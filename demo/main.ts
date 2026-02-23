@@ -23,6 +23,7 @@ import {
   renderRaincloud,
   renderScatterStats,
   renderCorrelogram,
+  renderBarStats,
   renderCoefPlot,
   renderResidualPanel,
   renderMixedPlot,
@@ -103,19 +104,6 @@ function tbl(
     </div>`)
 }
 
-/**
- * Wrap two table calls in a two-column grid.
- * Call after both tables have been rendered.
- */
-function wrapCols(container: HTMLElement, renderFn: () => void): void {
-  const wrapper = document.createElement('div')
-  wrapper.className = 'tables-cols'
-  container.appendChild(wrapper)
-  renderFn()
-  // Move the last two .stat-table-wrap children into the wrapper
-  const wraps = Array.from(container.querySelectorAll(':scope > .stat-table-wrap'))
-  wraps.slice(-2).forEach(w => wrapper.appendChild(w))
-}
 
 // ─── Synthetic datasets ────────────────────────────────────────────────────
 
@@ -180,9 +168,7 @@ const normConclusion = d.shapiroWilk.pValue > 0.05
   ? '<span style="color:#198754;font-weight:600">Normal</span>'
   : '<span style="color:#dc3545;font-weight:600">Non-normal</span>'
 
-// Table 1 + Table 2 side-by-side
-wrapCols(dTables, () => {
-  tbl(dTables, {
+tbl(dTables, {
     title: 'Summary Statistics',
     subtitle: `N = ${d.n} observations`,
     cols: [
@@ -218,7 +204,6 @@ wrapCols(dTables, () => {
     ],
     note: 'Null hypothesis: data are normally distributed.',
   })
-})
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPARISON SECTION
@@ -442,9 +427,7 @@ renderResidualPanel(
 
 const regTables = document.getElementById('regression-tables')!
 
-// Table 1: model summary + Table 2: coefficients
-wrapCols(regTables, () => {
-  tbl(regTables, {
+tbl(regTables, {
     title: 'Table 6.  Model Summary',
     subtitle: `N = ${multiReg.n}, predictors = 2`,
     cols: [
@@ -480,7 +463,6 @@ wrapCols(regTables, () => {
       fmtP(c.pValue),
     ]),
   })
-})
 
 // Full coefficient table with CIs
 tbl(regTables, {
@@ -556,11 +538,33 @@ tbl(lmmTables, {
   note: '&dagger;&thinsp;<em>p</em> &lt; .10, *&thinsp;<em>p</em> &lt; .05, **&thinsp;<em>p</em> &lt; .01, ***&thinsp;<em>p</em> &lt; .001. ns = not significant.',
 })
 
-// Table 2 + 3 side-by-side
 const vc = lmmResult.varianceComponents
 const totalVar = vc.intercept + vc.residual
-wrapCols(lmmTables, () => {
-  tbl(lmmTables, {
+
+// Variance components bar chart
+renderBarStats(
+  document.getElementById('lmm-variance-plot')!,
+  {
+    rows: [
+      { value: 'Random intercept (σ²_b)', count: vc.intercept, relative: vc.intercept / totalVar, cumulative: vc.intercept / totalVar },
+      { value: 'Residual (σ²_e)',          count: vc.residual,  relative: vc.residual  / totalVar, cumulative: 1 },
+    ],
+  },
+  { title: 'Variance Components', yLabel: 'σ²', showPercentages: true, width: 460, height: 320 }
+)
+
+// Group-level observed distributions
+const lmmGroupData = [1, 2, 3].map(g => ({
+  label: `Group ${g}`,
+  values: lmmY.filter((_, i) => lmmGroups[i] === g),
+}))
+renderViolinBox(
+  document.getElementById('lmm-groups-plot')!,
+  { groups: lmmGroupData },
+  { title: 'Observed Values by Group', xLabel: 'Group', yLabel: 'Y', width: 500, height: 320 }
+)
+
+tbl(lmmTables, {
     title: 'Table 9.  Variance Components',
     cols: [
       { h: 'Component',     a: 'l' },
@@ -607,7 +611,6 @@ wrapCols(lmmTables, () => {
     ],
     note: 'Estimated via REML.',
   })
-})
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PCA SECTION

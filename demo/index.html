@@ -74,8 +74,7 @@
       margin-bottom: 24px;
     }
 
-    /* Individual table wrapper — stacked or side-by-side */
-    .stat-table-wrap { }
+    /* Individual table wrapper — stacked vertically */
     .stat-table-wrap + .stat-table-wrap { margin-top: 32px; }
 
     .stat-table-title {
@@ -144,14 +143,15 @@
       border-top: 1px solid #e9ecef;
     }
 
-    /* Side-by-side layout for two compact tables */
-    .tables-cols {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 36px;
-      align-items: start;
+    /* Side-by-side plots row */
+    .plots-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
     }
-    @media (max-width: 760px) { .tables-cols { grid-template-columns: 1fr; } }
+    .plots-row .plot-container { flex: 1; min-width: 300px; margin-bottom: 0; }
+    @media (max-width: 760px) { .stat-table-wrap { min-width: 100%; } }
   </style>
 </head>
 <body>
@@ -213,8 +213,12 @@
     <!-- ─── LMM ──────────────────────────────────────────────────────────── -->
     <div id="lmm" class="section">
       <h2>Linear Mixed Models</h2>
-      <p class="desc">Random effects caterpillar plot (BLUPs) for a 3-group LMM.</p>
+      <p class="desc">BLUPs caterpillar plot, variance components, and group distributions for a 3-group LMM estimated via REML.</p>
       <div class="plot-container"><div id="lmm-plot"></div></div>
+      <div class="plots-row">
+        <div class="plot-container"><div id="lmm-variance-plot"></div></div>
+        <div class="plot-container"><div id="lmm-groups-plot"></div></div>
+      </div>
       <div class="table-container" id="lmm-tables"></div>
     </div>
 
