@@ -1,6 +1,6 @@
 'use strict';
 
-var chunkI76Y4CVA_cjs = require('../chunk-I76Y4CVA.cjs');
+var chunkFZPXXSO4_cjs = require('../chunk-FZPXXSO4.cjs');
 require('../chunk-BL33AEKS.cjs');
 var chunkAVJH2SAO_cjs = require('../chunk-AVJH2SAO.cjs');
 
@@ -8,195 +8,195 @@ var chunkAVJH2SAO_cjs = require('../chunk-AVJH2SAO.cjs');
 
 Object.defineProperty(exports, "analyze", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.analyze; }
+  get: function () { return chunkFZPXXSO4_cjs.analyze; }
 });
 Object.defineProperty(exports, "chiSquareTest", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.chiSquareTest; }
+  get: function () { return chunkFZPXXSO4_cjs.chiSquareTest; }
 });
 Object.defineProperty(exports, "ciMean", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.ciMean; }
+  get: function () { return chunkFZPXXSO4_cjs.ciMean; }
 });
 Object.defineProperty(exports, "cohensD", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.cohensD; }
+  get: function () { return chunkFZPXXSO4_cjs.cohensD; }
 });
 Object.defineProperty(exports, "cohensDCI", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.cohensDCI; }
+  get: function () { return chunkFZPXXSO4_cjs.cohensDCI; }
 });
 Object.defineProperty(exports, "cohensDPaired", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.cohensDPaired; }
+  get: function () { return chunkFZPXXSO4_cjs.cohensDPaired; }
 });
 Object.defineProperty(exports, "computeBLUPs", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.computeBLUPs; }
+  get: function () { return chunkFZPXXSO4_cjs.computeBLUPs; }
 });
 Object.defineProperty(exports, "contingencyTable", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.contingencyTable; }
+  get: function () { return chunkFZPXXSO4_cjs.contingencyTable; }
 });
 Object.defineProperty(exports, "correlationMatrix", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.correlationMatrix; }
+  get: function () { return chunkFZPXXSO4_cjs.correlationMatrix; }
 });
 Object.defineProperty(exports, "describe", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.describe; }
+  get: function () { return chunkFZPXXSO4_cjs.describe; }
 });
 Object.defineProperty(exports, "detectFieldType", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.detectFieldType; }
+  get: function () { return chunkFZPXXSO4_cjs.detectFieldType; }
 });
 Object.defineProperty(exports, "dunnTest", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.dunnTest; }
+  get: function () { return chunkFZPXXSO4_cjs.dunnTest; }
 });
 Object.defineProperty(exports, "etaSquared", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.etaSquared; }
+  get: function () { return chunkFZPXXSO4_cjs.etaSquared; }
 });
 Object.defineProperty(exports, "etaSquaredKW", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.etaSquaredKW; }
+  get: function () { return chunkFZPXXSO4_cjs.etaSquaredKW; }
 });
 Object.defineProperty(exports, "fisherExactTest", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.fisherExactTest; }
+  get: function () { return chunkFZPXXSO4_cjs.fisherExactTest; }
 });
 Object.defineProperty(exports, "frequencyTable", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.frequencyTable; }
+  get: function () { return chunkFZPXXSO4_cjs.frequencyTable; }
 });
 Object.defineProperty(exports, "friedmanTest", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.friedmanTest; }
+  get: function () { return chunkFZPXXSO4_cjs.friedmanTest; }
 });
 Object.defineProperty(exports, "gamesHowell", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.gamesHowell; }
+  get: function () { return chunkFZPXXSO4_cjs.gamesHowell; }
 });
 Object.defineProperty(exports, "goodnessOfFit", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.goodnessOfFit; }
+  get: function () { return chunkFZPXXSO4_cjs.goodnessOfFit; }
 });
 Object.defineProperty(exports, "hedgesG", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.hedgesG; }
+  get: function () { return chunkFZPXXSO4_cjs.hedgesG; }
 });
 Object.defineProperty(exports, "kendallTau", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.kendallTau; }
+  get: function () { return chunkFZPXXSO4_cjs.kendallTau; }
 });
 Object.defineProperty(exports, "kruskalWallis", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.kruskalWallis; }
+  get: function () { return chunkFZPXXSO4_cjs.kruskalWallis; }
 });
 Object.defineProperty(exports, "kurtosis", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.kurtosis; }
+  get: function () { return chunkFZPXXSO4_cjs.kurtosis; }
 });
 Object.defineProperty(exports, "linearRegression", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.linearRegression; }
+  get: function () { return chunkFZPXXSO4_cjs.linearRegression; }
 });
 Object.defineProperty(exports, "logisticRegression", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.logisticRegression; }
+  get: function () { return chunkFZPXXSO4_cjs.logisticRegression; }
 });
 Object.defineProperty(exports, "mannWhitneyU", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.mannWhitneyU; }
+  get: function () { return chunkFZPXXSO4_cjs.mannWhitneyU; }
 });
 Object.defineProperty(exports, "multipleRegression", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.multipleRegression; }
+  get: function () { return chunkFZPXXSO4_cjs.multipleRegression; }
 });
 Object.defineProperty(exports, "omegaSquared", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.omegaSquared; }
+  get: function () { return chunkFZPXXSO4_cjs.omegaSquared; }
 });
 Object.defineProperty(exports, "oneWayANOVA", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.oneWayANOVA; }
+  get: function () { return chunkFZPXXSO4_cjs.oneWayANOVA; }
 });
 Object.defineProperty(exports, "partialCorrelation", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.partialCorrelation; }
+  get: function () { return chunkFZPXXSO4_cjs.partialCorrelation; }
 });
 Object.defineProperty(exports, "pearsonCorrelation", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.pearsonCorrelation; }
+  get: function () { return chunkFZPXXSO4_cjs.pearsonCorrelation; }
 });
 Object.defineProperty(exports, "phiCoefficient", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.phiCoefficient; }
+  get: function () { return chunkFZPXXSO4_cjs.phiCoefficient; }
 });
 Object.defineProperty(exports, "polynomialRegression", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.polynomialRegression; }
+  get: function () { return chunkFZPXXSO4_cjs.polynomialRegression; }
 });
 Object.defineProperty(exports, "rankBiserial", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.rankBiserial; }
+  get: function () { return chunkFZPXXSO4_cjs.rankBiserial; }
 });
 Object.defineProperty(exports, "rankBiserialWilcoxon", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.rankBiserialWilcoxon; }
+  get: function () { return chunkFZPXXSO4_cjs.rankBiserialWilcoxon; }
 });
 Object.defineProperty(exports, "regressionDiagnostics", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.regressionDiagnostics; }
+  get: function () { return chunkFZPXXSO4_cjs.regressionDiagnostics; }
 });
 Object.defineProperty(exports, "runLMM", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.runLMM; }
+  get: function () { return chunkFZPXXSO4_cjs.runLMM; }
 });
 Object.defineProperty(exports, "runPCA", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.runPCA; }
+  get: function () { return chunkFZPXXSO4_cjs.runPCA; }
 });
 Object.defineProperty(exports, "screeData", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.screeData; }
+  get: function () { return chunkFZPXXSO4_cjs.screeData; }
 });
 Object.defineProperty(exports, "shapiroWilk", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.shapiroWilk; }
+  get: function () { return chunkFZPXXSO4_cjs.shapiroWilk; }
 });
 Object.defineProperty(exports, "skewness", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.skewness; }
+  get: function () { return chunkFZPXXSO4_cjs.skewness; }
 });
 Object.defineProperty(exports, "spearmanCorrelation", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.spearmanCorrelation; }
+  get: function () { return chunkFZPXXSO4_cjs.spearmanCorrelation; }
 });
 Object.defineProperty(exports, "tTestIndependent", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.tTestIndependent; }
+  get: function () { return chunkFZPXXSO4_cjs.tTestIndependent; }
 });
 Object.defineProperty(exports, "tTestPaired", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.tTestPaired; }
+  get: function () { return chunkFZPXXSO4_cjs.tTestPaired; }
 });
 Object.defineProperty(exports, "trimmedMean", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.trimmedMean; }
+  get: function () { return chunkFZPXXSO4_cjs.trimmedMean; }
 });
 Object.defineProperty(exports, "tukeyHSD", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.tukeyHSD; }
+  get: function () { return chunkFZPXXSO4_cjs.tukeyHSD; }
 });
 Object.defineProperty(exports, "varimaxRotation", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.varimaxRotation; }
+  get: function () { return chunkFZPXXSO4_cjs.varimaxRotation; }
 });
 Object.defineProperty(exports, "wilcoxonSignedRank", {
   enumerable: true,
-  get: function () { return chunkI76Y4CVA_cjs.wilcoxonSignedRank; }
+  get: function () { return chunkFZPXXSO4_cjs.wilcoxonSignedRank; }
 });
 Object.defineProperty(exports, "mean", {
   enumerable: true,

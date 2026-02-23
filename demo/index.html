@@ -154,6 +154,18 @@
       border-top: 1px solid #e9ecef;
     }
 
+    /* Plot-level title label above each chart */
+    .plot-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #495057;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e9ecef;
+    }
+
     /* Side-by-side plots row */
     .plots-row {
       display: flex;
@@ -197,10 +209,10 @@
     <div id="descriptive" class="section">
       <h2>Descriptive Statistics</h2>
       <p class="desc">Histogram with normality curve, QQ plot, KDE density, standalone box plot, and summary tables.</p>
-      <div class="plot-container"><div id="histogram-plot"></div></div>
-      <div class="plot-container"><div id="qq-plot"></div></div>
-      <div class="plot-container"><div id="density-plot"></div></div>
-      <div class="plot-container"><div id="boxplot-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Histogram</p><div id="histogram-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Normal Q-Q Plot</p><div id="qq-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Kernel Density Estimation</p><div id="density-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Box Plot</p><div id="boxplot-plot"></div></div>
       <div class="table-container" id="descriptive-tables"></div>
     </div>
 
@@ -208,11 +220,11 @@
     <div id="comparison" class="section">
       <h2>Group Comparison</h2>
       <p class="desc">Violin + box + jitter, raincloud, grouped/stacked bar, and bubble chart.</p>
-      <div class="plot-container"><div id="violin-plot"></div></div>
-      <div class="plot-container"><div id="raincloud-plot"></div></div>
-      <div class="plot-container"><div id="grouped-bar-plot"></div></div>
-      <div class="plot-container"><div id="stacked-bar-plot"></div></div>
-      <div class="plot-container"><div id="bubble-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Violin + Box + Jitter</p><div id="violin-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Raincloud Plot</p><div id="raincloud-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Grouped Bar Chart</p><div id="grouped-bar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Stacked Bar Chart</p><div id="stacked-bar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Bubble Chart</p><div id="bubble-plot"></div></div>
       <div class="table-container" id="comparison-tables"></div>
     </div>
 
@@ -220,8 +232,8 @@
     <div id="correlation" class="section">
       <h2>Correlation Analysis</h2>
       <p class="desc">Scatter plot with regression line and correlation matrix heatmap.</p>
-      <div class="plot-container"><div id="scatter-plot"></div></div>
-      <div class="plot-container"><div id="correlogram-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Scatter Plot with Regression Line</p><div id="scatter-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Correlation Matrix (Correlogram)</p><div id="correlogram-plot"></div></div>
       <div class="table-container" id="correlation-tables"></div>
     </div>
 
@@ -229,8 +241,8 @@
     <div id="regression" class="section">
       <h2>Regression Analysis</h2>
       <p class="desc">Coefficient plot and residual diagnostic panel.</p>
-      <div class="plot-container"><div id="coef-plot"></div></div>
-      <div class="plot-container"><div id="residual-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Coefficient Plot</p><div id="coef-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Regression Diagnostics Panel</p><div id="residual-plot"></div></div>
       <div class="table-container" id="regression-tables"></div>
     </div>
 
@@ -238,10 +250,10 @@
     <div id="lmm" class="section">
       <h2>Linear Mixed Models</h2>
       <p class="desc">BLUPs caterpillar plot, variance components, and group distributions for a 3-group LMM estimated via REML.</p>
-      <div class="plot-container"><div id="lmm-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">BLUPs Caterpillar Plot</p><div id="lmm-plot"></div></div>
       <div class="plots-row">
-        <div class="plot-container"><div id="lmm-variance-plot"></div></div>
-        <div class="plot-container"><div id="lmm-groups-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Variance Components</p><div id="lmm-variance-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Observed Values by Group</p><div id="lmm-groups-plot"></div></div>
       </div>
       <div class="table-container" id="lmm-tables"></div>
     </div>
@@ -250,8 +262,8 @@
     <div id="pca" class="section">
       <h2>Principal Component Analysis</h2>
       <p class="desc">Scree plot, biplot, and component tables.</p>
-      <div class="plot-container"><div id="scree-plot"></div></div>
-      <div class="plot-container"><div id="biplot"></div></div>
+      <div class="plot-container"><p class="plot-title">Scree Plot</p><div id="scree-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">PCA Biplot</p><div id="biplot"></div></div>
       <div class="table-container" id="pca-tables"></div>
     </div>
 
@@ -259,18 +271,18 @@
     <div id="distribution" class="section">
       <h2>Distribution Explorer</h2>
       <p class="desc">Normal and t-distribution PDF with highlighted areas.</p>
-      <div class="plot-container"><div id="dist-normal"></div></div>
-      <div class="plot-container"><div id="dist-t"></div></div>
+      <div class="plot-container"><p class="plot-title">Normal Distribution</p><div id="dist-normal"></div></div>
+      <div class="plot-container"><p class="plot-title">t-Distribution</p><div id="dist-t"></div></div>
     </div>
 
     <!-- ─── RANKING ──────────────────────────────────────────────────────── -->
     <div id="ranking" class="section">
       <h2>Ranking Charts</h2>
       <p class="desc">Lollipop, Cleveland dot plot, Pareto chart, and funnel chart.</p>
-      <div class="plot-container"><div id="lollipop-plot"></div></div>
-      <div class="plot-container"><div id="dot-plot-plot"></div></div>
-      <div class="plot-container"><div id="pareto-plot"></div></div>
-      <div class="plot-container"><div id="funnel-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Lollipop Chart</p><div id="lollipop-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Cleveland Dot Plot</p><div id="dot-plot-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Pareto Chart</p><div id="pareto-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Funnel Chart</p><div id="funnel-plot"></div></div>
     </div>
 
     <!-- ─── COMPOSITION ──────────────────────────────────────────────────── -->
@@ -278,21 +290,21 @@
       <h2>Composition Charts</h2>
       <p class="desc">Pie/donut chart, area chart, treemap, and waffle chart.</p>
       <div class="plots-row">
-        <div class="plot-container"><div id="pie-plot"></div></div>
-        <div class="plot-container"><div id="donut-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Pie Chart</p><div id="pie-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Donut Chart</p><div id="donut-plot"></div></div>
       </div>
-      <div class="plot-container"><div id="area-plot"></div></div>
-      <div class="plot-container"><div id="treemap-plot"></div></div>
-      <div class="plot-container"><div id="waffle-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Area Chart</p><div id="area-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Treemap</p><div id="treemap-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Waffle Chart</p><div id="waffle-plot"></div></div>
     </div>
 
     <!-- ─── TIME SERIES ──────────────────────────────────────────────────── -->
     <div id="timeseries" class="section">
       <h2>Time Series</h2>
       <p class="desc">Multi-line time series chart and sparklines.</p>
-      <div class="plot-container"><div id="linechart-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Line Chart</p><div id="linechart-plot"></div></div>
       <div class="plot-container">
-        <p style="font-size:13px;color:#6c757d;margin-bottom:12px;">Sparklines (inline trend indicators):</p>
+        <p class="plot-title">Sparklines</p>
         <div id="sparkline-a"></div>
         <div id="sparkline-b" style="margin-top:8px;"></div>
         <div id="sparkline-c" style="margin-top:8px;"></div>
@@ -303,26 +315,26 @@
     <div id="statistical" class="section">
       <h2>Statistical Plots</h2>
       <p class="desc">Forest plot for meta-analysis and ROC curve for classification evaluation.</p>
-      <div class="plot-container"><div id="forest-plot"></div></div>
-      <div class="plot-container"><div id="roc-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Forest Plot</p><div id="forest-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">ROC Curve</p><div id="roc-plot"></div></div>
     </div>
 
     <!-- ─── MULTIVARIATE ─────────────────────────────────────────────────── -->
     <div id="multivariate" class="section">
       <h2>Multivariate Plots</h2>
       <p class="desc">Radar chart, parallel coordinates, and scatter matrix (pair plot).</p>
-      <div class="plot-container"><div id="radar-plot"></div></div>
-      <div class="plot-container"><div id="parallel-plot"></div></div>
-      <div class="plot-container"><div id="pair-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Radar Chart</p><div id="radar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Parallel Coordinates</p><div id="parallel-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Scatter Matrix (Pair Plot)</p><div id="pair-plot"></div></div>
     </div>
 
     <!-- ─── CATEGORICAL ──────────────────────────────────────────────────── -->
     <div id="categorical" class="section">
       <h2>Categorical Plots</h2>
       <p class="desc">Strip plot (jittered dots), beeswarm plot, and mosaic plot.</p>
-      <div class="plot-container"><div id="strip-plot"></div></div>
-      <div class="plot-container"><div id="swarm-plot"></div></div>
-      <div class="plot-container"><div id="mosaic-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Strip Plot</p><div id="strip-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Beeswarm Plot</p><div id="swarm-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Mosaic Plot</p><div id="mosaic-plot"></div></div>
     </div>
 
     <!-- ─── HIERARCHICAL ─────────────────────────────────────────────────── -->
@@ -330,8 +342,8 @@
       <h2>Hierarchical &amp; Proportional</h2>
       <p class="desc">Sunburst chart for hierarchical part-to-whole relationships, and Marimekko chart (variable-width 100% stacked bars) for bivariate composition.</p>
       <div class="plots-row">
-        <div class="plot-container"><div id="sunburst-plot"></div></div>
-        <div class="plot-container"><div id="marimekko-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Sunburst Chart</p><div id="sunburst-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Marimekko Chart</p><div id="marimekko-plot"></div></div>
       </div>
     </div>
 
@@ -339,10 +351,10 @@
     <div id="networks" class="section">
       <h2>Networks &amp; Flows</h2>
       <p class="desc">Chord diagram for symmetric flow matrices, alluvial plot for multi-stage flows, arc diagram for network topology, and hierarchical edge bundling.</p>
-      <div class="plot-container"><div id="chord-plot"></div></div>
-      <div class="plot-container"><div id="alluvial-plot"></div></div>
-      <div class="plot-container"><div id="arc-plot"></div></div>
-      <div class="plot-container"><div id="edge-bundling-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Chord Diagram</p><div id="chord-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Alluvial Plot</p><div id="alluvial-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Arc Diagram</p><div id="arc-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Hierarchical Edge Bundling</p><div id="edge-bundling-plot"></div></div>
     </div>
 
   </main>
