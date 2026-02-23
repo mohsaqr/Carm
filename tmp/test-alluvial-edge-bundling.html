@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alluvial + Edge Bundling — Visual Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: #f0f2f5;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 8px;
+    }
+    p.desc {
+      font-size: 13px;
+      color: #6c757d;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #495057;
+      margin: 32px 0 8px;
+      border-left: 3px solid #4e79a7;
+      padding-left: 10px;
+    }
+    .plot-wrap {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 16px;
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .row { display: flex; gap: 24px; flex-wrap: wrap; }
+    .col { flex: 1 1 500px; }
+  </style>
+</head>
+<body>
+  <h1>Visual Test — Alluvial Plot &amp; Edge Bundling</h1>
+  <p class="desc">
+    Synthetic data rendered via the TypeScript modules (compiled in-browser via importmap + skypack CDN).
+    Inspect both plots for correct layout, colours, ribbons, and labels.
+  </p>
+
+  <h2>Alluvial Plot — Student flow through 3 academic stages</h2>
+  <div class="plot-wrap">
+    <div id="alluvial1" style="width:100%;min-height:520px"></div>
+  </div>
+
+  <h2>Alluvial Plot — Dark theme</h2>
+  <div class="plot-wrap" style="background:#14142b">
+    <div id="alluvial2" style="width:100%;min-height:520px"></div>
+  </div>
+
+  <h2>Edge Bundling — Software module dependencies</h2>
+  <div class="plot-wrap">
+    <div id="edge1" style="width:100%;min-height:640px"></div>
+  </div>
+
+  <h2>Edge Bundling — Dark theme, high bundling</h2>
+  <div class="plot-wrap" style="background:#14142b">
+    <div id="edge2" style="width:100%;min-height:640px"></div>
+  </div>
+
+<script type="module">
+// ─── Load D3 from CDN ──────────────────────────────────────────────────────
+import * as d3 from 'https://cdn.skypack.dev/d3@7'
+
+// ─── Theme constants (inline — mirrors themes/default.ts) ─────────────────
+const CARM_PALETTE = [
+  '#4e79a7','#f28e2b','#e15759','#76b7b2',
+  '#59a14f','#af7aa1','#ff9da7','#9c755f',
+]
+
+const DEFAULT_THEME = {
+  background:'#ffffff', surface:'#f8f9fa', text:'#1a1a2e',
+  textMuted:'#6c757d', textAnnotation:'#495057', gridLine:'#eaeef3',
+  axisLine:'#c4cdd6', colors:CARM_PALETTE,
+  fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif",
+  fontFamilyMono:"'JetBrains Mono','Fira Code',Menlo,Consolas,monospace",
+  fontSize:12, fontSizeSmall:11, fontSizeTitle:16,
+  marginTop:58, marginRight:32, marginBottom:84, marginLeft:64,
+  pointOpacity:0.55, violinOpacity:0.72, ciOpacity:0.15,
+}
+
+const DARK_THEME = {
+  ...DEFAULT_THEME,
+  background:'#14142b', surface:'#1e1e3f', text:'#e9ecef',
+  textMuted:'#9aa5b1', textAnnotation:'#ced4da',
+  gridLine:'#252548', axisLine:'#3d3d6b',
+}
+
+function getColor(i, theme) { return theme.colors[i % theme.colors.length] }
+
+function applyTheme(container, theme) {
+  container.style.background = theme.background
+}
+
+// ─── Shared components ─────────────────────────────────────────────────────
+let tooltipEl = null
+function ensureTooltip() {
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div')
+    tooltipEl.id = 'carm-tooltip'
+    tooltipEl.style.cssText = `
+      position:fixed;pointer-events:none;z-index:9999;
+      padding:8px 12px;border-radius:6px;font-size:12px;line-height:1.5;
+      max-width:240px;box-shadow:0 4px 12px rgba(0,0,0,0.15);
+      opacity:0;transition:opacity 0.15s ease;
+    `
+    document.body.appendChild(tooltipEl)
+  }
+  return tooltipEl
+}
+function showTooltip(event, content, theme) {
+  const el = ensureTooltip()
+  el.innerHTML = content
+  el.style.background = theme.surface
+  el.style.color = theme.text
+  el.style.border = `1px solid ${theme.gridLine}`
+  el.style.fontFamily = theme.fontFamily
+  el.style.left = `${Math.min(event.clientX + 14, window.innerWidth - 248)}px`
+  el.style.top = `${Math.max(event.clientY - 28, 8)}px`
+  el.style.opacity = '1'
+}
+function hideTooltip() { if (tooltipEl) tooltipEl.style.opacity = '0' }
+function fmtRow(label, value) {
+  return `<div style="display:flex;justify-content:space-between;gap:12px">
+    <span style="opacity:0.7">${label}</span>
+    <strong>${typeof value === 'number' ? value.toFixed(3) : value}</strong>
+  </div>`
+}
+
+function addSubtitle(svg, title, subtitle, W, theme) {
+  svg.append('rect').attr('x',20).attr('y',10).attr('width',3).attr('height',22)
+     .attr('rx',1.5).attr('fill', theme.colors[0])
+  svg.append('text').attr('x',30).attr('y',26)
+     .attr('font-family',theme.fontFamily).attr('font-size',theme.fontSizeTitle)
+     .attr('font-weight','700').attr('fill',theme.text).text(title)
+  if (subtitle) {
+    svg.append('text').attr('x',30).attr('y',45)
+       .attr('font-family',theme.fontFamily).attr('font-size',theme.fontSizeSmall)
+       .attr('font-style','italic').attr('fill',theme.textAnnotation).text(subtitle)
+  }
+}
+
+function addCaption(svg, text, W, H, theme) {
+  svg.append('text').attr('x',20).attr('y',H-8)
+     .attr('font-family',theme.fontFamily).attr('font-size',10)
+     .attr('fill',theme.textMuted).style('font-style','italic').text(text)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALLUVIAL PLOT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderAlluvial(container, data, config = {}) {
+  const theme = config.theme ?? DEFAULT_THEME
+  const W = config.width ?? Math.max(container.clientWidth || 700, 400)
+  const H = config.height ?? 520
+  const nodePadding = config.nodePadding ?? 8
+  const nodeWidth = config.nodeWidth ?? 18
+
+  const margin = {
+    top: theme.marginTop,
+    right: theme.marginRight + 80,
+    bottom: theme.marginBottom,
+    left: theme.marginLeft + 60,
+  }
+  const width = W - margin.left - margin.right
+  const height = H - margin.top - margin.bottom
+
+  container.innerHTML = ''
+  applyTheme(container, theme)
+
+  const svg = d3.select(container).append('svg')
+    .attr('width',W).attr('height',H)
+    .attr('viewBox',`0 0 ${W} ${H}`)
+    .style('background', theme.background)
+
+  addSubtitle(svg, config.title ?? 'Alluvial Plot', data.testResult?.formatted ?? '', W, theme)
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
+
+  if (!data.nodes.length || !data.flows.length) return
+
+  // Colour mapping
+  const uniqueLabels = [...new Set(data.nodes.map(n => n.label))]
+  const labelColor = new Map(uniqueLabels.map((lbl, i) => [lbl, getColor(i, theme)]))
+
+  const stageIndices = [...new Set(data.nodes.map(n => n.stage))].sort((a,b) => a-b)
+  const nStages = stageIndices.length
+  const stageX = si => nStages < 2 ? width/2 : (stageIndices.indexOf(si) / (nStages - 1)) * (width - nodeWidth)
+
+  const nodeById = new Map(data.nodes.map(n => [n.id, n]))
+  const inSum = new Map(), outSum = new Map()
+  data.flows.forEach(f => {
+    outSum.set(f.source, (outSum.get(f.source) ?? 0) + f.value)
+    inSum.set(f.target, (inSum.get(f.target) ?? 0) + f.value)
+  })
+
+  const firstStage = stageIndices[0], lastStage = stageIndices[nStages-1]
+  const nodeTotal = id => {
+    const n = nodeById.get(id)
+    if (!n) return 0
+    if (n.stage === firstStage) return outSum.get(id) ?? 0
+    if (n.stage === lastStage) return inSum.get(id) ?? 0
+    return Math.max(outSum.get(id) ?? 0, inSum.get(id) ?? 0)
+  }
+
+  const stageNodes = new Map()
+  stageIndices.forEach(si => {
+    const nodesInStage = data.nodes.filter(n => n.stage === si)
+      .sort((a,b) => nodeTotal(b.id) - nodeTotal(a.id))
+    const totalVal = nodesInStage.reduce((s,n) => s + nodeTotal(n.id), 0)
+    const usableH = height - nodePadding * Math.max(0, nodesInStage.length - 1)
+    const hScale = totalVal > 0 ? usableH / totalVal : 1
+    const lnodes = []
+    let yCursor = 0
+    nodesInStage.forEach(n => {
+      const tv = nodeTotal(n.id)
+      const nh = Math.max(4, tv * hScale)
+      lnodes.push({
+        id:n.id, stage:n.stage, label:n.label,
+        color: labelColor.get(n.label) ?? getColor(0, theme),
+        totalValue:tv, inValue: inSum.get(n.id)??0, outValue: outSum.get(n.id)??0,
+        x: stageX(si), y: yCursor, height: nh, outOffset:0, inOffset:0
+      })
+      yCursor += nh + nodePadding
+    })
+    stageNodes.set(si, lnodes)
+  })
+
+  const lnMap = new Map()
+  stageNodes.forEach(lnodes => lnodes.forEach(ln => lnMap.set(ln.id, ln)))
+
+  // Flows
+  const sortedFlows = [...data.flows].sort((a,b) => b.value - a.value)
+  const layoutFlows = []
+  sortedFlows.forEach(f => {
+    const src = lnMap.get(f.source), tgt = lnMap.get(f.target)
+    if (!src || !tgt) return
+    const srcHS = src.outValue > 0 ? src.height / src.outValue : 0
+    const tgtHS = tgt.inValue > 0 ? tgt.height / tgt.inValue : 0
+    const rH = Math.max(1, f.value * Math.min(srcHS, tgtHS))
+    layoutFlows.push({ src, tgt, value:f.value, ribbonH:rH, srcY: src.y + src.outOffset, tgtY: tgt.y + tgt.inOffset })
+    src.outOffset += rH
+    tgt.inOffset += rH
+  })
+
+  const flowGroup = g.append('g')
+  const nodeGroup = g.append('g')
+
+  layoutFlows.forEach(lf => {
+    const x1 = lf.src.x + nodeWidth, x2 = lf.tgt.x
+    const cp1 = x1 + (x2-x1)*0.4, cp2 = x1 + (x2-x1)*0.6
+    const yT1 = lf.srcY, yB1 = lf.srcY + lf.ribbonH
+    const yT2 = lf.tgtY, yB2 = lf.tgtY + lf.ribbonH
+    const d = `M ${x1},${yT1} C ${cp1},${yT1} ${cp2},${yT2} ${x2},${yT2} L ${x2},${yB2} C ${cp2},${yB2} ${cp1},${yB1} ${x1},${yB1} Z`
+    const srcPct = lf.src.outValue > 0 ? ((lf.value/lf.src.outValue)*100).toFixed(1) : '–'
+    flowGroup.append('path').attr('d',d)
+      .attr('fill', lf.src.color).attr('opacity',0.42)
+      .attr('stroke', lf.src.color).attr('stroke-width',0.5).attr('stroke-opacity',0.25)
+      .on('mouseover', function(event) {
+        d3.select(this).attr('opacity',0.72)
+        showTooltip(event, [fmtRow('From',lf.src.label),fmtRow('To',lf.tgt.label),fmtRow('Value',lf.value.toFixed(2)),fmtRow('% of source',`${srcPct}%`)].join(''), theme)
+      })
+      .on('mouseout', function() { d3.select(this).attr('opacity',0.42); hideTooltip() })
+  })
+
+  stageIndices.forEach(si => {
+    const lnodes = stageNodes.get(si)
+    const isFirst = si === firstStage, isLast = si === lastStage
+    lnodes.forEach(ln => {
+      nodeGroup.append('rect')
+        .attr('x',ln.x).attr('y',ln.y).attr('width',nodeWidth).attr('height',ln.height)
+        .attr('fill',ln.color).attr('rx',3).attr('stroke',theme.background).attr('stroke-width',1.5)
+        .on('mouseover', event => { showTooltip(event, [fmtRow('Label',ln.label),fmtRow('Stage',ln.stage),fmtRow('Total value',ln.totalValue.toFixed(2))].join(''), theme) })
+        .on('mouseout', hideTooltip)
+      const lx = isFirst ? ln.x-6 : isLast ? ln.x+nodeWidth+6 : ln.x+nodeWidth/2
+      const anchor = isFirst ? 'end' : isLast ? 'start' : 'middle'
+      nodeGroup.append('text').attr('x',lx).attr('y',ln.y+ln.height/2+4)
+        .attr('text-anchor',anchor).attr('font-family',theme.fontFamily)
+        .attr('font-size',theme.fontSizeSmall).attr('font-weight','500').attr('fill',theme.text)
+        .attr('pointer-events','none').text(ln.label)
+    })
+  })
+
+  if (data.stageLabels) {
+    stageIndices.forEach((si, sIdx) => {
+      const label = data.stageLabels[sIdx] ?? `Stage ${si}`
+      const x = stageX(si) + nodeWidth/2
+      nodeGroup.append('text').attr('x',x).attr('y',-12).attr('text-anchor','middle')
+        .attr('font-family',theme.fontFamily).attr('font-size',theme.fontSizeSmall)
+        .attr('font-weight','700').attr('fill',theme.textMuted).attr('letter-spacing','0.5')
+        .text(label.toUpperCase())
+    })
+  }
+
+  if (config.caption) addCaption(svg, config.caption, W, H, theme)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EDGE BUNDLING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderEdgeBundling(container, data, config = {}) {
+  const theme = config.theme ?? DEFAULT_THEME
+  const W = config.width ?? Math.max(container.clientWidth || 640, 400)
+  const H = config.height ?? Math.max(W, 480)
+  const beta = config.bundlingStrength ?? 0.85
+  const nodeR = config.nodeRadius ?? 4
+  const labelPad = 90
+  const radius = Math.min(W, H) / 2 - labelPad
+
+  container.innerHTML = ''
+  applyTheme(container, theme)
+
+  const svg = d3.select(container).append('svg')
+    .attr('width',W).attr('height',H).attr('viewBox',`0 0 ${W} ${H}`)
+    .style('background', theme.background)
+
+  addSubtitle(svg, config.title ?? 'Edge Bundling', data.testResult?.formatted ?? '', W, theme)
+
+  const cx = W/2, cy = H/2 + theme.marginTop/2
+  const g = svg.append('g').attr('transform', `translate(${cx},${cy})`)
+
+  if (!data.nodes.length) return
+
+  const colorKey = n => n.group ?? n.parent ?? ''
+  const uniqueKeys = [...new Set(data.nodes.map(colorKey))]
+  const colorMap = new Map(uniqueKeys.map((k,i) => [k, getColor(i, theme)]))
+  const nodeColor = n => colorMap.get(colorKey(n)) ?? getColor(0, theme)
+
+  // Build hierarchy
+  const rawNodes = data.nodes.map(n => ({ id:n.id, parentId: n.parent === '' ? undefined : n.parent, data:n }))
+  const stratify = d3.stratify().id(d => d.id).parentId(d => d.parentId)
+  let root
+  try { root = stratify(rawNodes) } catch(e) {
+    g.append('text').attr('text-anchor','middle').attr('font-family',theme.fontFamily)
+      .attr('font-size',theme.fontSize).attr('fill',theme.textMuted).text('Invalid hierarchy')
+    return
+  }
+
+  d3.cluster().size([360, radius])(root)
+
+  const nodeIndex = new Map()
+  root.each(n => nodeIndex.set(n.data.id, n))
+  const leafNodes = root.leaves()
+
+  // LCA path
+  function lcaPath(a, b) {
+    const ancestorsA = a.ancestors()
+    const ancestorsB = b.ancestors()
+    const setA = new Set(ancestorsA.map(n => n.data.id))
+    const lca = ancestorsB.find(n => setA.has(n.data.id))
+    if (!lca) return [a, b]
+    const lcaIdxA = ancestorsA.findIndex(n => n.data.id === lca.data.id)
+    const pathUp = ancestorsA.slice(0, lcaIdxA + 1)
+    const lcaIdxB = ancestorsB.findIndex(n => n.data.id === lca.data.id)
+    const pathDown = ancestorsB.slice(0, lcaIdxB).reverse()
+    return [...pathUp, ...pathDown]
+  }
+
+  const line = d3.lineRadial()
+    .curve(d3.curveBundle.beta(beta))
+    .angle(d => d.x * Math.PI / 180)
+    .radius(d => d.y)
+
+  const edgeGroup = g.append('g')
+  const nodeGroup = g.append('g')
+
+  const edgePaths = []
+  data.edges.forEach(e => {
+    const src = nodeIndex.get(e.source), tgt = nodeIndex.get(e.target)
+    if (!src || !tgt) return
+    const path = lcaPath(src, tgt)
+    const pathStr = line(path)
+    if (!pathStr) return
+    const color = nodeColor(src.data.data)
+    const el = edgeGroup.append('path').attr('d',pathStr)
+      .attr('fill','none').attr('stroke',color).attr('stroke-width',1).attr('opacity',0.28)
+    edgePaths.push({ srcId:e.source, tgtId:e.target, el })
+  })
+
+  let lockedNodeId = null
+
+  function highlightNode(nodeId) {
+    edgePaths.forEach(ep => {
+      const connected = ep.srcId === nodeId || ep.tgtId === nodeId
+      ep.el.attr('opacity', connected ? 0.9 : 0.05).attr('stroke-width', connected ? 2 : 0.8)
+    })
+  }
+  function resetHighlight() {
+    edgePaths.forEach(ep => ep.el.attr('opacity',0.28).attr('stroke-width',1))
+  }
+
+  leafNodes.forEach(n => {
+    const angleRad = n.x * Math.PI / 180
+    const nx = Math.sin(angleRad) * n.y
+    const ny = -Math.cos(angleRad) * n.y
+    const color = nodeColor(n.data.data)
+    const label = n.data.data.label ?? n.data.id
+
+    nodeGroup.append('circle').attr('cx',nx).attr('cy',ny).attr('r',nodeR)
+      .attr('fill',color).attr('stroke',theme.background).attr('stroke-width',1.5)
+      .attr('cursor','pointer')
+      .on('mouseover', function(event) {
+        if (lockedNodeId) return
+        highlightNode(n.data.id)
+        const conns = data.edges.filter(e => e.source===n.data.id||e.target===n.data.id).length
+        showTooltip(event,[fmtRow('Node',label),fmtRow('Group',n.data.data.group??n.data.data.parent??'—'),fmtRow('Connections',conns)].join(''),theme)
+      })
+      .on('mouseout', function() { if (!lockedNodeId) { resetHighlight(); hideTooltip() } })
+      .on('click', function(event) {
+        event.stopPropagation()
+        if (lockedNodeId === n.data.id) { lockedNodeId=null; resetHighlight(); hideTooltip() }
+        else { lockedNodeId=n.data.id; highlightNode(n.data.id) }
+      })
+
+    const flipped = n.x > 180
+    const rotDeg = n.x - 90
+    const labelR = n.y + nodeR + 5
+    const lx = Math.sin(angleRad) * labelR
+    const ly = -Math.cos(angleRad) * labelR
+    const textRot = flipped ? `rotate(${rotDeg+180},${lx},${ly})` : `rotate(${rotDeg},${lx},${ly})`
+    nodeGroup.append('text').attr('x',lx).attr('y',ly).attr('dy','0.35em')
+      .attr('text-anchor', flipped ? 'end' : 'start').attr('transform',textRot)
+      .attr('font-family',theme.fontFamily).attr('font-size',theme.fontSizeSmall)
+      .attr('fill',theme.text).attr('pointer-events','none').text(label)
+  })
+
+  svg.on('click', () => { if (lockedNodeId) { lockedNodeId=null; resetHighlight(); hideTooltip() } })
+
+  if (config.caption) addCaption(svg, config.caption, W, H, theme)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SYNTHETIC DATA
+// ─────────────────────────────────────────────────────────────────────────
+
+// Alluvial: student pathway across Enrolment → Year 1 → Graduation
+const alluvialData = {
+  nodes: [
+    { id:'s_stem', stage:0, label:'STEM' },
+    { id:'s_hum',  stage:0, label:'Humanities' },
+    { id:'s_bus',  stage:0, label:'Business' },
+    { id:'y1_pass', stage:1, label:'Pass' },
+    { id:'y1_cond', stage:1, label:'Conditional' },
+    { id:'y1_fail', stage:1, label:'Fail' },
+    { id:'g_hon', stage:2, label:'Honours' },
+    { id:'g_ord', stage:2, label:'Ordinary' },
+    { id:'g_drop', stage:2, label:'Dropout' },
+  ],
+  flows: [
+    { source:'s_stem', target:'y1_pass', value:120 },
+    { source:'s_stem', target:'y1_cond', value:40 },
+    { source:'s_stem', target:'y1_fail', value:15 },
+    { source:'s_hum',  target:'y1_pass', value:80 },
+    { source:'s_hum',  target:'y1_cond', value:55 },
+    { source:'s_hum',  target:'y1_fail', value:25 },
+    { source:'s_bus',  target:'y1_pass', value:95 },
+    { source:'s_bus',  target:'y1_cond', value:35 },
+    { source:'s_bus',  target:'y1_fail', value:10 },
+    { source:'y1_pass', target:'g_hon', value:180 },
+    { source:'y1_pass', target:'g_ord',  value:95 },
+    { source:'y1_pass', target:'g_drop', value:20 },
+    { source:'y1_cond', target:'g_hon',  value:25 },
+    { source:'y1_cond', target:'g_ord',  value:70 },
+    { source:'y1_cond', target:'g_drop', value:35 },
+    { source:'y1_fail', target:'g_drop', value:50 },
+  ],
+  stageLabels: ['Enrolment', 'Year 1', 'Graduation'],
+  testResult: { formatted: 'χ²(4) = 18.34, p = .001, V = 0.21' }
+}
+
+// Edge bundling: software modules with group hierarchy
+const bundleNodes = [
+  { id:'root',  parent:'', label:'System' },
+  { id:'core',  parent:'root', label:'Core' },
+  { id:'ui',    parent:'root', label:'UI' },
+  { id:'data',  parent:'root', label:'Data' },
+  { id:'stats', parent:'root', label:'Stats' },
+  // Core children
+  { id:'core.math',   parent:'core', label:'math',   group:'core' },
+  { id:'core.utils',  parent:'core', label:'utils',  group:'core' },
+  { id:'core.types',  parent:'core', label:'types',  group:'core' },
+  // UI children
+  { id:'ui.app',      parent:'ui', label:'app',      group:'ui' },
+  { id:'ui.panel',    parent:'ui', label:'panel',    group:'ui' },
+  { id:'ui.tooltip',  parent:'ui', label:'tooltip',  group:'ui' },
+  { id:'ui.legend',   parent:'ui', label:'legend',   group:'ui' },
+  // Data children
+  { id:'data.parser', parent:'data', label:'parser', group:'data' },
+  { id:'data.transform', parent:'data', label:'transform', group:'data' },
+  { id:'data.validate',  parent:'data', label:'validate',  group:'data' },
+  // Stats children
+  { id:'stats.desc',  parent:'stats', label:'descriptive', group:'stats' },
+  { id:'stats.corr',  parent:'stats', label:'correlation', group:'stats' },
+  { id:'stats.reg',   parent:'stats', label:'regression',  group:'stats' },
+  { id:'stats.comp',  parent:'stats', label:'comparison',  group:'stats' },
+  { id:'stats.freq',  parent:'stats', label:'frequency',   group:'stats' },
+]
+
+const bundleEdges = [
+  // core → stats
+  { source:'core.math',  target:'stats.desc' },
+  { source:'core.math',  target:'stats.corr' },
+  { source:'core.math',  target:'stats.reg'  },
+  { source:'core.math',  target:'stats.comp' },
+  { source:'core.utils', target:'stats.desc' },
+  { source:'core.utils', target:'stats.freq' },
+  { source:'core.types', target:'stats.desc' },
+  { source:'core.types', target:'stats.reg'  },
+  // core → ui
+  { source:'core.utils', target:'ui.app'     },
+  { source:'core.types', target:'ui.panel'   },
+  // stats → ui
+  { source:'stats.desc', target:'ui.panel'   },
+  { source:'stats.corr', target:'ui.panel'   },
+  { source:'stats.reg',  target:'ui.panel'   },
+  { source:'stats.comp', target:'ui.panel'   },
+  { source:'stats.freq', target:'ui.panel'   },
+  // data → stats
+  { source:'data.parser', target:'stats.desc' },
+  { source:'data.parser', target:'stats.corr' },
+  { source:'data.parser', target:'stats.reg'  },
+  { source:'data.transform', target:'stats.comp' },
+  { source:'data.validate',  target:'stats.desc' },
+  { source:'data.validate',  target:'stats.freq' },
+  // data → ui
+  { source:'data.parser', target:'ui.panel' },
+  // ui internal
+  { source:'ui.app',     target:'ui.tooltip' },
+  { source:'ui.panel',   target:'ui.legend'  },
+  { source:'ui.panel',   target:'ui.tooltip' },
+]
+
+const bundleData = {
+  nodes: bundleNodes,
+  edges: bundleEdges,
+  testResult: { formatted: 'Hierarchical edge bundling — β = 0.85' }
+}
+
+// ─── Render all ────────────────────────────────────────────────────────────
+const w1 = document.getElementById('alluvial1').clientWidth || 800
+
+renderAlluvial(document.getElementById('alluvial1'), alluvialData, {
+  title: 'Student Academic Pathway',
+  caption: 'Synthetic data — n = 475 students across 3 academic stages',
+  width: w1,
+  height: 520,
+})
+
+renderAlluvial(document.getElementById('alluvial2'), alluvialData, {
+  title: 'Student Academic Pathway (Dark)',
+  caption: 'Synthetic data — n = 475 students across 3 academic stages',
+  width: w1,
+  height: 520,
+  theme: DARK_THEME,
+})
+
+const w2 = document.getElementById('edge1').clientWidth || 640
+const sz = Math.min(Math.max(w2, 480), 680)
+
+renderEdgeBundling(document.getElementById('edge1'), bundleData, {
+  title: 'Software Module Dependencies',
+  caption: 'Hierarchical edge bundling (Holten 2006) — hover a node to highlight its connections',
+  width: sz, height: sz,
+  bundlingStrength: 0.85,
+})
+
+renderEdgeBundling(document.getElementById('edge2'), bundleData, {
+  title: 'Software Module Dependencies (Dark)',
+  caption: 'β = 0.95 (stronger bundling)',
+  width: sz, height: sz,
+  theme: DARK_THEME,
+  bundlingStrength: 0.95,
+})
+</script>
+</body>
+</html>

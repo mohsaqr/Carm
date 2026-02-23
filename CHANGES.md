@@ -1,3 +1,11 @@
+### 2026-02-23 — Add analyze() field-based dispatch layer (309 tests)
+
+- `src/core/types.ts`: Added `FieldType`, `NumericField`, `GroupField`, `Field`, `AnalyzeOptions`, `AnalysisResult` interfaces at end of file.
+- `src/stats/analyze.ts`: New file — `detectFieldType()` (infers field type from values), `splitGroups()` (splits numeric outcome by group labels), `checkNormality()` (Shapiro-Wilk per group with n<3/n>50 shortcuts), `selectTest()` (parametric vs non-parametric dispatch table), `analyze()` (public API — routes to t-test/MW, paired t/Wilcoxon, ANOVA/KW, chi-square/Fisher, or descriptive-only based on field types and normality).
+- `src/stats/index.ts`: Added `export * from './analyze.js'`.
+- `tests/stats/analyze.test.ts`: 28 tests covering all dispatch paths, error cases, and `detectFieldType` edge cases.
+- Tests: 309/309 (was 278).
+
 ### 2026-02-23 — LMM verified correct vs R lme4; wrong ground truth corrected (278 tests)
 
 - **Root cause resolved**: Ran R lme4 on the 2-group LMM fixture (y=[1..5,6..9,12]). R gives ICC=0.9769, logLik=-12.399, AIC=32.797, fixef=(2.1, 1.2) — **exact match with Carm**. The "ground truth" ICC=0.4092 previously reported was a fabricated value, not real R output.

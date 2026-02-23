@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arc Diagram — Visual Test</title>
+  <style>
+    body { margin: 0; padding: 24px; font-family: system-ui, sans-serif; background: #f4f6f9; }
+    h2 { color: #1a1a2e; margin-bottom: 4px; }
+    p.note { color: #6c757d; font-size: 13px; margin: 0 0 20px; }
+    .chart-wrap { background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 12px; display: inline-block; margin: 12px 0; }
+    .section { margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+  <h2>Arc Diagram — Visual Test</h2>
+  <p class="note">
+    Three test scenarios: (1) small network with 6 nodes and groups (straight labels), 
+    (2) larger network with 12 nodes (rotated labels), (3) ungrouped nodes, dark theme.
+    Check: baseline visible, arcs above nodes, arc height proportional to span, nodes coloured by group.
+  </p>
+
+  <div class="section">
+    <h3>Test 1 — 6 nodes, 3 groups, weighted edges (straight labels)</h3>
+    <div class="chart-wrap" id="chart1"></div>
+  </div>
+
+  <div class="section">
+    <h3>Test 2 — 12 nodes, 4 groups, many edges (rotated labels)</h3>
+    <div class="chart-wrap" id="chart2"></div>
+  </div>
+
+  <div class="section">
+    <h3>Test 3 — No groups, dark theme</h3>
+    <div class="chart-wrap" style="background:#14142b" id="chart3"></div>
+  </div>
+
+  <script type="module">
+    import { renderArcDiagram } from '../src/viz/plots/arc-diagram.js'
+    import { DARK_THEME } from '../src/viz/themes/default.js'
+
+    // ── Test 1: 6 nodes, 3 groups ─────────────────────────────────────────────
+    const nodes1 = [
+      { id: 'A', label: 'Alpha',   group: 'Science' },
+      { id: 'B', label: 'Beta',    group: 'Science' },
+      { id: 'C', label: 'Gamma',   group: 'Arts' },
+      { id: 'D', label: 'Delta',   group: 'Arts' },
+      { id: 'E', label: 'Epsilon', group: 'Tech' },
+      { id: 'F', label: 'Zeta',    group: 'Tech' },
+    ]
+    const edges1 = [
+      { source: 'A', target: 'B', value: 5 },
+      { source: 'A', target: 'E', value: 2 },
+      { source: 'B', target: 'C', value: 3 },
+      { source: 'C', target: 'D', value: 8 },
+      { source: 'D', target: 'F', value: 1 },
+      { source: 'E', target: 'F', value: 4 },
+      { source: 'B', target: 'F', value: 6 },
+    ]
+
+    renderArcDiagram(
+      document.getElementById('chart1'),
+      { nodes: nodes1, edges: edges1 },
+      {
+        title: 'Academic Collaboration Network',
+        caption: 'Synthetic data — visual test',
+        width: 680, height: 360,
+      }
+    )
+
+    // ── Test 2: 12 nodes ──────────────────────────────────────────────────────
+    const groups2 = ['Cluster A', 'Cluster A', 'Cluster A', 'Cluster B', 'Cluster B', 'Cluster B',
+                     'Cluster C', 'Cluster C', 'Cluster C', 'Cluster D', 'Cluster D', 'Cluster D']
+    const nodes2 = Array.from({ length: 12 }, (_, i) => ({
+      id: `N${i + 1}`,
+      label: `Node ${i + 1}`,
+      group: groups2[i],
+    }))
+    const edges2 = [
+      { source: 'N1',  target: 'N2',  value: 3 },
+      { source: 'N1',  target: 'N4',  value: 1 },
+      { source: 'N2',  target: 'N3',  value: 5 },
+      { source: 'N3',  target: 'N7',  value: 2 },
+      { source: 'N4',  target: 'N5',  value: 4 },
+      { source: 'N5',  target: 'N6',  value: 2 },
+      { source: 'N6',  target: 'N10', value: 1 },
+      { source: 'N7',  target: 'N8',  value: 6 },
+      { source: 'N8',  target: 'N9',  value: 3 },
+      { source: 'N9',  target: 'N12', value: 2 },
+      { source: 'N10', target: 'N11', value: 4 },
+      { source: 'N11', target: 'N12', value: 5 },
+      { source: 'N2',  target: 'N8',  value: 1 },
+      { source: 'N1',  target: 'N12', value: 2 },
+    ]
+
+    renderArcDiagram(
+      document.getElementById('chart2'),
+      { nodes: nodes2, edges: edges2 },
+      {
+        title: 'Multi-Cluster Network',
+        caption: 'Synthetic 12-node test',
+        width: 780, height: 400,
+      }
+    )
+
+    // ── Test 3: No groups, dark theme ─────────────────────────────────────────
+    const nodesUngrouped = [
+      { id: 'X', label: 'X' },
+      { id: 'Y', label: 'Y' },
+      { id: 'Z', label: 'Z' },
+      { id: 'W', label: 'W' },
+      { id: 'V', label: 'V' },
+    ]
+    const edgesUngrouped = [
+      { source: 'X', target: 'Z', value: 2 },
+      { source: 'Y', target: 'W', value: 4 },
+      { source: 'Z', target: 'V', value: 1 },
+      { source: 'X', target: 'V', value: 3 },
+    ]
+
+    renderArcDiagram(
+      document.getElementById('chart3'),
+      { nodes: nodesUngrouped, edges: edgesUngrouped },
+      {
+        title: 'Ungrouped Nodes (Dark)',
+        width: 600, height: 340,
+        theme: DARK_THEME,
+      }
+    )
+  </script>
+</body>
+</html>

@@ -1,3 +1,13 @@
+## 2026-02-23 (analyze dispatch)
+
+### analyze() auto-routing via Shapiro-Wilk
+- Groups with n < 3 are treated as normal (SW undefined for n<3). This means: if you want deterministic routing to t-test in tests, use n=2 per group.
+- Groups with n > 50 also skip SW (CLT applies — SW is overly sensitive at large n) → treated as normal.
+- `exactOptionalPropertyTypes: true` in tsconfig: must use `...(x !== undefined && { x })` spread pattern to conditionally include optional object properties; cannot assign `undefined` to an optional field.
+- `tukeyHSD(groups, msWithin, dfWithin, ciLevel)` requires ANOVA output — run `oneWayANOVA` first, then extract `.msWithin` and `.dfWithin` from the `ANOVAResult`.
+- `fisherExactTest(a, b, c, d)` takes 4 cell values (not a matrix). Extract from `contingencyTable().table[i][j]`.
+- Auto-fallback chi-square → Fisher only applies for 2×2 tables with any expected count < 5.
+
 ## 2026-02-23
 
 ### Shapiro-Wilk AS R94 Algorithm

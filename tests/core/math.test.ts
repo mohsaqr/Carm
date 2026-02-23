@@ -39,9 +39,20 @@ describe('Normal distribution', () => {
     expect(normalQuantile(0.975)).toBeCloseTo(1.96, 2)
   })
   it('normalQuantile is inverse of normalCDF', () => {
-    // BSM A&S §26.2.16 has max error ~4.5e-4; round-trip accurate to ~3 dp
+    // Acklam normalQuantile has max error ~1.15e-9; round-trip is limited by
+    // the erf approximation in normalCDF (~1e-7), so 6 dp is the right bound.
     for (const p of [0.1, 0.25, 0.5, 0.75, 0.9, 0.99]) {
-      expect(normalCDF(normalQuantile(p))).toBeCloseTo(p, 3)
+      expect(normalCDF(normalQuantile(p))).toBeCloseTo(p, 6)
+    }
+  })
+  it('normalQuantile — high precision at tail regions (Acklam vs A&S improvement)', () => {
+    // R: qnorm(c(0.001, 0.01, 0.025, 0.975, 0.99, 0.999))
+    const cases: [number, number][] = [
+      [0.001, -3.090232], [0.01, -2.326348], [0.025, -1.959964],
+      [0.975,  1.959964], [0.99,  2.326348], [0.999,  3.090232],
+    ]
+    for (const [p, expected] of cases) {
+      expect(normalQuantile(p)).toBeCloseTo(expected, 5)
     }
   })
 })
@@ -140,6 +151,22 @@ describe('Descriptive utilities', () => {
     expect(() => mean([])).toThrow()
     expect(() => variance([1])).toThrow()
     expect(() => median([])).toThrow()
+  })
+
+  it('mean — coercion: Number() guards against runtime string concatenation', () => {
+    // TypeScript prevents this at compile time; guard ensures correct behaviour
+    // if TypeScript safety is bypassed (e.g. untyped CSV data).
+    // Without Number(): [1,2,'3',4] would concatenate → '334' / 4 = 83.5
+    const mixed = [1, 2, '3', 4] as unknown as number[]
+    expect(mean(mixed)).toBeCloseTo(2.5, 8)
+  })
+
+  it('sd — Infinity input returns NaN explicitly (not opaque arithmetic NaN)', () => {
+    // mean([1, Infinity]) = Infinity; (Infinity - Infinity)^2 was silently NaN before fix
+    expect(isNaN(sd([1, Infinity]))).toBe(true)
+    expect(isNaN(variance([1, Infinity]))).toBe(true)
+    // mean itself still propagates correctly
+    expect(mean([1, Infinity])).toBe(Infinity)
   })
 })
 
