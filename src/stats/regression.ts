@@ -81,7 +81,9 @@ function fitOLS(
 
   // AIC and BIC: -2 * logLik + penalty
   // logLik for normal errors: -n/2 * log(2π) - n/2 * log(σ²) - RSS/(2σ²)
-  const logLik = -n / 2 * (Math.log(2 * Math.PI) + Math.log(ss_res / n) + 1)
+  // Clamp RSS to avoid log(0) = -Inf on perfect fit
+  const rssSafe = Math.max(ss_res, 1e-15)
+  const logLik = -n / 2 * (Math.log(2 * Math.PI) + Math.log(rssSafe / n) + 1)
   const aic = -2 * logLik + 2 * (p + 1)
   const bic = -2 * logLik + Math.log(n) * (p + 1)
 
@@ -273,11 +275,13 @@ export function logisticRegression(
   }, 0)
 
   // Null log-likelihood (intercept only)
-  const pMean = _mean([...y])
+  // Clamp pMean away from 0/1 to prevent nullLogLik = 0 on degenerate outcomes
+  const pMeanRaw = _mean([...y])
+  const pMean = Math.min(1 - 1e-12, Math.max(1e-12, pMeanRaw))
   const nullLogLik = n * (pMean * Math.log(Math.max(1e-15, pMean)) + (1 - pMean) * Math.log(Math.max(1e-15, 1 - pMean)))
 
   // McFadden pseudo-R²
-  const r2 = 1 - logLik / nullLogLik
+  const r2 = Math.abs(nullLogLik) < 1e-12 ? NaN : 1 - logLik / nullLogLik
 
   const aic = -2 * logLik + 2 * p
   const bic = -2 * logLik + Math.log(n) * p
