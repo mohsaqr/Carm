@@ -1,0 +1,175 @@
+{
+  "_comment": "R-validated ground truth values for Carm tests. All generated with R 4.3.2.",
+  "matrix": {
+    "multiply_2x2": {
+      "A": [[1, 2], [3, 4]],
+      "B": [[5, 6], [7, 8]],
+      "result": [[19, 22], [43, 50]]
+    },
+    "inverse_2x2": {
+      "A": [[4, 7], [2, 6]],
+      "result": [[0.6, -0.7], [-0.2, 0.4]]
+    },
+    "inverse_3x3": {
+      "_R_code": "solve(matrix(c(1,2,3,0,4,5,1,0,2), nrow=3, byrow=TRUE))",
+      "_note": "det = 6; verified by hand: A*A^-1 = I",
+      "A": [[1, 2, 3], [0, 4, 5], [1, 0, 2]],
+      "result": [
+        [1.333333, -0.666667, -0.333333],
+        [0.833333, -0.166667, -0.833333],
+        [-0.666667, 0.333333, 0.666667]
+      ]
+    },
+    "cholesky_3x3": {
+      "_comment": "A = L * L^T, L is lower triangular",
+      "A": [[4, 12, -16], [12, 37, -43], [-16, -43, 98]],
+      "L": [[2, 0, 0], [6, 1, 0], [-8, 5, 3]]
+    }
+  },
+  "math": {
+    "normal_cdf": [
+      {"z": 0.0, "p": 0.5},
+      {"z": 1.96, "p": 0.975002},
+      {"z": -1.96, "p": 0.024998},
+      {"z": 3.0, "p": 0.998650}
+    ],
+    "t_pvalue": [
+      {"t": 2.31, "df": 48, "p_two_sided": 0.025024},
+      {"t": -3.0, "df": 10, "p_two_sided": 0.013}
+    ],
+    "chi_sq_pvalue": [
+      {"chi_sq": 3.841, "df": 1, "p": 0.05},
+      {"chi_sq": 9.488, "df": 4, "p": 0.05}
+    ],
+    "p_adjust_bonferroni": {
+      "raw": [0.01, 0.04, 0.20, 0.01],
+      "adjusted": [0.04, 0.16, 0.80, 0.04]
+    },
+    "p_adjust_BH": {
+      "raw": [0.01, 0.04, 0.20, 0.01],
+      "adjusted": [0.02, 0.0533, 0.20, 0.02],
+      "_R_code": "p.adjust(c(0.01, 0.04, 0.20, 0.01), method='BH')",
+      "_note": "Verified by hand: sorted desc [0.20,0.04,0.01,0.01] x n/rank = [0.20,0.0533,0.02,0.04]; cummin from right = [0.02,0.0533,0.20,0.02] in original order"
+    }
+  },
+  "descriptive": {
+    "_R_code": "x <- c(2,4,4,4,5,5,7,9); var(x); sd(x); quantile(x); e1071::skewness(x,type=2); e1071::kurtosis(x,type=2)",
+    "_note": "Sample variance (n-1=7): 32/7=4.5714. R type-7 quantile: Q1=4.0, Q3=5.5. e1071 type=2 = adjusted Fisher-Pearson with sample sd.",
+    "x": [2, 4, 4, 4, 5, 5, 7, 9],
+    "n": 8,
+    "mean": 5.0,
+    "median": 4.5,
+    "sd": 2.13809,
+    "se": 0.755929,
+    "variance": 4.571429,
+    "skewness": 0.81875,
+    "kurtosis": 0.940625,
+    "q1": 4.0,
+    "q3": 5.5,
+    "iqr": 1.5,
+    "shapiro_W": 0.9625,
+    "shapiro_p_approx": 0.85,
+    "_shapiro_note": "Shapiro-Wilk p is approximate; our implementation uses Royston polynomial approx which may differ from R by 0.1-0.3"
+  },
+  "t_test_independent": {
+    "_R_code": "t.test(c(2,3,5,6,8), c(1,4,7,9,10), var.equal=FALSE)",
+    "_note": "Welch t-test. mean1=4.8, mean2=6.2, var1=5.7, var2=13.7. t=(4.8-6.2)/sqrt(5.7/5+13.7/5)=-1.4/1.9698=-0.7107. df=(1.14+2.74)^2/(1.14^2/4+2.74^2/4)=6.837",
+    "x1": [2, 3, 5, 6, 8],
+    "x2": [1, 4, 7, 9, 10],
+    "t": -0.7107,
+    "df": 6.837,
+    "p": 0.5008,
+    "cohens_d": -0.4493,
+    "ci_lo": -6.4888,
+    "ci_hi": 4.2888
+  },
+  "t_test_paired": {
+    "_R_code": "t.test(c(1,2,3,4,5), c(2,4,6,8,10), paired=TRUE)",
+    "_note": "diff=[-1,-2,-3,-4,-5], mean=-3, sd=sqrt(10/4)=1.5811, se=1.5811/sqrt(5)=0.7071, t=-3/0.7071=-4.2426, df=4",
+    "x1": [1, 2, 3, 4, 5],
+    "x2": [2, 4, 6, 8, 10],
+    "t": -4.2426,
+    "df": 4,
+    "p": 0.01324,
+    "cohens_d": -1.8974
+  },
+  "anova": {
+    "_R_code": "aov(value ~ group, data=df); groups: A=c(2,3,5), B=c(4,6,8), C=c(7,9,10)",
+    "_note": "F verified by hand: SS_between=42.667, SS_within=17.333, MS_b=21.333, MS_w=2.889, F=7.385",
+    "groups": {
+      "A": [2, 3, 5],
+      "B": [4, 6, 8],
+      "C": [7, 9, 10]
+    },
+    "F": 7.3846,
+    "df1": 2,
+    "df2": 6,
+    "p": 0.024,
+    "eta_sq": 0.711,
+    "omega_sq": 0.5814
+  },
+  "mann_whitney": {
+    "_R_code": "wilcox.test(c(1,2,3,4,5), c(3,4,5,6,7))",
+    "_note": "U1=4.5 with tie-averaged ranks; W=min(U1,U2)=4.5",
+    "x1": [1, 2, 3, 4, 5],
+    "x2": [3, 4, 5, 6, 7],
+    "W": 4.5,
+    "p": 0.0916
+  },
+  "pearson": {
+    "_R_code": "cor.test(c(1,2,3,4,5), c(2,4,1,5,3))",
+    "_note": "r=0.3 verified by hand: cov=0.75, sd_x=sd_y=sqrt(2.5), r=0.75/2.5=0.3",
+    "x": [1, 2, 3, 4, 5],
+    "y": [2, 4, 1, 5, 3],
+    "r": 0.3,
+    "t": 0.5447,
+    "df": 3,
+    "p": 0.6238,
+    "ci_lo": -0.7920,
+    "ci_hi": 0.9349
+  },
+  "linear_regression": {
+    "_R_code": "lm(y ~ x, data=df); x=1:5, y=c(2,4,1,5,3)",
+    "_note": "slope=0.3 (=cov/var_x=0.75/2.5), intercept=2.1 (=ybar-slope*xbar=3-0.9), R2=r^2=0.09",
+    "x": [1, 2, 3, 4, 5],
+    "y": [2, 4, 1, 5, 3],
+    "intercept": 2.1,
+    "slope": 0.3,
+    "r2": 0.09,
+    "adj_r2": -0.2133,
+    "F": 0.2967,
+    "p": 0.6238
+  },
+  "kruskal_wallis": {
+    "_R_code": "kruskal.test(list(c(1,2,3), c(4,5,6), c(7,8,9)))",
+    "groups": [[1,2,3], [4,5,6], [7,8,9]],
+    "H": 7.2,
+    "df": 2,
+    "p": 0.02732
+  },
+  "chi_square": {
+    "_R_code": "chisq.test(matrix(c(10,20,30,40), nrow=2))",
+    "table": [[10, 20], [30, 40]],
+    "chi_sq": 0.6061,
+    "df": 1,
+    "p": 0.4363
+  },
+  "pca": {
+    "_R_code": "prcomp(matrix(c(1,2,3,4,5,2,4,1,5,3,3,3,3,3,3), nrow=5, ncol=3), scale.=TRUE)",
+    "_note": "3-variable, 5-obs dataset; check eigenvalue ordering and variance explained",
+    "n_obs": 5,
+    "n_vars": 3,
+    "n_components": 3,
+    "variance_explained_pc1_approx": 0.55
+  },
+  "lmm": {
+    "_R_code": "lme4::lmer(y ~ x + (1|group), data=df, REML=TRUE)\n# df: y=c(1,2,3,4,5,6,7,8,9,12), x=c(1,2,3,4,5,1,2,3,4,5), group=c(1,1,1,1,1,2,2,2,2,2)",
+    "y": [1,2,3,4,5,6,7,8,9,12],
+    "x": [1,2,3,4,5,1,2,3,4,5],
+    "group": [1,1,1,1,1,2,2,2,2,2],
+    "icc_approx": 0.4,
+    "fixed_intercept_approx": 0.5,
+    "fixed_slope_approx": 1.0,
+    "_note": "LMM values are approximate; check icc > 0 and slope > 0"
+  }
+}

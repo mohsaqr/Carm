@@ -1,0 +1,54 @@
+{
+  "name": "carm",
+  "version": "0.1.0",
+  "description": "Statistical analysis and visualization for JavaScript/TypeScript",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./stats": {
+      "types": "./dist/stats/index.d.ts",
+      "import": "./dist/stats/index.js",
+      "require": "./dist/stats/index.cjs"
+    },
+    "./viz": {
+      "types": "./dist/viz/index.d.ts",
+      "import": "./dist/viz/index.js",
+      "require": "./dist/viz/index.cjs"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "require": "./dist/core/index.cjs"
+    }
+  },
+  "peerDependencies": {
+    "d3": ">=7.0.0"
+  },
+  "dependencies": {
+    "jstat": "^1.9.6"
+  },
+  "devDependencies": {
+    "d3": "^7.9.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "vite": "^6.0.0",
+    "@types/d3": "^7.4.3",
+    "@types/node": "^22.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepare": "tsup",
+    "test": "NODE_OPTIONS='--max-old-space-size=4096' vitest run",
+    "test:watch": "vitest",
+    "demo": "vite demo",
+    "typecheck": "tsc --noEmit"
+  }
+}

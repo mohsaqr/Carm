@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carm Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #212529;
+      min-height: 100vh;
+    }
+    header {
+      background: #0d6efd;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 22px; font-weight: 700; }
+    header p { font-size: 14px; opacity: 0.85; }
+    nav {
+      display: flex;
+      gap: 8px;
+      padding: 16px 32px;
+      background: white;
+      border-bottom: 1px solid #dee2e6;
+      flex-wrap: wrap;
+    }
+    nav button {
+      padding: 8px 18px;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+    nav button:hover { background: #e9ecef; }
+    nav button.active { background: #0d6efd; color: white; border-color: #0d6efd; }
+    main {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 32px;
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    .plot-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .stats-table {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 13px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Carm</h1>
+      <p>Statistical analysis & visualization for TypeScript — publication-quality plots with embedded statistics</p>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" onclick="showSection('descriptive', this)">Descriptive</button>
+    <button onclick="showSection('comparison', this)">Group Comparison</button>
+    <button onclick="showSection('correlation', this)">Correlation</button>
+    <button onclick="showSection('regression', this)">Regression</button>
+    <button onclick="showSection('lmm', this)">Mixed Models</button>
+    <button onclick="showSection('pca', this)">PCA</button>
+    <button onclick="showSection('distribution', this)">Distributions</button>
+  </nav>
+
+  <main>
+    <div id="descriptive" class="section active">
+      <h2>Descriptive Statistics</h2>
+      <p class="desc">Histogram with normality curve, QQ plot, and full descriptive summary.</p>
+      <div class="plot-container">
+        <div id="histogram-plot"></div>
+      </div>
+      <div class="plot-container">
+        <div id="qq-plot"></div>
+      </div>
+      <div class="stats-table" id="descriptive-stats"></div>
+    </div>
+
+    <div id="comparison" class="section">
+      <h2>Group Comparison</h2>
+      <p class="desc">Violin + box + jitter plot with significance brackets (one-way ANOVA + Tukey HSD).</p>
+      <div class="plot-container">
+        <div id="violin-plot"></div>
+      </div>
+      <div class="plot-container">
+        <div id="raincloud-plot"></div>
+      </div>
+      <div class="stats-table" id="comparison-stats"></div>
+    </div>
+
+    <div id="correlation" class="section">
+      <h2>Correlation Analysis</h2>
+      <p class="desc">Scatter plot with regression line and correlation matrix heatmap.</p>
+      <div class="plot-container">
+        <div id="scatter-plot"></div>
+      </div>
+      <div class="plot-container">
+        <div id="correlogram-plot"></div>
+      </div>
+    </div>
+
+    <div id="regression" class="section">
+      <h2>Regression Analysis</h2>
+      <p class="desc">Coefficient plot and residual diagnostic panel.</p>
+      <div class="plot-container">
+        <div id="coef-plot"></div>
+      </div>
+      <div class="plot-container">
+        <div id="residual-plot"></div>
+      </div>
+    </div>
+
+    <div id="lmm" class="section">
+      <h2>Linear Mixed Models</h2>
+      <p class="desc">Random effects caterpillar plot (BLUPs) for a 3-group LMM.</p>
+      <div class="plot-container">
+        <div id="lmm-plot"></div>
+      </div>
+      <div class="stats-table" id="lmm-stats"></div>
+    </div>
+
+    <div id="pca" class="section">
+      <h2>Principal Component Analysis</h2>
+      <p class="desc">Scree plot, biplot, and loadings heatmap.</p>
+      <div class="plot-container">
+        <div id="scree-plot"></div>
+      </div>
+      <div class="plot-container">
+        <div id="biplot"></div>
+      </div>
+    </div>
+
+    <div id="distribution" class="section">
+      <h2>Distribution Explorer</h2>
+      <p class="desc">Normal and t-distribution PDF with highlighted areas.</p>
+      <div class="plot-container">
+        <div id="dist-normal"></div>
+      </div>
+      <div class="plot-container">
+        <div id="dist-t"></div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="./main.ts"></script>
+  <script>
+    function showSection(id, btn) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'))
+      document.getElementById(id).classList.add('active')
+      btn.classList.add('active')
+    }
+  </script>
+</body>
+</html>

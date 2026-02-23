@@ -1,0 +1,10 @@
+// Stats submodule — all statistical computation functions
+export * from './descriptive.js'
+export * from './effect-size.js'
+export * from './frequency.js'
+export * from './comparison.js'
+export * from './post-hoc.js'
+export * from './correlation.js'
+export * from './regression.js'
+export * from './pca.js'
+export * from './mixed.js'
