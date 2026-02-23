@@ -170,6 +170,12 @@
     <button onclick="showSection('lmm', this)">Mixed Models</button>
     <button onclick="showSection('pca', this)">PCA</button>
     <button onclick="showSection('distribution', this)">Distributions</button>
+    <button onclick="showSection('ranking', this)">Ranking</button>
+    <button onclick="showSection('composition', this)">Composition</button>
+    <button onclick="showSection('timeseries', this)">Time Series</button>
+    <button onclick="showSection('statistical', this)">Statistical</button>
+    <button onclick="showSection('multivariate', this)">Multivariate</button>
+    <button onclick="showSection('categorical', this)">Categorical</button>
   </nav>
 
   <main>
@@ -177,18 +183,23 @@
     <!-- ─── DESCRIPTIVE ──────────────────────────────────────────────────── -->
     <div id="descriptive" class="section active">
       <h2>Descriptive Statistics</h2>
-      <p class="desc">Histogram with normality curve, QQ plot, and full summary table.</p>
+      <p class="desc">Histogram with normality curve, QQ plot, KDE density, standalone box plot, and summary tables.</p>
       <div class="plot-container"><div id="histogram-plot"></div></div>
       <div class="plot-container"><div id="qq-plot"></div></div>
+      <div class="plot-container"><div id="density-plot"></div></div>
+      <div class="plot-container"><div id="boxplot-plot"></div></div>
       <div class="table-container" id="descriptive-tables"></div>
     </div>
 
     <!-- ─── COMPARISON ───────────────────────────────────────────────────── -->
     <div id="comparison" class="section">
       <h2>Group Comparison</h2>
-      <p class="desc">Violin + box + jitter plot with significance brackets (one-way ANOVA + Tukey HSD).</p>
+      <p class="desc">Violin + box + jitter, raincloud, grouped/stacked bar, and bubble chart.</p>
       <div class="plot-container"><div id="violin-plot"></div></div>
       <div class="plot-container"><div id="raincloud-plot"></div></div>
+      <div class="plot-container"><div id="grouped-bar-plot"></div></div>
+      <div class="plot-container"><div id="stacked-bar-plot"></div></div>
+      <div class="plot-container"><div id="bubble-plot"></div></div>
       <div class="table-container" id="comparison-tables"></div>
     </div>
 
@@ -237,6 +248,68 @@
       <p class="desc">Normal and t-distribution PDF with highlighted areas.</p>
       <div class="plot-container"><div id="dist-normal"></div></div>
       <div class="plot-container"><div id="dist-t"></div></div>
+    </div>
+
+    <!-- ─── RANKING ──────────────────────────────────────────────────────── -->
+    <div id="ranking" class="section">
+      <h2>Ranking Charts</h2>
+      <p class="desc">Lollipop, Cleveland dot plot, Pareto chart, and funnel chart.</p>
+      <div class="plot-container"><div id="lollipop-plot"></div></div>
+      <div class="plot-container"><div id="dot-plot-plot"></div></div>
+      <div class="plot-container"><div id="pareto-plot"></div></div>
+      <div class="plot-container"><div id="funnel-plot"></div></div>
+    </div>
+
+    <!-- ─── COMPOSITION ──────────────────────────────────────────────────── -->
+    <div id="composition" class="section">
+      <h2>Composition Charts</h2>
+      <p class="desc">Pie/donut chart, area chart, treemap, and waffle chart.</p>
+      <div class="plots-row">
+        <div class="plot-container"><div id="pie-plot"></div></div>
+        <div class="plot-container"><div id="donut-plot"></div></div>
+      </div>
+      <div class="plot-container"><div id="area-plot"></div></div>
+      <div class="plot-container"><div id="treemap-plot"></div></div>
+      <div class="plot-container"><div id="waffle-plot"></div></div>
+    </div>
+
+    <!-- ─── TIME SERIES ──────────────────────────────────────────────────── -->
+    <div id="timeseries" class="section">
+      <h2>Time Series</h2>
+      <p class="desc">Multi-line time series chart and sparklines.</p>
+      <div class="plot-container"><div id="linechart-plot"></div></div>
+      <div class="plot-container">
+        <p style="font-size:13px;color:#6c757d;margin-bottom:12px;">Sparklines (inline trend indicators):</p>
+        <div id="sparkline-a"></div>
+        <div id="sparkline-b" style="margin-top:8px;"></div>
+        <div id="sparkline-c" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <!-- ─── STATISTICAL ──────────────────────────────────────────────────── -->
+    <div id="statistical" class="section">
+      <h2>Statistical Plots</h2>
+      <p class="desc">Forest plot for meta-analysis and ROC curve for classification evaluation.</p>
+      <div class="plot-container"><div id="forest-plot"></div></div>
+      <div class="plot-container"><div id="roc-plot"></div></div>
+    </div>
+
+    <!-- ─── MULTIVARIATE ─────────────────────────────────────────────────── -->
+    <div id="multivariate" class="section">
+      <h2>Multivariate Plots</h2>
+      <p class="desc">Radar chart, parallel coordinates, scatter matrix (pair plot), and treemap.</p>
+      <div class="plot-container"><div id="radar-plot"></div></div>
+      <div class="plot-container"><div id="parallel-plot"></div></div>
+      <div class="plot-container"><div id="pair-plot"></div></div>
+    </div>
+
+    <!-- ─── CATEGORICAL ──────────────────────────────────────────────────── -->
+    <div id="categorical" class="section">
+      <h2>Categorical Plots</h2>
+      <p class="desc">Strip plot (jittered dots), beeswarm plot, and mosaic plot.</p>
+      <div class="plot-container"><div id="strip-plot"></div></div>
+      <div class="plot-container"><div id="swarm-plot"></div></div>
+      <div class="plot-container"><div id="mosaic-plot"></div></div>
     </div>
 
   </main>
