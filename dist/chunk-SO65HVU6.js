@@ -1,0 +1,1759 @@
+import { formatP, interpretCohensD, interpretEtaSq, interpretR, interpretCramerV, formatChiSq, formatTTest, formatANOVA, formatMannWhitney, formatKruskalWallis, formatCorrelation, Matrix, formatLMM, formatRegression } from './chunk-CQNGM2TQ.js';
+import { sortAsc, mean, sd, se, tDistQuantile, normalQuantile, variance, roundTo, normalCDF, median, quantile, chiSqPValue, tDistPValue, fDistPValue, rank, adjustPValues, cov, nelderMead } from './chunk-IRX4LIZX.js';
+
+// src/stats/descriptive.ts
+function mode(x) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const v of x) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const maxCount = Math.max(...counts.values());
+  const modes = [];
+  for (const [v, c] of counts) {
+    if (c === maxCount) modes.push(v);
+  }
+  return modes.sort((a, b) => a - b);
+}
+function trimmedMean(x, alpha = 0.05) {
+  const sorted = sortAsc(x);
+  const n = sorted.length;
+  const trim = Math.floor(n * alpha);
+  const trimmed = sorted.slice(trim, n - trim);
+  if (trimmed.length === 0) throw new Error("trimmedMean: too much trimming, no data remains");
+  return mean(trimmed);
+}
+function skewness(x) {
+  const n = x.length;
+  if (n < 3) throw new Error("skewness: need at least 3 observations");
+  const m = mean(x);
+  const s = sd(x);
+  if (s === 0) return 0;
+  const sum = x.reduce((acc, v) => acc + ((v - m) / s) ** 3, 0);
+  return n / ((n - 1) * (n - 2)) * sum;
+}
+function kurtosis(x) {
+  const n = x.length;
+  if (n < 4) throw new Error("kurtosis: need at least 4 observations");
+  const m = mean(x);
+  const s = sd(x);
+  if (s === 0) return 0;
+  const sum = x.reduce((acc, v) => acc + ((v - m) / s) ** 4, 0);
+  const k1 = n * (n + 1) / ((n - 1) * (n - 2) * (n - 3)) * sum;
+  const k2 = 3 * (n - 1) ** 2 / ((n - 2) * (n - 3));
+  return k1 - k2;
+}
+function ciMean(x, ciLevel = 0.95) {
+  const n = x.length;
+  if (n < 2) throw new Error("ciMean: need at least 2 observations");
+  const m = mean(x);
+  const s = se(x);
+  const t = tDistQuantile(1 - (1 - ciLevel) / 2, n - 1);
+  return [m - t * s, m + t * s];
+}
+var SW_C1 = [0, 0.221157, -0.147981, -2.07119, 4.434685, -2.706056];
+var SW_C2 = [0, 0.042981, -0.293762, -1.752461, 5.682633, -3.582633];
+function swPoly(c, x) {
+  let r = 0;
+  for (let i = c.length - 1; i >= 0; i--) r = r * x + (c[i] ?? 0);
+  return r;
+}
+function shapiroWilk(x) {
+  const n = x.length;
+  if (n < 3) throw new Error("shapiroWilk: need at least 3 observations");
+  if (n > 5e3) throw new Error("shapiroWilk: n > 5000 not supported");
+  const sorted = sortAsc(x);
+  const nn2 = Math.floor(n / 2);
+  const a = new Array(nn2).fill(0);
+  if (n === 3) {
+    a[0] = Math.SQRT1_2;
+  } else if (n === 4) {
+    a[0] = 0.6872;
+    a[1] = 0.1677;
+  } else if (n === 5) {
+    a[0] = 0.6646;
+    a[1] = 0.2413;
+  } else {
+    for (let i = 0; i < nn2; i++) {
+      a[i] = normalQuantile((i + 1 - 0.375) / (n + 0.25));
+    }
+    let summ2 = 0;
+    for (let i = 0; i < nn2; i++) summ2 += a[i] * a[i];
+    summ2 *= 2;
+    const ssumm2 = Math.sqrt(summ2);
+    const rsn = 1 / Math.sqrt(n);
+    const a0orig = a[0];
+    const a1orig = a[1];
+    const a1corr = swPoly(SW_C1, rsn) - a0orig / ssumm2;
+    if (n > 5) {
+      const a2corr = -a1orig / ssumm2 + swPoly(SW_C2, rsn);
+      const num = summ2 - 2 * a0orig * a0orig - 2 * a1orig * a1orig;
+      const den = 1 - 2 * a1corr * a1corr - 2 * a2corr * a2corr;
+      const fac = num > 0 && den > 0 ? Math.sqrt(num / den) : 1;
+      a[0] = a1corr;
+      a[1] = a2corr;
+      for (let i = 2; i < nn2; i++) a[i] = (a[i] ?? 0) / -fac;
+    } else {
+      const num = summ2 - 2 * a0orig * a0orig;
+      const den = 1 - 2 * a1corr * a1corr;
+      const fac = num > 0 && den > 0 ? Math.sqrt(num / den) : 1;
+      a[0] = a1corr;
+      for (let i = 1; i < nn2; i++) a[i] = (a[i] ?? 0) / -fac;
+    }
+  }
+  let w1 = 0;
+  for (let i = 0; i < nn2; i++) {
+    w1 += (a[i] ?? 0) * ((sorted[n - 1 - i] ?? 0) - (sorted[i] ?? 0));
+  }
+  const sst = variance(sorted) * (n - 1);
+  const W = sst > 0 ? Math.min(1, w1 * w1 / sst) : 1;
+  const pValue = shapiroWilkPValue(W, n);
+  return { statistic: roundTo(W, 4), pValue: roundTo(pValue, 4) };
+}
+function polynomialEval(coeffs, x) {
+  return coeffs.reduce((acc, c) => acc * x + c, 0);
+}
+function shapiroWilkPValue(W, n) {
+  let y = Math.log(1 - W);
+  let z;
+  if (n <= 11) {
+    const gamma = polynomialEval([0.459, -2.273], 1 / n);
+    if (y >= gamma) return 5e-7;
+    y = -Math.log(gamma - y);
+    const mu = polynomialEval([-1.2725, 1.0521, -0.0895], 1 / n);
+    const sigma = Math.exp(polynomialEval([-6714e-7, 0.025054, -0.6714, 0.724], 1 / n));
+    z = (y - mu) / sigma;
+  } else {
+    const mu = polynomialEval([38915e-7, -0.083751, -0.31082, -1.5861], Math.log(n));
+    const sigma = Math.exp(polynomialEval([30302e-7, -0.082676, -0.4803], Math.log(n)));
+    z = (y - mu) / sigma;
+  }
+  return Math.max(0, Math.min(1, 1 - normalCDF(z)));
+}
+function describe(x, ciLevel = 0.95) {
+  if (x.length === 0) throw new Error("describe: empty array");
+  const n = x.length;
+  const m = mean(x);
+  const med = median(x);
+  const modes = mode(x);
+  const tm = trimmedMean(x, 0.05);
+  const s = sd(x);
+  const sem = se(x);
+  const v = variance(x);
+  const sorted = sortAsc(x);
+  const mn = sorted[0];
+  const mx = sorted[n - 1];
+  const q1 = quantile(x, 0.25);
+  const q3 = quantile(x, 0.75);
+  const iqr = q3 - q1;
+  const skew = n >= 3 ? skewness(x) : 0;
+  const kurt = n >= 4 ? kurtosis(x) : 0;
+  const ci = ciMean(x, ciLevel);
+  const sw = n >= 3 ? shapiroWilk(x) : { statistic: NaN, pValue: NaN };
+  const ciPct = Math.round(ciLevel * 100);
+  const formatted = [
+    `n = ${n}`,
+    `M = ${roundTo(m, 2)}, SD = ${roundTo(s, 2)}, SE = ${roundTo(sem, 2)}`,
+    `Mdn = ${roundTo(med, 2)}, IQR = ${roundTo(iqr, 2)}`,
+    `Skew = ${roundTo(skew, 2)}, Kurt = ${roundTo(kurt, 2)}`,
+    `${ciPct}% CI [${roundTo(ci[0], 2)}, ${roundTo(ci[1], 2)}]`,
+    n >= 3 ? `Shapiro-Wilk W = ${roundTo(sw.statistic, 3)}, ${formatP(sw.pValue)}` : ""
+  ].filter(Boolean).join("; ");
+  return {
+    n,
+    mean: roundTo(m, 6),
+    median: roundTo(med, 6),
+    mode: modes,
+    trimmedMean: roundTo(tm, 6),
+    sd: roundTo(s, 6),
+    se: roundTo(sem, 6),
+    variance: roundTo(v, 6),
+    min: mn,
+    max: mx,
+    range: mx - mn,
+    iqr: roundTo(iqr, 6),
+    q1: roundTo(q1, 6),
+    q3: roundTo(q3, 6),
+    skewness: roundTo(skew, 6),
+    kurtosis: roundTo(kurt, 6),
+    ci,
+    ciLevel,
+    shapiroWilk: sw,
+    formatted
+  };
+}
+
+// src/stats/effect-size.ts
+function cohensD(x1, x2) {
+  if (x1.length < 2 || x2.length < 2) throw new Error("cohensD: need at least 2 observations per group");
+  const n1 = x1.length, n2 = x2.length;
+  const m1 = mean(x1), m2 = mean(x2);
+  const v1 = variance(x1), v2 = variance(x2);
+  const sdPooled = Math.sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2));
+  if (sdPooled === 0) return { value: 0, name: "Cohen's d", interpretation: "negligible" };
+  const d = (m1 - m2) / sdPooled;
+  return {
+    value: d,
+    name: "Cohen's d",
+    interpretation: interpretCohensD(d)
+  };
+}
+function cohensDPaired(diffs) {
+  if (diffs.length < 2) throw new Error("cohensDPaired: need at least 2 differences");
+  const m = mean(diffs);
+  const s = sd(diffs);
+  const d = s === 0 ? 0 : m / s;
+  return {
+    value: d,
+    name: "Cohen's d",
+    interpretation: interpretCohensD(d)
+  };
+}
+function hedgesG(x1, x2) {
+  const d = cohensD(x1, x2);
+  const df = x1.length + x2.length - 2;
+  const J = 1 - 3 / (4 * df - 1);
+  const g = d.value * J;
+  return {
+    value: g,
+    name: "Hedges' g",
+    interpretation: interpretCohensD(g)
+  };
+}
+function etaSquared(ssBetween, ssTotal) {
+  if (ssTotal <= 0) return { value: 0, name: "\u03B7\xB2", interpretation: "negligible" };
+  const eta2 = Math.max(0, Math.min(1, ssBetween / ssTotal));
+  return {
+    value: eta2,
+    name: "\u03B7\xB2",
+    interpretation: interpretEtaSq(eta2)
+  };
+}
+function omegaSquared(ssBetween, ssTotal, dfBetween, msWithin) {
+  const denom = ssTotal + msWithin;
+  if (denom <= 0) return { value: 0, name: "\u03C9\xB2", interpretation: "negligible" };
+  const omega2 = Math.max(0, (ssBetween - dfBetween * msWithin) / denom);
+  return {
+    value: omega2,
+    name: "\u03C9\xB2",
+    interpretation: interpretEtaSq(omega2)
+  };
+}
+function rankBiserial(U, n1, n2) {
+  const r = 1 - 2 * U / (n1 * n2);
+  return {
+    value: r,
+    name: "r (rank-biserial)",
+    interpretation: interpretR(r)
+  };
+}
+function rankBiserialWilcoxon(T, n) {
+  const maxT = n * (n + 1) / 2;
+  const r = maxT > 0 ? T / maxT * 2 - 1 : 0;
+  return {
+    value: r,
+    name: "r (rank-biserial)",
+    interpretation: interpretR(r)
+  };
+}
+function etaSquaredKW(H, k, n) {
+  const eta2 = Math.max(0, (H - k + 1) / (n - k));
+  return {
+    value: eta2,
+    name: "\u03B7\xB2_H",
+    interpretation: interpretEtaSq(eta2)
+  };
+}
+function cohensDCI(d, n1, n2, ciLevel = 0.95) {
+  const sampleSE = Math.sqrt((n1 + n2) / (n1 * n2) + d * d / (2 * (n1 + n2)));
+  const z = normalQuantileInline(1 - (1 - ciLevel) / 2);
+  return [d - z * sampleSE, d + z * sampleSE];
+}
+function normalQuantileInline(p) {
+  const a = [2.515517, 0.802853, 0.010328];
+  const b = [1.432788, 0.189269, 1308e-6];
+  const t = Math.sqrt(-2 * Math.log(p <= 0.5 ? p : 1 - p));
+  const num = a[0] + a[1] * t + a[2] * t * t;
+  const den = 1 + b[0] * t + b[1] * t * t + b[2] * t * t * t;
+  const x = t - num / den;
+  return p <= 0.5 ? -x : x;
+}
+
+// src/stats/frequency.ts
+function frequencyTable(data) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const v of data) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const total = data.length;
+  const sorted = [...counts.entries()].sort((a, b) => {
+    const av = typeof a[0] === "number" ? a[0] : String(a[0]);
+    const bv = typeof b[0] === "number" ? b[0] : String(b[0]);
+    return av < bv ? -1 : av > bv ? 1 : 0;
+  });
+  let cumulative = 0;
+  return sorted.map(([value, count]) => {
+    const relative = count / total;
+    cumulative += relative;
+    return { value, count, relative, cumulative: Math.min(1, cumulative) };
+  });
+}
+function contingencyTable(group1, group2) {
+  if (group1.length !== group2.length) throw new Error("contingencyTable: arrays must have equal length");
+  const rowSet = [...new Set(group1)].sort();
+  const colSet = [...new Set(group2)].sort();
+  const table = Array.from(
+    { length: rowSet.length },
+    () => new Array(colSet.length).fill(0)
+  );
+  for (let i = 0; i < group1.length; i++) {
+    const r = rowSet.indexOf(group1[i]);
+    const c = colSet.indexOf(group2[i]);
+    table[r][c]++;
+  }
+  return { table, rowLabels: rowSet, colLabels: colSet };
+}
+function expectedCounts(observed) {
+  const R = observed.length;
+  const C = observed[0].length;
+  const rowTotals = observed.map((row) => row.reduce((s, v) => s + v, 0));
+  const colTotals = Array.from(
+    { length: C },
+    (_, j) => observed.reduce((s, row) => s + (row[j] ?? 0), 0)
+  );
+  const total = rowTotals.reduce((s, v) => s + v, 0);
+  return Array.from(
+    { length: R },
+    (_, i) => Array.from({ length: C }, (_2, j) => rowTotals[i] * (colTotals[j] ?? 0) / total)
+  );
+}
+function chiSquareTest(observed, yatesCorrection = false) {
+  const R = observed.length;
+  if (R < 2) throw new Error("chiSquareTest: need at least 2 rows");
+  const C = observed[0].length;
+  if (C < 2) throw new Error("chiSquareTest: need at least 2 columns");
+  const expected = expectedCounts(observed);
+  const n = observed.reduce((s, row) => s + row.reduce((a, v) => a + v, 0), 0);
+  let chiSq = 0;
+  for (let i = 0; i < R; i++) {
+    for (let j = 0; j < C; j++) {
+      const o = observed[i][j] ?? 0;
+      const e = expected[i][j] ?? 0;
+      const num = yatesCorrection ? Math.max(0, Math.abs(o - e) - 0.5) : o - e;
+      chiSq += num * num / e;
+    }
+  }
+  const df = (R - 1) * (C - 1);
+  const pValue = chiSqPValue(chiSq, df);
+  const minDim = Math.min(R, C) - 1;
+  const cramersV = Math.sqrt(chiSq / (n * Math.max(1, minDim)));
+  const effectSize = {
+    value: cramersV,
+    name: "Cram\xE9r's V",
+    interpretation: interpretCramerV(cramersV, df)
+  };
+  const ci = [NaN, NaN];
+  const formatted = formatChiSq(chiSq, df, pValue, cramersV, "V");
+  return {
+    testName: "Pearson's \u03C7\xB2",
+    statistic: chiSq,
+    df,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel: 0.95,
+    n,
+    formatted,
+    table: frequencyTable(observed.flatMap(
+      (row, i) => row.flatMap((count, j) => new Array(count).fill(`${i},${j}`))
+    )),
+    expectedCounts: expected
+  };
+}
+function fisherExactTest(a, b, c, d) {
+  if (a < 0 || b < 0 || c < 0 || d < 0) throw new Error("fisherExactTest: all cells must be non-negative");
+  const n = a + b + c + d;
+  const r1 = a + b;
+  const c1 = a + c;
+  const c2 = b + d;
+  const pObserved = hypergeomPMF(a, r1, c1, n);
+  let pValue = 0;
+  const kMin = Math.max(0, r1 - c2);
+  const kMax = Math.min(r1, c1);
+  for (let k = kMin; k <= kMax; k++) {
+    const p = hypergeomPMF(k, r1, c1, n);
+    if (p <= pObserved + 1e-10) pValue += p;
+  }
+  pValue = Math.min(1, pValue);
+  const oddsRatio = b === 0 || c === 0 ? (a + 0.5) * (d + 0.5) / ((b + 0.5) * (c + 0.5)) : a * d / (b * c);
+  const se2 = Math.sqrt(1 / (a + 0.5) + 1 / (b + 0.5) + 1 / (c + 0.5) + 1 / (d + 0.5));
+  const z = normalQuantile(0.975);
+  const logOR = Math.log(oddsRatio);
+  const ci = [Math.exp(logOR - z * se2), Math.exp(logOR + z * se2)];
+  const effectSize = {
+    value: oddsRatio,
+    name: "Odds ratio",
+    interpretation: oddsRatio >= 3 ? "large" : oddsRatio >= 1.5 ? "medium" : "small"
+  };
+  return {
+    testName: "Fisher's Exact Test",
+    statistic: oddsRatio,
+    df: 1,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel: 0.95,
+    n,
+    formatted: `OR = ${oddsRatio.toFixed(2)}, ${formatP(pValue)}, 95% CI [${ci[0].toFixed(2)}, ${ci[1].toFixed(2)}]`
+  };
+}
+function hypergeomPMF(k, n, K, N) {
+  return Math.exp(
+    logCombination(K, k) + logCombination(N - K, n - k) - logCombination(N, n)
+  );
+}
+function logCombination(n, k) {
+  if (k < 0 || k > n) return -Infinity;
+  if (k === 0 || k === n) return 0;
+  return logFactorial(n) - logFactorial(k) - logFactorial(n - k);
+}
+function logFactorial(n) {
+  if (n <= 1) return 0;
+  let result = 0;
+  for (let i = 2; i <= n; i++) result += Math.log(i);
+  return result;
+}
+function phiCoefficient(a, b, c, d) {
+  const denom = Math.sqrt((a + b) * (c + d) * (a + c) * (b + d));
+  return denom === 0 ? 0 : (a * d - b * c) / denom;
+}
+function goodnessOfFit(observed, expected) {
+  const n = observed.reduce((s, v) => s + v, 0);
+  const k = observed.length;
+  if (k < 2) throw new Error("goodnessOfFit: need at least 2 categories");
+  const expCounts = expected ? expected.map((p) => p * n) : new Array(k).fill(n / k);
+  let chiSq = 0;
+  for (let i = 0; i < k; i++) {
+    const o = observed[i] ?? 0;
+    const e = expCounts[i] ?? 0;
+    if (e <= 0) throw new Error(`goodnessOfFit: expected count must be > 0 at index ${i}`);
+    chiSq += (o - e) ** 2 / e;
+  }
+  const df = k - 1;
+  const pValue = chiSqPValue(chiSq, df);
+  const w = Math.sqrt(chiSq / n);
+  return {
+    testName: "Chi-square goodness-of-fit",
+    statistic: chiSq,
+    df,
+    pValue,
+    effectSize: {
+      value: w,
+      name: "Cohen's w",
+      interpretation: w < 0.1 ? "negligible" : w < 0.3 ? "small" : w < 0.5 ? "medium" : "large"
+    },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted: formatChiSq(chiSq, df, pValue, w, "w")
+  };
+}
+
+// src/stats/comparison.ts
+function tTestIndependent(x1, x2, equalVariances = false, ciLevel = 0.95, alternative = "two.sided") {
+  if (x1.length < 2 || x2.length < 2) throw new Error("tTestIndependent: need at least 2 per group");
+  const n1 = x1.length, n2 = x2.length;
+  const m1 = mean(x1), m2 = mean(x2);
+  const v1 = variance(x1), v2 = variance(x2);
+  let df;
+  let se2;
+  if (equalVariances) {
+    const spSq = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2);
+    se2 = Math.sqrt(spSq * (1 / n1 + 1 / n2));
+    df = n1 + n2 - 2;
+  } else {
+    se2 = Math.sqrt(v1 / n1 + v2 / n2);
+    const num = (v1 / n1 + v2 / n2) ** 2;
+    const den = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
+    df = den > 0 ? num / den : n1 + n2 - 2;
+  }
+  const t = se2 === 0 ? 0 : (m1 - m2) / se2;
+  const pFull = tDistPValue(t, df);
+  const pValue = alternative === "two.sided" ? pFull : alternative === "less" ? t < 0 ? pFull / 2 : 1 - pFull / 2 : t > 0 ? pFull / 2 : 1 - pFull / 2;
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const diff = m1 - m2;
+  const ci = [diff - tCrit * se2, diff + tCrit * se2];
+  const effectSize = cohensD(x1, x2);
+  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  return {
+    testName: equalVariances ? "Student's t-test" : "Welch's t-test",
+    statistic: t,
+    df,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel,
+    n: n1 + n2,
+    formatted
+  };
+}
+function tTestPaired(x1, x2, ciLevel = 0.95) {
+  if (x1.length !== x2.length) throw new Error("tTestPaired: arrays must have equal length");
+  if (x1.length < 2) throw new Error("tTestPaired: need at least 2 pairs");
+  const diffs = x1.map((v, i) => v - (x2[i] ?? 0));
+  const n = diffs.length;
+  const mDiff = mean(diffs);
+  const seDiff = se(diffs);
+  const df = n - 1;
+  const t = seDiff === 0 ? 0 : mDiff / seDiff;
+  const pValue = tDistPValue(t, df);
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const ci = [mDiff - tCrit * seDiff, mDiff + tCrit * seDiff];
+  const effectSize = cohensDPaired(diffs);
+  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  return {
+    testName: "Paired t-test",
+    statistic: t,
+    df,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel,
+    n,
+    formatted
+  };
+}
+function oneWayANOVA(groups) {
+  if (groups.length < 2) throw new Error("oneWayANOVA: need at least 2 groups");
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const grandMean = mean(allValues);
+  let ssBetween = 0, ssWithin = 0;
+  const groupStats = groups.map((g) => {
+    const gm = mean(g.values);
+    const gn = g.values.length;
+    ssBetween += gn * (gm - grandMean) ** 2;
+    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
+    return { label: g.label, n: gn, mean: gm, sd: sd(g.values) };
+  });
+  const ssTotal = ssBetween + ssWithin;
+  const dfBetween = k - 1;
+  const dfWithin = n - k;
+  const msBetween = ssBetween / dfBetween;
+  const msWithin = ssWithin / dfWithin;
+  const F = msWithin === 0 ? Infinity : msBetween / msWithin;
+  const pValue = fDistPValue(F, dfBetween, dfWithin);
+  const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin);
+  const formatted = formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
+  return {
+    testName: "One-way ANOVA",
+    statistic: F,
+    df: [dfBetween, dfWithin],
+    pValue,
+    effectSize: omega,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted,
+    groups: groupStats,
+    ssBetween,
+    ssWithin,
+    ssTotal,
+    msBetween,
+    msWithin,
+    dfBetween,
+    dfWithin
+  };
+}
+function mannWhitneyU(x1, x2, alternative = "two.sided") {
+  if (x1.length < 1 || x2.length < 1) throw new Error("mannWhitneyU: empty group");
+  const n1 = x1.length, n2 = x2.length;
+  const combined = [
+    ...x1.map((v, i) => ({ v, group: 1, i })),
+    ...x2.map((v, i) => ({ v, group: 2, i }))
+  ].sort((a, b) => a.v - b.v);
+  const allCombined = rank(combined.map((d) => d.v));
+  let R1 = 0;
+  for (let i = 0; i < combined.length; i++) {
+    if (combined[i].group === 1) R1 += allCombined[i];
+  }
+  const U1 = R1 - n1 * (n1 + 1) / 2;
+  const N = n1 + n2;
+  const muU = n1 * n2 / 2;
+  const allVals = combined.map((d) => d.v);
+  const tieCountsU = /* @__PURE__ */ new Map();
+  for (const v of allVals) tieCountsU.set(v, (tieCountsU.get(v) ?? 0) + 1);
+  let tieCorr = 0;
+  for (const t of tieCountsU.values()) tieCorr += t * t * t - t;
+  const varU = n1 * n2 / 12 * (N + 1 - tieCorr / (N * (N - 1)));
+  const z = varU === 0 ? 0 : (U1 - muU) / Math.sqrt(varU);
+  const zAbs = Math.abs(z);
+  const pNormal = 2 * (1 - normalCDFInline(zAbs));
+  const pValue = alternative === "two.sided" ? pNormal : alternative === "less" ? z < 0 ? pNormal / 2 : 1 - pNormal / 2 : z > 0 ? pNormal / 2 : 1 - pNormal / 2;
+  const effect = rankBiserial(U1, n1, n2);
+  const formatted = formatMannWhitney(U1, pValue, effect.value);
+  return {
+    testName: "Mann-Whitney U",
+    statistic: U1,
+    df: 0,
+    pValue: Math.min(1, Math.max(0, pValue)),
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n: n1 + n2,
+    formatted
+  };
+}
+function normalCDFInline(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf = 1 - poly * Math.exp(-x * x);
+  return 0.5 * (1 + (z >= 0 ? erf : -erf));
+}
+function wilcoxonExactP(W, n) {
+  const maxW = n * (n + 1) / 2;
+  let dist = new Array(maxW + 1).fill(0);
+  dist[0] = 1;
+  for (let k = 1; k <= n; k++) {
+    const newDist = [...dist];
+    for (let w = k; w <= maxW; w++) {
+      newDist[w] += dist[w - k];
+    }
+    dist = newDist;
+  }
+  const total = Math.pow(2, n);
+  let cumP = 0;
+  for (let w = 0; w <= W && w <= maxW; w++) {
+    cumP += (dist[w] ?? 0) / total;
+  }
+  return Math.min(1, 2 * cumP);
+}
+function wilcoxonSignedRank(x1, x2) {
+  if (x1.length !== x2.length) throw new Error("wilcoxonSignedRank: arrays must match length");
+  const diffs = x1.map((v, i) => v - (x2[i] ?? 0)).filter((d) => d !== 0);
+  const n = diffs.length;
+  if (n === 0) throw new Error("wilcoxonSignedRank: no non-zero differences");
+  const absDiffs = diffs.map(Math.abs);
+  const ranks_ = rank(absDiffs);
+  let Wplus = 0, Wminus = 0;
+  for (let i = 0; i < n; i++) {
+    if ((diffs[i] ?? 0) > 0) Wplus += ranks_[i];
+    else Wminus += ranks_[i];
+  }
+  const W = Math.min(Wplus, Wminus);
+  let pValue;
+  if (n <= 20) {
+    pValue = wilcoxonExactP(W, n);
+  } else {
+    const muW = n * (n + 1) / 4;
+    const varW = n * (n + 1) * (2 * n + 1) / 24;
+    const z = varW === 0 ? 0 : (W + 0.5 - muW) / Math.sqrt(varW);
+    pValue = 2 * (1 - normalCDFInline(Math.abs(z)));
+  }
+  const effect = { value: Wplus / (n * (n + 1) / 2) * 2 - 1, name: "r (rank-biserial)", interpretation: "small" };
+  return {
+    testName: "Wilcoxon Signed-Rank",
+    statistic: W,
+    df: 0,
+    pValue: Math.min(1, Math.max(0, pValue)),
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted: `V = ${W}, ${formatP(pValue)}, r = ${effect.value.toFixed(2)}`
+  };
+}
+function kruskalWallis(groups) {
+  if (groups.length < 2) throw new Error("kruskalWallis: need at least 2 groups");
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const allRanks_ = rank(allValues);
+  let offset = 0;
+  let H = 0;
+  for (const g of groups) {
+    const gn = g.values.length;
+    let Rj = 0;
+    for (let i = 0; i < gn; i++) Rj += allRanks_[offset + i];
+    H += Rj * Rj / gn;
+    offset += gn;
+  }
+  H = 12 / (n * (n + 1)) * H - 3 * (n + 1);
+  const tieCounts = /* @__PURE__ */ new Map();
+  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
+  let C = 0;
+  for (const t of tieCounts.values()) C += t * t * t - t;
+  const correction = 1 - C / (n * n * n - n);
+  if (correction > 0) H /= correction;
+  const df = k - 1;
+  const pValue = chiSqPValue(H, df);
+  const effect = etaSquaredKW(H, k, n);
+  const formatted = formatKruskalWallis(H, df, pValue, effect.value);
+  return {
+    testName: "Kruskal-Wallis",
+    statistic: H,
+    df,
+    pValue,
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted
+  };
+}
+function friedmanTest(data) {
+  const n = data.length;
+  if (n < 2) throw new Error("friedmanTest: need at least 2 subjects");
+  const k = data[0].length;
+  if (k < 2) throw new Error("friedmanTest: need at least 2 conditions");
+  let sumRankSq = 0;
+  for (const row of data) {
+    const rowRanks = rank(row);
+    for (const r of rowRanks) sumRankSq += r * r;
+  }
+  const colRankSums = Array.from(
+    { length: k },
+    (_, j) => data.reduce((s, row) => {
+      const rowRanks = rank(row);
+      return s + (rowRanks[j] ?? 0);
+    }, 0)
+  );
+  const Rj2sum = colRankSums.reduce((s, r) => s + r * r, 0);
+  const chi2 = 12 / (n * k * (k + 1)) * Rj2sum - 3 * n * (k + 1);
+  const df = k - 1;
+  const pValue = chiSqPValue(chi2, df);
+  const w = chi2 / (n * (k - 1));
+  return {
+    testName: "Friedman Test",
+    statistic: chi2,
+    df,
+    pValue,
+    effectSize: {
+      value: w,
+      name: "Kendall's W",
+      interpretation: w < 0.1 ? "negligible" : w < 0.3 ? "small" : w < 0.5 ? "medium" : "large"
+    },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${formatP(pValue)}, W = ${w.toFixed(2)}`
+  };
+}
+
+// src/stats/post-hoc.ts
+function tukeyHSD(groups, msWithin, dfWithin, ciLevel = 0.95) {
+  const results = [];
+  const alpha = 1 - ciLevel;
+  const k = groups.length;
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const g1 = groups[i];
+      const g2 = groups[j];
+      const n1 = g1.values.length;
+      const n2 = g2.values.length;
+      const m1 = mean(g1.values);
+      const m2 = mean(g2.values);
+      const diff = m1 - m2;
+      const se2 = Math.sqrt(msWithin / 2 * (1 / n1 + 1 / n2));
+      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
+      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin);
+      const pValue = pValueStudentizedRange(q, k);
+      const ciHalf = tCrit * se2;
+      const ci = [diff - ciHalf, diff + ciHalf];
+      results.push({
+        group1: g1.label,
+        group2: g2.label,
+        meanDiff: diff,
+        se: se2,
+        statistic: q,
+        pValue,
+        pValueAdj: pValue,
+        // already family-wise corrected
+        ci,
+        significant: pValue < alpha
+      });
+    }
+  }
+  return results;
+}
+function pValueStudentizedRange(q, k, _df) {
+  const t = q / Math.SQRT2;
+  const pOne = 2 * (1 - normCDF(t));
+  return Math.min(1, k * (k - 1) / 2 * pOne);
+}
+function normCDF(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf = 1 - poly * Math.exp(-x * x);
+  return 0.5 * (1 + (z >= 0 ? erf : -erf));
+}
+function gamesHowell(groups, ciLevel = 0.95) {
+  const results = [];
+  const alpha = 1 - ciLevel;
+  const k = groups.length;
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const g1 = groups[i];
+      const g2 = groups[j];
+      const n1 = g1.values.length;
+      const n2 = g2.values.length;
+      const m1 = mean(g1.values);
+      const m2 = mean(g2.values);
+      const v1 = variance(g1.values);
+      const v2 = variance(g2.values);
+      const diff = m1 - m2;
+      const se2 = Math.sqrt(v1 / n1 + v2 / n2);
+      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
+      const dfNum = (v1 / n1 + v2 / n2) ** 2;
+      const dfDen = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
+      const df = dfDen > 0 ? dfNum / dfDen : n1 + n2 - 2;
+      const pValue = pValueStudentizedRange(q, k);
+      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), df);
+      const ciHalf = tCrit * se2;
+      results.push({
+        group1: g1.label,
+        group2: g2.label,
+        meanDiff: diff,
+        se: se2,
+        statistic: q,
+        pValue,
+        pValueAdj: pValue,
+        ci: [diff - ciHalf, diff + ciHalf],
+        significant: pValue < alpha
+      });
+    }
+  }
+  return results;
+}
+function dunnTest(groups, method = "bonferroni") {
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const allRanks = rank(allValues);
+  let offset = 0;
+  const groupRankMeans = [];
+  const groupNs = [];
+  for (const g of groups) {
+    const gn = g.values.length;
+    let Rj = 0;
+    for (let i = 0; i < gn; i++) Rj += allRanks[offset + i];
+    groupRankMeans.push(Rj / gn);
+    groupNs.push(gn);
+    offset += gn;
+  }
+  const tieCounts = /* @__PURE__ */ new Map();
+  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
+  let C = 0;
+  for (const t of tieCounts.values()) C += t * t * t - t;
+  const tieAdj = C / (12 * (n - 1));
+  const rawPValues = [];
+  const pairs = [];
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const diff = (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0);
+      const se2 = Math.sqrt(
+        (n * (n + 1) / 12 - tieAdj) * (1 / (groupNs[i] ?? 1) + 1 / (groupNs[j] ?? 1))
+      );
+      const z = se2 === 0 ? 0 : diff / se2;
+      const p = 2 * (1 - normCDF(Math.abs(z)));
+      rawPValues.push(p);
+      pairs.push({ i, j });
+    }
+  }
+  const adjPValues = adjustPValues(rawPValues, method);
+  return pairs.map(({ i, j }, idx) => ({
+    group1: groups[i].label,
+    group2: groups[j].label,
+    meanDiff: (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0),
+    se: 0,
+    statistic: 0,
+    pValue: rawPValues[idx],
+    pValueAdj: adjPValues[idx],
+    ci: [NaN, NaN],
+    significant: (adjPValues[idx] ?? 1) < 0.05
+  }));
+}
+
+// src/stats/correlation.ts
+function pearsonCorrelation(x, y, ciLevel = 0.95) {
+  if (x.length !== y.length) throw new Error("pearsonCorrelation: arrays must have equal length");
+  const n = x.length;
+  if (n < 3) throw new Error("pearsonCorrelation: need at least 3 observations");
+  const sdX = sd(x), sdY = sd(y);
+  if (sdX === 0 || sdY === 0) throw new Error("pearsonCorrelation: zero variance in input");
+  const r = cov(x, y) / (sdX * sdY);
+  const rClamped = Math.max(-1, Math.min(1, r));
+  const df = n - 2;
+  const t = Math.abs(rClamped) === 1 ? Infinity : rClamped * Math.sqrt(df / (1 - rClamped * rClamped));
+  const pValue = tDistPValue(t, df);
+  const ci = fisherZCI(rClamped, n, ciLevel);
+  return {
+    testName: "Pearson r",
+    statistic: roundTo(rClamped, 4),
+    df,
+    pValue: roundTo(pValue, 4),
+    effectSize: {
+      value: rClamped,
+      name: "Pearson r",
+      interpretation: interpretR(rClamped)
+    },
+    ci,
+    ciLevel,
+    n,
+    formatted: formatCorrelation(rClamped, df, pValue, ci, "r", ciLevel)
+  };
+}
+function fisherZCI(r, n, ciLevel) {
+  const z = Math.log((1 + r) / (1 - r)) / 2;
+  const se2 = 1 / Math.sqrt(n - 3);
+  const zCrit = normalQuantile(1 - (1 - ciLevel) / 2);
+  const lo = z - zCrit * se2;
+  const hi = z + zCrit * se2;
+  return [
+    Math.tanh(lo),
+    Math.tanh(hi)
+  ];
+}
+function spearmanCorrelation(x, y, ciLevel = 0.95) {
+  if (x.length !== y.length) throw new Error("spearmanCorrelation: arrays must have equal length");
+  const n = x.length;
+  if (n < 3) throw new Error("spearmanCorrelation: need at least 3 observations");
+  const rx = rank(x), ry = rank(y);
+  const rhoResult = pearsonCorrelation(rx, ry, ciLevel);
+  return {
+    ...rhoResult,
+    testName: "Spearman's \u03C1",
+    effectSize: {
+      ...rhoResult.effectSize,
+      name: "Spearman's \u03C1"
+    },
+    formatted: formatCorrelation(rhoResult.statistic, typeof rhoResult.df === "number" ? rhoResult.df : 0, rhoResult.pValue, rhoResult.ci, "\u03C1", ciLevel)
+  };
+}
+function kendallTau(x, y, ciLevel = 0.95) {
+  if (x.length !== y.length) throw new Error("kendallTau: arrays must have equal length");
+  const n = x.length;
+  if (n < 3) throw new Error("kendallTau: need at least 3 observations");
+  let concordant = 0, discordant = 0;
+  let tiesX = 0, tiesY = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = (x[i] ?? 0) - (x[j] ?? 0);
+      const dy = (y[i] ?? 0) - (y[j] ?? 0);
+      const sign = Math.sign(dx * dy);
+      if (sign > 0) concordant++;
+      else if (sign < 0) discordant++;
+      if (dx === 0) tiesX++;
+      if (dy === 0) tiesY++;
+    }
+  }
+  const n2 = n * (n - 1) / 2;
+  const tau = (concordant - discordant) / Math.sqrt((n2 - tiesX) * (n2 - tiesY));
+  const varTau = 2 * (2 * n + 5) / (9 * n * (n - 1));
+  const z = tau / Math.sqrt(varTau);
+  const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+  const ci = fisherZCI(tau, n, ciLevel);
+  const df = n - 2;
+  return {
+    testName: "Kendall's \u03C4",
+    statistic: roundTo(tau, 4),
+    df,
+    pValue: roundTo(pValue, 4),
+    effectSize: {
+      value: tau,
+      name: "Kendall's \u03C4",
+      interpretation: interpretR(tau)
+    },
+    ci,
+    ciLevel,
+    n,
+    formatted: formatCorrelation(tau, df, pValue, ci, "\u03C4", ciLevel)
+  };
+}
+function partialCorrelation(x, y, controls) {
+  if (x.length !== y.length) throw new Error("partialCorrelation: arrays must have equal length");
+  const xRes = residualize(x, controls);
+  const yRes = residualize(y, controls);
+  return pearsonCorrelation(xRes, yRes);
+}
+function residualize(y, predictors) {
+  if (predictors.length === 0) return [...y];
+  const n = y.length;
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predictors.map((p) => p[i] ?? 0)])
+  );
+  const Xt = X.transpose();
+  const XtX = Xt.multiply(X);
+  const XtY = Xt.multiply(Matrix.colVec(y));
+  const beta = XtX.inverse().multiply(XtY);
+  const fitted = X.multiply(beta);
+  return Array.from({ length: n }, (_, i) => (y[i] ?? 0) - fitted.get(i, 0));
+}
+function correlationMatrix(data, labels, method = "pearson") {
+  const k = data.length;
+  if (k < 2) throw new Error("correlationMatrix: need at least 2 variables");
+  const n = data[0].length;
+  const corrFn = method === "pearson" ? pearsonCorrelation : method === "spearman" ? spearmanCorrelation : kendallTau;
+  const r = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      if (i === j) return 1;
+      if (j < i) return 0;
+      try {
+        return corrFn(data[i], data[j]).statistic;
+      } catch {
+        return NaN;
+      }
+    })
+  );
+  const pValues = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      if (i === j) return NaN;
+      if (j < i) return 0;
+      try {
+        return corrFn(data[i], data[j]).pValue;
+      } catch {
+        return NaN;
+      }
+    })
+  );
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < i; j++) {
+      r[i][j] = r[j][i];
+      pValues[i][j] = pValues[j][i];
+    }
+  }
+  return {
+    r,
+    pValues,
+    n,
+    labels: labels ?? Array.from({ length: k }, (_, i) => `Var${i + 1}`)
+  };
+}
+
+// src/stats/regression.ts
+function fitOLS(X, y, coefNames, ciLevel = 0.95) {
+  const n = y.length;
+  const p = X.cols;
+  const Xt = X.transpose();
+  const XtX = Xt.multiply(X);
+  const XtY = Xt.multiply(Matrix.colVec(y));
+  const XtXInv = XtX.inverse();
+  const betaM = XtXInv.multiply(XtY);
+  const beta = Array.from({ length: p }, (_, i) => betaM.get(i, 0));
+  const fitted = Array.from({ length: n }, (_, i) => {
+    let val = 0;
+    for (let j = 0; j < p; j++) val += X.get(i, j) * (beta[j] ?? 0);
+    return val;
+  });
+  const residuals = y.map((v, i) => v - (fitted[i] ?? 0));
+  const yMean = mean(y);
+  const ss_res = residuals.reduce((s, r) => s + r * r, 0);
+  const ss_tot = y.reduce((s, v) => s + (v - yMean) ** 2, 0);
+  const r2 = ss_tot > 0 ? Math.max(0, 1 - ss_res / ss_tot) : 0;
+  const adjR2 = 1 - (1 - r2) * (n - 1) / (n - p);
+  const dfRes = n - p;
+  if (dfRes <= 0) throw new Error("fitOLS: not enough degrees of freedom");
+  const sigma2 = ss_res / dfRes;
+  const covBeta = XtXInv.scale(sigma2);
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, dfRes);
+  const coefficients = beta.map((b, i) => {
+    const se2 = Math.sqrt(Math.max(0, covBeta.get(i, i)));
+    const t = se2 === 0 ? 0 : b / se2;
+    const pVal = tDistPValue(t, dfRes);
+    const ci = [b - tCrit * se2, b + tCrit * se2];
+    return {
+      name: coefNames[i] ?? `\u03B2${i}`,
+      estimate: roundTo(b, 6),
+      se: roundTo(se2, 6),
+      tValue: roundTo(t, 4),
+      pValue: roundTo(pVal, 4),
+      ci
+    };
+  });
+  const dfModel = p - 1;
+  const ss_reg = ss_tot - ss_res;
+  const F = sigma2 === 0 || dfModel === 0 ? 0 : ss_reg / dfModel / sigma2;
+  const fPValue = fDistPValue(F, dfModel, dfRes);
+  const logLik = -n / 2 * (Math.log(2 * Math.PI) + Math.log(ss_res / n) + 1);
+  const aic = -2 * logLik + 2 * (p + 1);
+  const bic = -2 * logLik + Math.log(n) * (p + 1);
+  const formatted = formatRegression(r2, adjR2, F, dfModel, dfRes, fPValue);
+  return {
+    coefficients,
+    r2: roundTo(r2, 6),
+    adjR2: roundTo(adjR2, 6),
+    fStatistic: roundTo(F, 4),
+    fDf: [dfModel, dfRes],
+    fPValue: roundTo(fPValue, 4),
+    aic: roundTo(aic, 2),
+    bic: roundTo(bic, 2),
+    residuals,
+    fitted,
+    n,
+    formatted
+  };
+}
+function linearRegression(x, y, ciLevel = 0.95) {
+  if (x.length !== y.length) throw new Error("linearRegression: arrays must have equal length");
+  if (x.length < 3) throw new Error("linearRegression: need at least 3 observations");
+  const n = x.length;
+  const X = Matrix.fromArray(Array.from({ length: n }, (_, i) => [1, x[i] ?? 0]));
+  return fitOLS(X, y, ["(Intercept)", "x"], ciLevel);
+}
+function multipleRegression(y, predictors, ciLevel = 0.95) {
+  if (predictors.length === 0) throw new Error("multipleRegression: need at least 1 predictor");
+  const n = y.length;
+  for (const p of predictors) {
+    if (p.values.length !== n) throw new Error(`multipleRegression: predictor '${p.name}' length mismatch`);
+  }
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predictors.map((p) => p.values[i] ?? 0)])
+  );
+  const names = ["(Intercept)", ...predictors.map((p) => p.name)];
+  return fitOLS(X, y, names, ciLevel);
+}
+function polynomialRegression(x, y, degree, ciLevel = 0.95) {
+  if (degree < 1) throw new Error("polynomialRegression: degree must be \u2265 1");
+  if (x.length !== y.length) throw new Error("polynomialRegression: arrays must match length");
+  const n = x.length;
+  const X = Matrix.fromArray(
+    Array.from(
+      { length: n },
+      (_, i) => [1, ...Array.from({ length: degree }, (_2, d) => (x[i] ?? 0) ** (d + 1))]
+    )
+  );
+  const names = ["(Intercept)", ...Array.from({ length: degree }, (_, d) => `x^${d + 1}`)];
+  return fitOLS(X, y, names, ciLevel);
+}
+function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 1e-8) {
+  for (const v of y) {
+    if (v !== 0 && v !== 1) throw new Error("logisticRegression: y must be 0 or 1");
+  }
+  const n = y.length;
+  const p = predictors.length + 1;
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predictors.map((pr) => pr.values[i] ?? 0)])
+  );
+  const names = ["(Intercept)", ...predictors.map((pr) => pr.name)];
+  let beta = new Array(p).fill(0);
+  for (let iter = 0; iter < maxIter; iter++) {
+    const eta2 = Array.from({ length: n }, (_, i) => {
+      let v = 0;
+      for (let j = 0; j < p; j++) v += X.get(i, j) * (beta[j] ?? 0);
+      return v;
+    });
+    const mu2 = eta2.map((e) => 1 / (1 + Math.exp(-e)));
+    const w2 = mu2.map((m) => Math.max(1e-10, m * (1 - m)));
+    const Xw2 = Matrix.fromArray(
+      Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_2, j) => X.get(i, j) * Math.sqrt(w2[i])))
+    );
+    const yAdj = Array.from({ length: n }, (_, i) => Math.sqrt(w2[i]) * ((y[i] ?? 0) - (mu2[i] ?? 0)));
+    try {
+      const Xwt = Xw2.transpose();
+      const XwtXw = Xwt.multiply(Xw2);
+      const XwtY = Xwt.multiply(Matrix.colVec(yAdj));
+      const delta = XwtXw.inverse().multiply(XwtY);
+      let maxChange = 0;
+      for (let j = 0; j < p; j++) {
+        const d = delta.get(j, 0);
+        beta[j] = (beta[j] ?? 0) + d;
+        maxChange = Math.max(maxChange, Math.abs(d));
+      }
+      if (maxChange < tol) break;
+    } catch {
+      break;
+    }
+  }
+  const eta = Array.from({ length: n }, (_, i) => {
+    let v = 0;
+    for (let j = 0; j < p; j++) v += X.get(i, j) * (beta[j] ?? 0);
+    return v;
+  });
+  const mu = eta.map((e) => 1 / (1 + Math.exp(-e)));
+  const w = mu.map((m) => Math.max(1e-10, m * (1 - m)));
+  const Xw = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_2, j) => X.get(i, j) * Math.sqrt(w[i])))
+  );
+  let cov2;
+  try {
+    cov2 = Xw.transpose().multiply(Xw).inverse();
+  } catch {
+    cov2 = Matrix.identity(p);
+  }
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, n - p);
+  const coefficients = beta.map((b, i) => {
+    const se2 = Math.sqrt(Math.max(0, cov2.get(i, i)));
+    const z = se2 === 0 ? 0 : b / se2;
+    const pVal = 2 * (1 - normCDFLocal(Math.abs(z)));
+    const ci = [b - tCrit * se2, b + tCrit * se2];
+    return {
+      name: names[i] ?? `\u03B2${i}`,
+      estimate: roundTo(b, 6),
+      se: roundTo(se2, 6),
+      tValue: roundTo(z, 4),
+      pValue: roundTo(pVal, 4),
+      ci
+    };
+  });
+  const logLik = mu.reduce((s, m, i) => {
+    const yi = y[i] ?? 0;
+    return s + yi * Math.log(Math.max(1e-15, m)) + (1 - yi) * Math.log(Math.max(1e-15, 1 - m));
+  }, 0);
+  const pMean = mean([...y]);
+  const nullLogLik = n * (pMean * Math.log(Math.max(1e-15, pMean)) + (1 - pMean) * Math.log(Math.max(1e-15, 1 - pMean)));
+  const r2 = 1 - logLik / nullLogLik;
+  const aic = -2 * logLik + 2 * p;
+  const bic = -2 * logLik + Math.log(n) * p;
+  const residuals = y.map((v, i) => (v ?? 0) - (mu[i] ?? 0));
+  return {
+    coefficients,
+    r2: roundTo(r2, 6),
+    adjR2: roundTo(r2, 6),
+    // McFadden's for logistic
+    fStatistic: NaN,
+    fDf: [p - 1, n - p],
+    fPValue: NaN,
+    aic: roundTo(aic, 2),
+    bic: roundTo(bic, 2),
+    residuals,
+    fitted: mu,
+    n,
+    formatted: `McFadden R\xB2 = ${roundTo(r2, 3)}, AIC = ${roundTo(aic, 1)}`
+  };
+}
+function normCDFLocal(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf = 1 - poly * Math.exp(-x * x);
+  return 0.5 * (1 + (z >= 0 ? erf : -erf));
+}
+function regressionDiagnostics(result, predictors) {
+  const n = result.n;
+  const p = result.coefficients.length;
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predictors.map((pr) => pr.values[i] ?? 0)])
+  );
+  const Xt = X.transpose();
+  let XtXInv;
+  try {
+    XtXInv = Xt.multiply(X).inverse();
+  } catch {
+    XtXInv = Matrix.identity(p);
+  }
+  const hat = X.multiply(XtXInv).multiply(Xt);
+  const leverage = Array.from({ length: n }, (_, i) => hat.get(i, i));
+  const mse = result.residuals.reduce((s, r) => s + r * r, 0) / (n - p);
+  const standardizedResiduals = result.residuals.map((r, i) => {
+    const denom = Math.sqrt(mse * (1 - (leverage[i] ?? 0)));
+    return denom === 0 ? 0 : r / denom;
+  });
+  const cooksDistance = result.residuals.map((r, i) => {
+    const h = leverage[i] ?? 0;
+    return r * r * h / (p * mse * (1 - h) ** 2);
+  });
+  const vif = predictors.map((_, j) => {
+    const otherPreds = predictors.filter((__, k) => k !== j);
+    if (otherPreds.length === 0) return 1;
+    const xj = predictors[j].values;
+    const others = otherPreds.map((p2) => ({ name: p2.name, values: p2.values }));
+    try {
+      const res = multipleRegression(xj, others);
+      return 1 / Math.max(1e-10, 1 - res.r2);
+    } catch {
+      return NaN;
+    }
+  });
+  return { leverage, cooksDistance, standardizedResiduals, vif };
+}
+
+// src/stats/pca.ts
+function standardize(data, scale = true) {
+  const k = data[0].length;
+  const colMeans = Array.from({ length: k }, (_, j) => mean(data.map((row) => row[j] ?? 0)));
+  const colSDs = Array.from({ length: k }, (_, j) => sd(data.map((row) => row[j] ?? 0)));
+  const X = Matrix.fromArray(
+    data.map(
+      (row) => row.map((v, j) => {
+        const centered = v - (colMeans[j] ?? 0);
+        const s = colSDs[j] ?? 1;
+        return scale && s !== 0 ? centered / s : centered;
+      })
+    )
+  );
+  return { X, colMeans, colSDs };
+}
+function runPCA(data, nComponents, scale = true) {
+  if (data.length < 2) throw new Error("runPCA: need at least 2 observations");
+  const n = data.length;
+  const k = data[0].length;
+  if (k < 2) throw new Error("runPCA: need at least 2 variables");
+  const { X } = standardize(data, scale);
+  const Xs = X.scale(1 / Math.sqrt(n - 1));
+  const { U: _U, S, V } = Xs.svd();
+  const nc = nComponents ?? Math.min(n - 1, k);
+  const eigenvalues = S.slice(0, nc).map((s) => s * s);
+  const totalVar = S.reduce((sum, s) => sum + s * s, 0);
+  const loadings = Array.from(
+    { length: k },
+    (_, varIdx) => Array.from({ length: nc }, (_2, compIdx) => V.get(varIdx, compIdx))
+  );
+  const Vk = Matrix.fromArray(
+    Array.from({ length: k }, (_, i) => Array.from({ length: nc }, (_2, j) => V.get(i, j)))
+  );
+  const scoresM = X.multiply(Vk);
+  const scores = Array.from(
+    { length: n },
+    (_, i) => Array.from({ length: nc }, (_2, j) => scoresM.get(i, j))
+  );
+  const varianceExplained = eigenvalues.map((e) => totalVar > 0 ? e / totalVar : 0);
+  const cumulativeVariance = varianceExplained.reduce((acc, v, i) => {
+    acc.push((acc[i - 1] ?? 0) + v);
+    return acc;
+  }, []);
+  return {
+    loadings,
+    scores,
+    eigenvalues: eigenvalues.map((e) => roundTo(e, 6)),
+    varianceExplained: varianceExplained.map((v) => roundTo(v, 6)),
+    cumulativeVariance: cumulativeVariance.map((v) => roundTo(v, 6)),
+    nComponents: nc
+  };
+}
+function varimaxRotation(loadings, maxIter = 1e3, tol = 1e-6) {
+  const k = loadings.length;
+  const m = loadings[0].length;
+  let L = loadings.map((row) => [...row]);
+  let T = Array.from(
+    { length: m },
+    (_, i) => Array.from({ length: m }, (_2, j) => i === j ? 1 : 0)
+  );
+  for (let iter = 0; iter < maxIter; iter++) {
+    let delta = 0;
+    for (let p = 0; p < m - 1; p++) {
+      for (let q = p + 1; q < m; q++) {
+        const u = L.map((row) => (row[p] ?? 0) ** 2 - (row[q] ?? 0) ** 2);
+        const v = L.map((row) => 2 * (row[p] ?? 0) * (row[q] ?? 0));
+        const A = u.reduce((s, ui) => s + ui, 0);
+        const B = v.reduce((s, vi) => s + vi, 0);
+        const C = u.reduce((s, ui, i) => s + ui ** 2 - (v[i] ?? 0) ** 2, 0);
+        const D = u.reduce((s, ui, i) => s + ui * (v[i] ?? 0), 0) * 2;
+        const X_ = C - (A ** 2 - B ** 2) / k;
+        const Y_ = D - 2 * A * B / k;
+        const angle = Math.atan2(Y_, X_) / 4;
+        if (Math.abs(angle) < 1e-12) continue;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        delta += Math.abs(angle);
+        const newLp = L.map((row) => (row[p] ?? 0) * cos + (row[q] ?? 0) * sin);
+        const newLq = L.map((row) => -(row[p] ?? 0) * sin + (row[q] ?? 0) * cos);
+        L.forEach((row, i) => {
+          row[p] = newLp[i];
+          row[q] = newLq[i];
+        });
+        for (let r = 0; r < m; r++) {
+          const tp = (T[r]?.[p] ?? 0) * cos + (T[r]?.[q] ?? 0) * sin;
+          const tq = -(T[r]?.[p] ?? 0) * sin + (T[r]?.[q] ?? 0) * cos;
+          T[r][p] = tp;
+          T[r][q] = tq;
+        }
+      }
+    }
+    if (delta < tol) break;
+  }
+  return { rotatedLoadings: L, rotationMatrix: T };
+}
+function screeData(pca) {
+  return {
+    components: Array.from({ length: pca.nComponents }, (_, i) => i + 1),
+    eigenvalues: pca.eigenvalues,
+    varianceExplained: pca.varianceExplained,
+    cumulativeVariance: pca.cumulativeVariance
+  };
+}
+
+// src/stats/mixed.ts
+function remlProfileLogLik(logPsi, y, X, Z) {
+  const psi = Math.exp(logPsi);
+  const n = y.length;
+  const q = Z.cols;
+  const p = X.cols;
+  const ZtZ = Z.transpose().multiply(Z);
+  const Dmat = ZtZ.add(Matrix.identity(q).scale(1 / psi));
+  let DInv;
+  let logDetD;
+  try {
+    DInv = Dmat.inverse();
+    logDetD = Dmat.logDet();
+  } catch {
+    return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 };
+  }
+  const ZDinvZt = Z.multiply(DInv).multiply(Z.transpose());
+  const VpsiInv = Matrix.fromArray(
+    Array.from(
+      { length: n },
+      (_, i) => Array.from(
+        { length: n },
+        (_2, j) => (i === j ? 1 : 0) - ZDinvZt.get(i, j)
+      )
+    )
+  );
+  const logDetVpsi = q * Math.log(psi) + logDetD;
+  const XtVinv = X.transpose().multiply(VpsiInv);
+  const XtVinvX = XtVinv.multiply(X);
+  let XtVinvXInv;
+  let logDetXVX;
+  try {
+    XtVinvXInv = XtVinvX.inverse();
+    logDetXVX = XtVinvX.logDet();
+  } catch {
+    return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 };
+  }
+  const XtVinvY = XtVinv.multiply(Matrix.colVec(y));
+  const beta = XtVinvXInv.multiply(XtVinvY);
+  const Xbeta = X.multiply(beta);
+  const e = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - Xbeta.get(i, 0));
+  const eM = Matrix.colVec(e);
+  const quadForm = eM.transpose().multiply(VpsiInv).multiply(eM).get(0, 0);
+  const sigmae2 = Math.max(1e-8, quadForm / (n - p));
+  const sigmab2 = psi * sigmae2;
+  const reml = -0.5 * ((n - p) * Math.log(sigmae2) + logDetVpsi + logDetXVX);
+  return { negLogLik: -reml, sigmae2, sigmab2 };
+}
+function runLMM(input) {
+  const { outcome: y, fixedPredictors, groupId, ciLevel = 0.95 } = input;
+  const n = y.length;
+  if (n < 5) throw new Error("runLMM: need at least 5 observations");
+  if (groupId.length !== n) throw new Error("runLMM: groupId must have same length as outcome");
+  const groupLevels = [...new Set(groupId)];
+  const nGroups = groupLevels.length;
+  if (nGroups < 2) throw new Error("runLMM: need at least 2 groups");
+  const predNames = Object.keys(fixedPredictors);
+  const p = predNames.length + 1;
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [
+      1,
+      ...predNames.map((name) => (fixedPredictors[name] ?? [])[i] ?? 0)
+    ])
+  );
+  const Z = Matrix.fromArray(
+    Array.from(
+      { length: n },
+      (_, i) => groupLevels.map((g) => groupId[i] === g ? 1 : 0)
+    )
+  );
+  const objFn = (theta) => remlProfileLogLik(theta[0] ?? 0, y, X, Z).negLogLik;
+  const starts = [-4, -2, 0, 2, 4];
+  let optResult = nelderMead(objFn, [starts[0]], { maxIter: 1e3, tol: 1e-8 });
+  for (let si = 1; si < starts.length; si++) {
+    const cand = nelderMead(objFn, [starts[si]], { maxIter: 1e3, tol: 1e-8 });
+    if (cand.fval < optResult.fval) optResult = cand;
+  }
+  const finalModel = remlProfileLogLik(optResult.x[0] ?? 0, y, X, Z);
+  const sigmab2 = finalModel.sigmab2;
+  const sigmae2 = finalModel.sigmae2;
+  const scale = sigmab2 / sigmae2;
+  const ZtZ = Z.transpose().multiply(Z);
+  let VinvScaled;
+  if (scale < 1e-10) {
+    VinvScaled = Matrix.identity(n);
+  } else {
+    const Dmat = ZtZ.add(Matrix.identity(nGroups).scale(1 / scale));
+    let DInv;
+    try {
+      DInv = Dmat.inverse();
+      const ZDinvZt = Z.multiply(DInv).multiply(Z.transpose());
+      VinvScaled = Matrix.fromArray(
+        Array.from(
+          { length: n },
+          (_, i) => Array.from(
+            { length: n },
+            (_2, j) => (i === j ? 1 : 0) - ZDinvZt.get(i, j)
+          )
+        )
+      );
+    } catch {
+      VinvScaled = Matrix.identity(n);
+    }
+  }
+  const Vinv = VinvScaled.scale(1 / sigmae2);
+  const Xt = X.transpose();
+  const XtVinv = Xt.multiply(Vinv);
+  const XtVinvX = XtVinv.multiply(X);
+  let XtVinvXInv;
+  try {
+    XtVinvXInv = XtVinvX.inverse();
+  } catch {
+    XtVinvXInv = Matrix.identity(p);
+  }
+  const XtVinvY = XtVinv.multiply(Matrix.colVec([...y]));
+  const betaM = XtVinvXInv.multiply(XtVinvY);
+  const beta = Array.from({ length: p }, (_, i) => betaM.get(i, 0));
+  const df = Math.max(1, n - p - nGroups + 1);
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const covBeta = XtVinvXInv.scale(sigmae2);
+  const fixedEffectNames = ["(Intercept)", ...predNames];
+  const fixedEffects = beta.map((b, i) => {
+    const seVal = Math.sqrt(Math.max(0, covBeta.get(i, i)));
+    const t = seVal === 0 ? 0 : b / seVal;
+    const pVal = tDistPValue(t, df);
+    return {
+      name: fixedEffectNames[i] ?? `\u03B2${i}`,
+      estimate: roundTo(b, 6),
+      se: roundTo(seVal, 6),
+      tValue: roundTo(t, 4),
+      pValue: roundTo(pVal, 4),
+      ci: [roundTo(b - tCrit * seVal, 6), roundTo(b + tCrit * seVal, 6)]
+    };
+  });
+  const icc = sigmab2 / (sigmab2 + sigmae2);
+  const remlConst = 0.5 * (n - p) * (1 + Math.log(2 * Math.PI));
+  const logLik = -finalModel.negLogLik - remlConst;
+  const aic = -2 * logLik + 2 * (p + 2);
+  const bic = -2 * logLik + Math.log(n) * (p + 2);
+  const formatted = formatLMM(icc, aic, bic, logLik);
+  return {
+    fixedEffects,
+    varianceComponents: {
+      intercept: roundTo(sigmab2, 6),
+      residual: roundTo(sigmae2, 6)
+    },
+    icc: roundTo(icc, 6),
+    logLik: roundTo(logLik, 4),
+    aic: roundTo(aic, 2),
+    bic: roundTo(bic, 2),
+    nObs: n,
+    nGroups,
+    formatted
+  };
+}
+function computeBLUPs(input, result) {
+  const { outcome: y, fixedPredictors, groupId } = input;
+  const n = y.length;
+  const groupLevels = [...new Set(groupId)];
+  const predNames = Object.keys(fixedPredictors);
+  const sigmab2 = result.varianceComponents.intercept;
+  const sigmae2 = result.varianceComponents.residual;
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predNames.map((name) => (fixedPredictors[name] ?? [])[i] ?? 0)])
+  );
+  const beta = result.fixedEffects.map((fe) => fe.estimate);
+  const Xbeta = X.multiply(Matrix.colVec(beta));
+  const residuals = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - Xbeta.get(i, 0));
+  const psi = sigmab2 / sigmae2;
+  return groupLevels.map((g) => {
+    const indices = Array.from({ length: n }, (_, i) => i).filter((i) => groupId[i] === g);
+    const sumResid = indices.reduce((s, i) => s + (residuals[i] ?? 0), 0);
+    const nj = indices.length;
+    const blup = psi / (1 + psi * nj) * sumResid;
+    return { group: g, blup: roundTo(blup, 6) };
+  });
+}
+
+// src/stats/analyze.ts
+var DEFAULTS = {
+  ciLevel: 0.95,
+  paired: false,
+  pAdjMethod: "holm",
+  forceTest: void 0,
+  equalVariances: false,
+  normalityAlpha: 0.05
+};
+function detectFieldType(values) {
+  if (values.length === 0) return "categorical";
+  const allFiniteNumber = values.every((v) => typeof v === "number" && isFinite(v));
+  if (allFiniteNumber) {
+    const nums = values;
+    const unique2 = new Set(nums);
+    if (unique2.size === 2) {
+      const sorted = [...unique2].sort((a, b) => a - b);
+      if (sorted[0] === 0 && sorted[1] === 1) return "binary";
+    }
+    return "numeric";
+  }
+  const unique = new Set(values);
+  return unique.size === 2 ? "binary" : "categorical";
+}
+function splitGroups(outcome, labels) {
+  if (outcome.length !== labels.length) {
+    throw new Error(
+      `analyze: outcome length (${outcome.length}) !== predictor length (${labels.length})`
+    );
+  }
+  const map = /* @__PURE__ */ new Map();
+  for (let i = 0; i < labels.length; i++) {
+    const key = String(labels[i]);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(outcome[i]);
+  }
+  return [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([label, values]) => ({ label, values }));
+}
+function checkNormality(groups, alpha = 0.05) {
+  const results = groups.map((g) => {
+    const n = g.values.length;
+    if (n < 3 || n > 50) {
+      return { group: g.label, W: 1, p: 1 };
+    }
+    const sw = shapiroWilk(g.values);
+    return { group: g.label, W: sw.statistic, p: sw.pValue };
+  });
+  const allNormal = results.every((r) => r.p >= alpha);
+  return { allNormal, results };
+}
+function selectTest(outcomeFt, predictorFt, groups, opts) {
+  if (opts.forceTest) return opts.forceTest;
+  if (outcomeFt === "numeric") {
+    if (predictorFt === void 0) return "describe-only";
+    if (predictorFt === "binary") {
+      const { allNormal } = checkNormality(groups, opts.normalityAlpha);
+      if (opts.paired) {
+        return allNormal ? "t-test-paired" : "wilcoxon";
+      }
+      return allNormal ? "t-test-independent" : "mann-whitney";
+    }
+    if (predictorFt === "categorical") {
+      const { allNormal } = checkNormality(groups, opts.normalityAlpha);
+      return allNormal ? "one-way-anova" : "kruskal-wallis";
+    }
+    throw new Error(
+      `analyze: unsupported predictor type '${predictorFt}' for numeric outcome. Use 'binary' or 'categorical'.`
+    );
+  }
+  return "chi-square";
+}
+function analyze(outcome, predictor, opts) {
+  const options = { ...DEFAULTS, ...opts };
+  if (outcome.type === "binary" || outcome.type === "categorical") {
+    if (predictor === void 0) {
+      throw new Error(
+        `analyze: categorical/binary outcome requires a predictor for frequency tests`
+      );
+    }
+    const groupOutcome = outcome;
+    const groupPredictor = predictor;
+    const { table } = contingencyTable(
+      groupOutcome.values,
+      groupPredictor.values
+    );
+    const testName = options.forceTest ?? "chi-square";
+    let result2;
+    if (testName === "fisher") {
+      if (table.length !== 2 || table[0].length !== 2) {
+        throw new Error(`analyze: Fisher's exact test requires a 2\xD72 table`);
+      }
+      result2 = fisherExactTest(table[0][0], table[0][1], table[1][0], table[1][1]);
+    } else {
+      if (!options.forceTest && table.length === 2 && table[0].length === 2) {
+        const n = table[0][0] + table[0][1] + table[1][0] + table[1][1];
+        const r0 = table[0][0] + table[0][1];
+        const r1 = n - r0;
+        const c0 = table[0][0] + table[1][0];
+        const c1 = n - c0;
+        const anyLowExpected = r0 * c0 / n < 5 || r0 * c1 / n < 5 || r1 * c0 / n < 5 || r1 * c1 / n < 5;
+        if (anyLowExpected) {
+          result2 = fisherExactTest(table[0][0], table[0][1], table[1][0], table[1][1]);
+          return {
+            test: result2.testName,
+            outcome: outcome.name,
+            predictor: predictor.name,
+            result: result2
+          };
+        }
+      }
+      result2 = chiSquareTest(table);
+    }
+    return {
+      test: result2.testName,
+      outcome: outcome.name,
+      predictor: predictor.name,
+      result: result2
+    };
+  }
+  const numericOutcome = outcome;
+  const numericValues = numericOutcome.values;
+  if (predictor === void 0) {
+    const desc = describe(numericValues, options.ciLevel);
+    const dummyResult = {
+      testName: "Descriptive statistics",
+      statistic: NaN,
+      df: 0,
+      pValue: NaN,
+      effectSize: { value: NaN, name: "none", interpretation: "negligible" },
+      ci: [NaN, NaN],
+      ciLevel: options.ciLevel,
+      n: numericValues.length,
+      formatted: desc.formatted
+    };
+    return {
+      test: "descriptive",
+      outcome: outcome.name,
+      result: dummyResult,
+      descriptives: [desc]
+    };
+  }
+  const groups = splitGroups(numericValues, predictor.values);
+  const normalityCheck = checkNormality(groups, options.normalityAlpha);
+  const selectedTest = selectTest(outcome.type, predictor.type, groups, options);
+  let result;
+  let posthoc;
+  if (selectedTest === "t-test-independent" || selectedTest === "mann-whitney") {
+    if (groups.length !== 2) {
+      throw new Error(
+        `analyze: '${selectedTest}' requires exactly 2 groups, got ${groups.length}`
+      );
+    }
+    const [g1, g2] = groups;
+    if (selectedTest === "t-test-independent") {
+      result = tTestIndependent(g1.values, g2.values, options.equalVariances, options.ciLevel);
+    } else {
+      result = mannWhitneyU(g1.values, g2.values);
+    }
+  } else if (selectedTest === "t-test-paired" || selectedTest === "wilcoxon") {
+    if (groups.length !== 2) {
+      throw new Error(
+        `analyze: '${selectedTest}' requires exactly 2 groups, got ${groups.length}`
+      );
+    }
+    const [g1, g2] = groups;
+    if (g1.values.length !== g2.values.length) {
+      throw new Error(
+        `analyze: paired=true but group sizes are unequal (${g1.label}: ${g1.values.length}, ${g2.label}: ${g2.values.length})`
+      );
+    }
+    if (selectedTest === "t-test-paired") {
+      result = tTestPaired(g1.values, g2.values, options.ciLevel);
+    } else {
+      result = wilcoxonSignedRank(g1.values, g2.values);
+    }
+  } else if (selectedTest === "one-way-anova") {
+    const anovaResult = oneWayANOVA(groups);
+    result = anovaResult;
+    posthoc = tukeyHSD(groups, anovaResult.msWithin, anovaResult.dfWithin, options.ciLevel);
+  } else if (selectedTest === "kruskal-wallis") {
+    result = kruskalWallis(groups);
+    posthoc = dunnTest(groups, options.pAdjMethod);
+  } else if (selectedTest === "chi-square" || selectedTest === "fisher") {
+    throw new Error(
+      `analyze: '${selectedTest}' is not applicable to numeric outcomes`
+    );
+  } else {
+    throw new Error(`analyze: unknown test '${selectedTest}'`);
+  }
+  const descriptives = groups.map(
+    (g) => describe(g.values, options.ciLevel)
+  );
+  return {
+    test: result.testName,
+    outcome: outcome.name,
+    predictor: predictor.name,
+    result,
+    descriptives,
+    // Only include optional fields when they have a value (exactOptionalPropertyTypes)
+    ...posthoc !== void 0 && { posthoc },
+    normality: normalityCheck.results
+  };
+}
+
+export { analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, correlationMatrix, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, fisherExactTest, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kendallTau, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, partialCorrelation, pearsonCorrelation, phiCoefficient, polynomialRegression, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runLMM, runPCA, screeData, shapiroWilk, skewness, spearmanCorrelation, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+//# sourceMappingURL=chunk-SO65HVU6.js.map
+//# sourceMappingURL=chunk-SO65HVU6.js.map

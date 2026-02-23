@@ -1,0 +1,5 @@
+export { analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, correlationMatrix, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, fisherExactTest, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kendallTau, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, partialCorrelation, pearsonCorrelation, phiCoefficient, polynomialRegression, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runLMM, runPCA, screeData, shapiroWilk, skewness, spearmanCorrelation, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank } from '../chunk-SO65HVU6.js';
+import '../chunk-CQNGM2TQ.js';
+export { mean, median, quantile, sd, se, variance } from '../chunk-IRX4LIZX.js';
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map
