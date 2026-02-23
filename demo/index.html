@@ -8,7 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f8f9fa;
+      background: #f0f2f5;
       color: #212529;
       min-height: 100vh;
     }
@@ -22,7 +22,7 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
     header h1 { font-size: 22px; font-weight: 700; }
-    header p { font-size: 14px; opacity: 0.85; }
+    header p  { font-size: 14px; opacity: 0.85; }
     nav {
       display: flex;
       gap: 8px;
@@ -30,6 +30,10 @@
       background: white;
       border-bottom: 1px solid #dee2e6;
       flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
     nav button {
       padding: 8px 18px;
@@ -40,7 +44,7 @@
       font-size: 14px;
       transition: all 0.15s;
     }
-    nav button:hover { background: #e9ecef; }
+    nav button:hover  { background: #e9ecef; }
     nav button.active { background: #0d6efd; color: white; border-color: #0d6efd; }
     main {
       max-width: 1100px;
@@ -56,25 +60,105 @@
       padding: 24px;
       margin-bottom: 24px;
     }
-    .stats-table {
-      font-family: 'JetBrains Mono', 'Courier New', monospace;
-      font-size: 13px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      padding: 16px;
-      margin-top: 16px;
-      white-space: pre-wrap;
-      line-height: 1.7;
-    }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
-    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 16px; }
+    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 20px; }
+
+    /* ═══════════════════════════════════════════
+       Publication-quality statistical tables
+       ═══════════════════════════════════════════ */
+    .table-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 28px 32px 24px;
+      margin-bottom: 24px;
+    }
+
+    /* Individual table wrapper — stacked or side-by-side */
+    .stat-table-wrap { }
+    .stat-table-wrap + .stat-table-wrap { margin-top: 32px; }
+
+    .stat-table-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 1px;
+      letter-spacing: 0.01em;
+    }
+    .stat-table-subtitle {
+      font-size: 12px;
+      color: #6c757d;
+      font-style: italic;
+      margin-bottom: 10px;
+    }
+
+    /* The table itself — APA style: only horizontal rules */
+    .stat-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      color: #212529;
+      margin-top: 8px;
+    }
+    .stat-table thead { border-top: 2px solid #1a1a2e; }
+    .stat-table thead th {
+      padding: 7px 13px;
+      font-weight: 600;
+      font-size: 12.5px;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      border-bottom: 1px solid #868e96;
+      background: transparent;
+    }
+    .stat-table tbody tr:last-child td {
+      border-bottom: 2px solid #1a1a2e;
+      padding-bottom: 9px;
+    }
+    .stat-table tbody td { padding: 5.5px 13px; }
+    .stat-table tbody tr:nth-child(even) td {
+      background: rgba(13,110,253,0.028);
+    }
+    .stat-table tbody tr:hover td {
+      background: rgba(13,110,253,0.06);
+      transition: background 0.1s;
+    }
+
+    /* Column alignment helpers */
+    .stat-table .l { text-align: left; }
+    .stat-table .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .stat-table .c { text-align: center; font-variant-numeric: tabular-nums; }
+
+    /* Significance stars */
+    .stat-sig { color: #0d6efd; font-weight: 700; font-size: 9.5px; }
+
+    /* Muted / dim cells (e.g. diagonal of correlation matrix) */
+    .stat-dim { color: #adb5bd; }
+
+    /* Table note (below table) */
+    .stat-table-note {
+      font-size: 11.5px;
+      color: #6c757d;
+      margin-top: 9px;
+      line-height: 1.6;
+      padding-top: 7px;
+      border-top: 1px solid #e9ecef;
+    }
+
+    /* Side-by-side layout for two compact tables */
+    .tables-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 36px;
+      align-items: start;
+    }
+    @media (max-width: 760px) { .tables-cols { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>Carm</h1>
-      <p>Statistical analysis & visualization for TypeScript — publication-quality plots with embedded statistics</p>
+      <p>Statistical analysis &amp; visualization for TypeScript — publication-quality plots and tables</p>
     </div>
   </header>
 
@@ -89,82 +173,68 @@
   </nav>
 
   <main>
+
+    <!-- ─── DESCRIPTIVE ──────────────────────────────────────────────────── -->
     <div id="descriptive" class="section active">
       <h2>Descriptive Statistics</h2>
-      <p class="desc">Histogram with normality curve, QQ plot, and full descriptive summary.</p>
-      <div class="plot-container">
-        <div id="histogram-plot"></div>
-      </div>
-      <div class="plot-container">
-        <div id="qq-plot"></div>
-      </div>
-      <div class="stats-table" id="descriptive-stats"></div>
+      <p class="desc">Histogram with normality curve, QQ plot, and full summary table.</p>
+      <div class="plot-container"><div id="histogram-plot"></div></div>
+      <div class="plot-container"><div id="qq-plot"></div></div>
+      <div class="table-container" id="descriptive-tables"></div>
     </div>
 
+    <!-- ─── COMPARISON ───────────────────────────────────────────────────── -->
     <div id="comparison" class="section">
       <h2>Group Comparison</h2>
       <p class="desc">Violin + box + jitter plot with significance brackets (one-way ANOVA + Tukey HSD).</p>
-      <div class="plot-container">
-        <div id="violin-plot"></div>
-      </div>
-      <div class="plot-container">
-        <div id="raincloud-plot"></div>
-      </div>
-      <div class="stats-table" id="comparison-stats"></div>
+      <div class="plot-container"><div id="violin-plot"></div></div>
+      <div class="plot-container"><div id="raincloud-plot"></div></div>
+      <div class="table-container" id="comparison-tables"></div>
     </div>
 
+    <!-- ─── CORRELATION ──────────────────────────────────────────────────── -->
     <div id="correlation" class="section">
       <h2>Correlation Analysis</h2>
       <p class="desc">Scatter plot with regression line and correlation matrix heatmap.</p>
-      <div class="plot-container">
-        <div id="scatter-plot"></div>
-      </div>
-      <div class="plot-container">
-        <div id="correlogram-plot"></div>
-      </div>
+      <div class="plot-container"><div id="scatter-plot"></div></div>
+      <div class="plot-container"><div id="correlogram-plot"></div></div>
+      <div class="table-container" id="correlation-tables"></div>
     </div>
 
+    <!-- ─── REGRESSION ───────────────────────────────────────────────────── -->
     <div id="regression" class="section">
       <h2>Regression Analysis</h2>
       <p class="desc">Coefficient plot and residual diagnostic panel.</p>
-      <div class="plot-container">
-        <div id="coef-plot"></div>
-      </div>
-      <div class="plot-container">
-        <div id="residual-plot"></div>
-      </div>
+      <div class="plot-container"><div id="coef-plot"></div></div>
+      <div class="plot-container"><div id="residual-plot"></div></div>
+      <div class="table-container" id="regression-tables"></div>
     </div>
 
+    <!-- ─── LMM ──────────────────────────────────────────────────────────── -->
     <div id="lmm" class="section">
       <h2>Linear Mixed Models</h2>
       <p class="desc">Random effects caterpillar plot (BLUPs) for a 3-group LMM.</p>
-      <div class="plot-container">
-        <div id="lmm-plot"></div>
-      </div>
-      <div class="stats-table" id="lmm-stats"></div>
+      <div class="plot-container"><div id="lmm-plot"></div></div>
+      <div class="table-container" id="lmm-tables"></div>
     </div>
 
+    <!-- ─── PCA ──────────────────────────────────────────────────────────── -->
     <div id="pca" class="section">
       <h2>Principal Component Analysis</h2>
-      <p class="desc">Scree plot, biplot, and loadings heatmap.</p>
-      <div class="plot-container">
-        <div id="scree-plot"></div>
-      </div>
-      <div class="plot-container">
-        <div id="biplot"></div>
-      </div>
+      <p class="desc">Scree plot, biplot, and component tables.</p>
+      <div class="plot-container"><div id="scree-plot"></div></div>
+      <div class="plot-container"><div id="biplot"></div></div>
+      <div class="table-container" id="pca-tables"></div>
     </div>
 
+    <!-- ─── DISTRIBUTIONS ───────────────────────────────────────────────── -->
     <div id="distribution" class="section">
       <h2>Distribution Explorer</h2>
       <p class="desc">Normal and t-distribution PDF with highlighted areas.</p>
-      <div class="plot-container">
-        <div id="dist-normal"></div>
-      </div>
-      <div class="plot-container">
-        <div id="dist-t"></div>
-      </div>
+      <div class="plot-container"><div id="dist-normal"></div></div>
+      <div class="plot-container"><div id="dist-t"></div></div>
     </div>
+
   </main>
 
   <script type="module" src="./main.ts"></script>
