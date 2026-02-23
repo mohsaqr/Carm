@@ -25,8 +25,8 @@
     header p  { font-size: 14px; opacity: 0.85; }
     nav {
       display: flex;
-      gap: 8px;
-      padding: 16px 32px;
+      gap: 6px;
+      padding: 12px 32px;
       background: white;
       border-bottom: 1px solid #dee2e6;
       flex-wrap: wrap;
@@ -35,24 +35,29 @@
       z-index: 10;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
-    nav button {
-      padding: 8px 18px;
+    nav a {
+      padding: 6px 14px;
       border: 1px solid #dee2e6;
       border-radius: 6px;
       background: white;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
+      text-decoration: none;
+      color: #212529;
       transition: all 0.15s;
+      white-space: nowrap;
     }
-    nav button:hover  { background: #e9ecef; }
-    nav button.active { background: #0d6efd; color: white; border-color: #0d6efd; }
+    nav a:hover   { background: #e9ecef; }
+    nav a.active  { background: #0d6efd; color: white; border-color: #0d6efd; }
     main {
       max-width: 1100px;
       margin: 32px auto;
       padding: 0 32px;
     }
-    .section { display: none; }
-    .section.active { display: block; }
+    .section {
+      margin-bottom: 56px;
+      scroll-margin-top: 68px;   /* clears the sticky nav */
+    }
     .plot-container {
       background: white;
       border-radius: 12px;
@@ -60,8 +65,14 @@
       padding: 24px;
       margin-bottom: 24px;
     }
-    h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
-    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 20px; }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e9ecef;
+    }
+    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 20px; margin-top: 8px; }
 
     /* ═══════════════════════════════════════════
        Publication-quality statistical tables
@@ -163,25 +174,27 @@
   </header>
 
   <nav>
-    <button class="active" onclick="showSection('descriptive', this)">Descriptive</button>
-    <button onclick="showSection('comparison', this)">Group Comparison</button>
-    <button onclick="showSection('correlation', this)">Correlation</button>
-    <button onclick="showSection('regression', this)">Regression</button>
-    <button onclick="showSection('lmm', this)">Mixed Models</button>
-    <button onclick="showSection('pca', this)">PCA</button>
-    <button onclick="showSection('distribution', this)">Distributions</button>
-    <button onclick="showSection('ranking', this)">Ranking</button>
-    <button onclick="showSection('composition', this)">Composition</button>
-    <button onclick="showSection('timeseries', this)">Time Series</button>
-    <button onclick="showSection('statistical', this)">Statistical</button>
-    <button onclick="showSection('multivariate', this)">Multivariate</button>
-    <button onclick="showSection('categorical', this)">Categorical</button>
+    <a href="#descriptive">Descriptive</a>
+    <a href="#comparison">Group Comparison</a>
+    <a href="#correlation">Correlation</a>
+    <a href="#regression">Regression</a>
+    <a href="#lmm">Mixed Models</a>
+    <a href="#pca">PCA</a>
+    <a href="#distribution">Distributions</a>
+    <a href="#ranking">Ranking</a>
+    <a href="#composition">Composition</a>
+    <a href="#timeseries">Time Series</a>
+    <a href="#statistical">Statistical</a>
+    <a href="#multivariate">Multivariate</a>
+    <a href="#categorical">Categorical</a>
+    <a href="#hierarchical">Hierarchical</a>
+    <a href="#networks">Networks &amp; Flows</a>
   </nav>
 
   <main>
 
     <!-- ─── DESCRIPTIVE ──────────────────────────────────────────────────── -->
-    <div id="descriptive" class="section active">
+    <div id="descriptive" class="section">
       <h2>Descriptive Statistics</h2>
       <p class="desc">Histogram with normality curve, QQ plot, KDE density, standalone box plot, and summary tables.</p>
       <div class="plot-container"><div id="histogram-plot"></div></div>
@@ -297,7 +310,7 @@
     <!-- ─── MULTIVARIATE ─────────────────────────────────────────────────── -->
     <div id="multivariate" class="section">
       <h2>Multivariate Plots</h2>
-      <p class="desc">Radar chart, parallel coordinates, scatter matrix (pair plot), and treemap.</p>
+      <p class="desc">Radar chart, parallel coordinates, and scatter matrix (pair plot).</p>
       <div class="plot-container"><div id="radar-plot"></div></div>
       <div class="plot-container"><div id="parallel-plot"></div></div>
       <div class="plot-container"><div id="pair-plot"></div></div>
@@ -312,16 +325,48 @@
       <div class="plot-container"><div id="mosaic-plot"></div></div>
     </div>
 
+    <!-- ─── HIERARCHICAL ─────────────────────────────────────────────────── -->
+    <div id="hierarchical" class="section">
+      <h2>Hierarchical &amp; Proportional</h2>
+      <p class="desc">Sunburst chart for hierarchical part-to-whole relationships, and Marimekko chart (variable-width 100% stacked bars) for bivariate composition.</p>
+      <div class="plots-row">
+        <div class="plot-container"><div id="sunburst-plot"></div></div>
+        <div class="plot-container"><div id="marimekko-plot"></div></div>
+      </div>
+    </div>
+
+    <!-- ─── NETWORKS & FLOWS ──────────────────────────────────────────────── -->
+    <div id="networks" class="section">
+      <h2>Networks &amp; Flows</h2>
+      <p class="desc">Chord diagram for symmetric flow matrices, alluvial plot for multi-stage flows, arc diagram for network topology, and hierarchical edge bundling.</p>
+      <div class="plot-container"><div id="chord-plot"></div></div>
+      <div class="plot-container"><div id="alluvial-plot"></div></div>
+      <div class="plot-container"><div id="arc-plot"></div></div>
+      <div class="plot-container"><div id="edge-bundling-plot"></div></div>
+    </div>
+
   </main>
 
   <script type="module" src="./main.ts"></script>
   <script>
-    function showSection(id, btn) {
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
-      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'))
-      document.getElementById(id).classList.add('active')
-      btn.classList.add('active')
-    }
+    // Highlight the nav link whose section is most visible in the viewport
+    const sections = document.querySelectorAll('.section')
+    const navLinks = document.querySelectorAll('nav a')
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(a => a.classList.remove('active'))
+          const active = document.querySelector(`nav a[href="#${entry.target.id}"]`)
+          if (active) active.classList.add('active')
+        }
+      })
+    }, { rootMargin: '-20% 0px -70% 0px' })
+
+    sections.forEach(s => observer.observe(s))
+
+    // Mark first link active on load
+    if (navLinks.length) navLinks[0].classList.add('active')
   </script>
 </body>
 </html>

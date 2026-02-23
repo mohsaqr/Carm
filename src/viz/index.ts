@@ -42,4 +42,12 @@ export * from './plots/parallel-coords.js'
 export * from './plots/treemap.js'
 export * from './plots/waffle-chart.js'
 export * from './plots/sparkline.js'
+// Hierarchical & Proportional
+export * from './plots/sunburst.js'
+export * from './plots/marimekko.js'
+// Networks & Flows
+export * from './plots/chord-diagram.js'
+export * from './plots/arc-diagram.js'
+export * from './plots/alluvial-plot.js'
+export * from './plots/edge-bundling.js'
 export * from './export.js'

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chord Diagram — Visual Test</title>
+  <style>
+    body { margin: 0; padding: 24px; font-family: system-ui, sans-serif; background: #f4f6f9; }
+    h2 { color: #1a1a2e; margin-bottom: 4px; }
+    p.note { color: #6c757d; font-size: 13px; margin: 0 0 20px; }
+    .chart-wrap { background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 12px; display: inline-block; margin: 12px 0; }
+    .section { margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+  <h2>Chord Diagram — Visual Test</h2>
+  <p class="note">
+    Two synthetic datasets: (1) a 4-group trade flow matrix, (2) a 6-group migration matrix.
+    Check: arcs coloured by group, ribbons semi-transparent, labels outside arcs, tick marks visible.
+  </p>
+
+  <div class="section">
+    <h3>Test 1 — 4 groups, trade flows</h3>
+    <div class="chart-wrap" id="chart1"></div>
+  </div>
+
+  <div class="section">
+    <h3>Test 2 — 6 groups, migration flows (with caption)</h3>
+    <div class="chart-wrap" id="chart2"></div>
+  </div>
+
+  <div class="section">
+    <h3>Test 3 — Dark theme</h3>
+    <div class="chart-wrap" style="background:#14142b" id="chart3"></div>
+  </div>
+
+  <script type="module">
+    import { renderChordDiagram } from '../src/viz/plots/chord-diagram.js'
+    import { DARK_THEME } from '../src/viz/themes/default.js'
+
+    // ── Test 1: 4-group trade matrix ─────────────────────────────────────────
+    const tradeMatrix = [
+      [ 0,  850, 320, 190],
+      [700,   0, 450, 210],
+      [280, 380,   0, 610],
+      [160, 190, 540,   0],
+    ]
+    const tradeLabels = ['North America', 'Europe', 'Asia-Pacific', 'Latin America']
+
+    renderChordDiagram(
+      document.getElementById('chart1'),
+      { matrix: tradeMatrix, labels: tradeLabels },
+      {
+        title: 'Regional Trade Flows',
+        width: 560, height: 500,
+        caption: 'Synthetic data — for visual testing only',
+      }
+    )
+
+    // ── Test 2: 6-group migration ─────────────────────────────────────────────
+    const migMatrix = [
+      [  0, 120,  85,  40,  20, 15],
+      [ 90,   0, 110,  30,  60, 10],
+      [ 70, 100,   0,  80,  25, 35],
+      [ 35,  25,  95,   0,  70, 20],
+      [ 15,  55,  30,  65,   0, 45],
+      [ 10,   8,  40,  18,  50,  0],
+    ]
+    const migLabels = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania', 'ME']
+
+    renderChordDiagram(
+      document.getElementById('chart2'),
+      { matrix: migMatrix, labels: migLabels },
+      {
+        title: 'International Migration',
+        width: 580, height: 520,
+        caption: 'Source: synthetic test data',
+        padAngle: 0.03,
+      }
+    )
+
+    // ── Test 3: Dark theme ────────────────────────────────────────────────────
+    renderChordDiagram(
+      document.getElementById('chart3'),
+      { matrix: tradeMatrix, labels: tradeLabels },
+      {
+        title: 'Trade Flows (Dark)',
+        width: 520, height: 480,
+        theme: DARK_THEME,
+      }
+    )
+  </script>
+</body>
+</html>
