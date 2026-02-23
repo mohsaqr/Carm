@@ -154,3 +154,87 @@ export interface GroupData {
   readonly values: readonly number[]
   readonly label: string
 }
+
+// ─── analyze() dispatch layer ─────────────────────────────────────────────
+
+/** Field type descriptor for the analyze() dispatch layer. */
+export type FieldType = 'numeric' | 'binary' | 'categorical' | 'ordinal'
+
+/**
+ * A numeric outcome field.
+ * @field type    - Always 'numeric'
+ * @field name    - Column / variable name, used in result labels
+ * @field values  - The raw numeric observations
+ */
+export interface NumericField {
+  readonly type: 'numeric'
+  readonly name: string
+  readonly values: readonly number[]
+}
+
+/**
+ * A grouping field whose values are labels (string or 0/1 int).
+ * Declared as 'binary' (exactly 2 unique values) or 'categorical' (3+).
+ * @field type    - 'binary' | 'categorical'
+ * @field name    - Column / variable name
+ * @field values  - One label per observation, parallel to the outcome field
+ */
+export interface GroupField {
+  readonly type: 'binary' | 'categorical'
+  readonly name: string
+  readonly values: readonly (string | number)[]
+}
+
+/** Union of all field kinds accepted by analyze(). */
+export type Field = NumericField | GroupField
+
+/**
+ * Options bag for analyze().
+ * @field ciLevel          - Confidence level for all CIs (default 0.95)
+ * @field paired           - If true and predictor is binary, uses paired t-test
+ *                           instead of independent. Requires both groups to be
+ *                           the same length.
+ * @field pAdjMethod       - Multiple-comparison correction for post-hoc tests
+ *                           (default 'holm'). Passed to tukeyHSD / dunnTest.
+ * @field forceTest        - Skip auto-selection and run a specific test by name:
+ *                           't-test-independent' | 't-test-paired' |
+ *                           'one-way-anova' | 'kruskal-wallis' |
+ *                           'chi-square' | 'fisher' | 'mann-whitney' |
+ *                           'wilcoxon'
+ * @field equalVariances   - Passed to tTestIndependent when resolving to
+ *                           't-test-independent'. Default false (Welch's).
+ * @field normalityAlpha   - Shapiro-Wilk p-value threshold for auto-routing
+ *                           parametric vs non-parametric. Default 0.05.
+ */
+export interface AnalyzeOptions {
+  readonly ciLevel?: number
+  readonly paired?: boolean
+  readonly pAdjMethod?: PAdjMethod
+  readonly forceTest?: string
+  readonly equalVariances?: boolean
+  readonly normalityAlpha?: number
+}
+
+/**
+ * Result envelope returned by analyze().
+ * @field test          - Human-readable name of the test that was run
+ * @field outcome       - Name of the outcome field
+ * @field predictor     - Name of the predictor/grouping field (if any)
+ * @field result        - The full statistical result (StatResult or
+ *                        FrequencyTestResult, depending on test)
+ * @field descriptives  - Per-group or overall DescriptiveResult (always
+ *                        included for numeric outcomes)
+ * @field posthoc       - Pairwise comparisons (only when 3+ groups)
+ * @field normality     - Shapiro-Wilk results per group used for routing
+ *                        (informational — helps explain why parametric/
+ *                        non-parametric was chosen)
+ */
+export interface AnalysisResult {
+  readonly test: string
+  readonly outcome: string
+  readonly predictor?: string
+  readonly result: StatResult | FrequencyTestResult
+  readonly descriptives?: readonly DescriptiveResult[]
+  readonly posthoc?: readonly PairwiseResult[]
+  readonly normality?: ReadonlyArray<{ group: string; W: number; p: number }>
+}
