@@ -1,3 +1,31 @@
+## 2026-02-25 (clustering module)
+
+### GMM cross-validation with R mclust
+- K-Means++ initialization (splitmix32 PRNG) finds slightly different local optima than mclust's hierarchical init. Multi-seed search (9+ seeds) closes the gap to ΔLL ≈ 0.004 for VVV. EII and VVI reach near-exact match (ΔLL ≈ 0.0001 and 0.0000).
+- mclust returns *negative* BIC (higher = better). Convert to standard BIC: `bic = -fit$bic`.
+- mclust's `attr(fit$bic, "df")` stores the DF — useful for cross-validation but not always well-documented.
+
+### LCA smoothing: MLE vs Beta(1,1)
+- poLCA uses raw MLE for rho (item-response probabilities): `sumX / sumW`.
+- Beta(1,1) smoothing `(sumX + 1) / (sumW + 2)` biases rho toward 0.5. For a 2-class/5-item dataset (n=100), this causes a ΔLL gap of ~0.478 — unacceptable for R equivalence.
+- Fix: use raw MLE with minimal floor to prevent log(0): `Math.max(Math.min(sumX / sumW, 1 - 1e-10), 1e-10)`. After fix: ΔLL = 0.0000000076 (exact to 10 decimals).
+
+### poLCA data format
+- poLCA requires data coded as 1/2 (not 0/1). The R reference script does `lca_data_raw + 1`. Our TS implementation works with 0/1 directly.
+- `probs[[d]][k, 2]` gives P(value=2) = P(original=1), which is what we store as rho.
+
+### K-Means exact match with R
+- When both R and TS converge to the same optimum (which K-Means++ usually does for well-separated clusters), inertia matches to 10+ decimal places.
+- R's `kmeans()` with `algorithm = "Lloyd"` matches our Lloyd's implementation exactly.
+
+### LTA cross-validation
+- depmixS4 is non-deterministic (different runs give different results even with set.seed). Cannot use for cross-validation.
+- Alternatives: seqHMM package, hmmlearn (Python), or manual hand-computation for small cases.
+
+### TypeScript noUncheckedIndexedAccess with +=
+- With `noUncheckedIndexedAccess: true`, `arr[i] += x` fails because `arr[i]` is `T | undefined`. Must use `arr[i]! += x`.
+- This applies to all compound assignment operators: `+=`, `-=`, `*=`, `++`.
+
 ## 2026-02-24 (floating settings panel + bold/halo)
 
 ### Gear popover architecture

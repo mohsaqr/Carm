@@ -1,3 +1,30 @@
+### 2026-02-25 — Clustering module: GMM, LCA, LTA, KMeans (R-equivalent)
+
+- `src/stats/clustering.ts`: New file (~1050 lines). Implements:
+  - **fitGMM**: EM algorithm with K-Means++ init, 6 mclust covariance models (VVV/EEE/VVI/EEI/VII/EII), correct DF per model, empty cluster re-seeding, deterministic PRNG (splitmix32).
+  - **predictGMM**: Posterior probabilities for new data.
+  - **findBestGMM**: BIC-based model selection across K and covariance types.
+  - **fitLCA**: Latent Class Analysis for binary data, MLE (matches R poLCA exactly).
+  - **fitLTA**: Latent Transition Analysis (Hidden Markov LCA), Baum-Welch in log-space, Viterbi decoding, ICL criterion.
+  - **runKMeans**: Lloyd's algorithm with K-Means++ init, convergence check, empty cluster re-seeding.
+  - **predictKMeans**: Assign new points to nearest centroid.
+- `src/stats/index.ts`: Added `export * from './clustering.js'`.
+- `tests/stats/clustering.test.ts`: 47 unit tests covering all 4 models (structure, convergence, diagnostics, determinism, means recovery, posteriors, covariance constraints, DF, edge cases, predict).
+- `tests/stats/clustering-xval.test.ts`: 20 cross-validation tests against R reference values.
+- `tests/r_clustering_reference.R`: R script generating reference from mclust, poLCA, stats::kmeans.
+- `tests/r_clustering_reference.json`: R reference data (90×2 GMM data, 100×5 LCA data, exact results).
+
+**R equivalence achieved:**
+| Model   | ΔLL (TS − R)     | Status              |
+|---------|-------------------|---------------------|
+| GMM VVV | +0.004            | Near-exact (init)   |
+| GMM EII | +0.0001           | Near-exact           |
+| GMM VVI | +0.0000           | Exact (4 decimals)  |
+| LCA     | −0.0000000076     | Exact (10 decimals) |
+| KMeans  | −0.0000000005     | Exact (10 decimals) |
+
+- Tests: 376/376 (was 309/309).
+
 ### 2026-02-24 — Floating settings panel with sliders + bold/halo toggles
 
 **Aistatia — Gear icon settings popover:**

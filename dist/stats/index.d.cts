@@ -1,6 +1,7 @@
 import { b as DescriptiveResult, c as EffectSize, g as FrequencyTestResult, S as StatResult, f as FrequencyRow, G as GroupData, P as PAdjMethod, j as PairwiseResult, k as RegressionResult, i as PCAResult, L as LMMResult, F as Field, a as AnalyzeOptions, A as AnalysisResult, d as FieldType } from '../types-DC8rlZlK.cjs';
 export { C as CorrelationMatrix, c as correlationMatrix, k as kendallTau, p as partialCorrelation, a as pearsonCorrelation, s as spearmanCorrelation } from '../correlation-gmbnWkDH.cjs';
-export { p as mean, q as median, u as quantile, x as sd, y as se, E as variance } from '../math-g4nrtyHp.cjs';
+import { M as Matrix } from '../math-qKSJ70Vo.cjs';
+export { p as mean, q as median, u as quantile, x as sd, y as se, F as variance } from '../math-qKSJ70Vo.cjs';
 
 /**
  * Descriptive statistics module.
@@ -455,4 +456,174 @@ declare function detectFieldType(values: readonly (string | number)[]): FieldTyp
  */
 declare function analyze(outcome: Field, predictor?: Field, opts?: AnalyzeOptions): AnalysisResult;
 
-export { type ANOVAResult, type LMMInput, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, fisherExactTest, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+/**
+ * Clustering & Mixture Models: GMM, LCA, LTA, K-Means.
+ *
+ * - GMM: Gaussian Mixture with EM, K-Means++ init, mclust-style covariance constraints
+ * - LCA: Latent Class Analysis for binary data (MLE, matches poLCA)
+ * - LTA: Latent Transition Analysis (Hidden Markov LCA) with Baum-Welch in log-space
+ * - K-Means: Lloyd's algorithm with K-Means++ init and empty-cluster re-seeding
+ *
+ * All functions are deterministic via a seeded PRNG (default seed: 42).
+ * Cross-validate against: mclust (GMM), poLCA (LCA), seqHMM (LTA), stats::kmeans (K-Means).
+ */
+
+type CovarianceModel = 'VVV' | 'EEE' | 'VVI' | 'EEI' | 'VII' | 'EII';
+interface ClusterDiagnostics {
+    readonly converged: boolean;
+    readonly iterations: number;
+    readonly logLikelihood: number;
+    readonly df: number;
+    readonly aic: number;
+    readonly bic: number;
+    readonly icl: number;
+    readonly entropy: number;
+    readonly avepp: readonly number[];
+    readonly formatted: string;
+}
+interface GMMOptions {
+    readonly k: number;
+    readonly model?: CovarianceModel;
+    readonly seed?: number;
+    readonly tol?: number;
+    readonly maxIter?: number;
+    readonly regCovar?: number;
+}
+interface GMMResult {
+    readonly weights: readonly number[];
+    readonly means: readonly number[][];
+    readonly covariances: readonly Matrix[];
+    readonly posteriors: readonly (readonly number[])[];
+    readonly labels: readonly number[];
+    readonly diagnostics: ClusterDiagnostics;
+}
+interface LCAOptions {
+    readonly k: number;
+    readonly seed?: number;
+    readonly tol?: number;
+    readonly maxIter?: number;
+}
+interface LCAResult {
+    readonly rho: readonly (readonly number[])[];
+    readonly priorWeights: readonly number[];
+    readonly posteriors: readonly (readonly number[])[];
+    readonly labels: readonly number[];
+    readonly diagnostics: ClusterDiagnostics;
+}
+interface LTAOptions {
+    readonly k: number;
+    readonly seed?: number;
+    readonly tol?: number;
+    readonly maxIter?: number;
+}
+interface LTAResult {
+    readonly pi: readonly number[];
+    readonly tau: readonly (readonly number[])[];
+    readonly rho: readonly (readonly number[])[];
+    readonly trajectories: readonly (readonly number[])[];
+    readonly posteriors: readonly (readonly (readonly number[])[])[];
+    readonly diagnostics: ClusterDiagnostics;
+}
+interface KMeansOptions {
+    readonly k: number;
+    readonly seed?: number;
+    readonly maxIter?: number;
+    readonly tol?: number;
+}
+interface KMeansResult {
+    readonly centroids: readonly (readonly number[])[];
+    readonly labels: readonly number[];
+    readonly inertia: number;
+    readonly converged: boolean;
+    readonly iterations: number;
+}
+/**
+ * Fit a Gaussian Mixture Model via Expectation-Maximization.
+ *
+ * Supports mclust-style covariance constraints:
+ * - VVV: Variable volume, variable shape, variable orientation (full covariance per component)
+ * - EEE: Equal volume, equal shape, equal orientation (single pooled covariance)
+ * - VVI: Variable volume, variable shape, identity orientation (diagonal, per component)
+ * - EEI: Equal volume, equal shape, identity orientation (single shared diagonal)
+ * - VII: Variable volume, identity shape, identity orientation (spherical, per component)
+ * - EII: Equal volume, identity shape, identity orientation (single shared scalar × I)
+ *
+ * @param data - N × D numeric data matrix (array of observation arrays)
+ * @param options - GMM configuration
+ * @returns GMMResult with weights, means, covariances, posteriors, labels, diagnostics
+ *
+ * Cross-validate with R:
+ * > library(mclust)
+ * > fit <- Mclust(data, G=3, modelNames="VVV")
+ * > fit$parameters$mean
+ * > fit$parameters$variance$sigma
+ * > fit$BIC
+ */
+declare function fitGMM(data: readonly (readonly number[])[], options: GMMOptions): GMMResult;
+/**
+ * Predict cluster assignments for new data given a fitted GMM.
+ */
+declare function predictGMM(data: readonly (readonly number[])[], result: GMMResult): {
+    readonly labels: readonly number[];
+    readonly posteriors: readonly (readonly number[])[];
+};
+/**
+ * Automatic model selection: fit GMM across a grid of K and covariance models,
+ * return the model with the lowest BIC.
+ *
+ * @param data - N × D data matrix
+ * @param kRange - Array of K values to try (default [1,2,3,4,5])
+ * @param models - Array of covariance models to try (default all 6)
+ * @returns The GMMResult with the lowest BIC
+ */
+declare function findBestGMM(data: readonly (readonly number[])[], kRange?: readonly number[], models?: readonly CovarianceModel[]): GMMResult;
+/**
+ * Fit a Latent Class Analysis model for binary data.
+ *
+ * Uses EM with Bernoulli emission model and Beta(1,1) (uniform) prior smoothing.
+ *
+ * @param data - N × M binary matrix (0/1 values)
+ * @param options - LCA configuration
+ * @returns LCAResult with rho (item-response probabilities), priorWeights, posteriors, labels
+ *
+ * Cross-validate with R:
+ * > library(poLCA)
+ * > f <- cbind(V1, V2, V3, ...) ~ 1
+ * > fit <- poLCA(f, data, nclass=3, nrep=1, probs.start=...)
+ * > fit$probs
+ */
+declare function fitLCA(data: readonly (readonly number[])[], options: LCAOptions): LCAResult;
+/**
+ * Fit a Latent Transition Analysis model (categorical Hidden Markov Model).
+ *
+ * Uses Baum-Welch (EM) in log-space for numerical stability.
+ * Measurement model is time-invariant (measurement invariance assumption).
+ * Viterbi decoding provides most-likely state trajectories.
+ *
+ * @param data - N × T × M binary tensor (subjects × timepoints × items)
+ * @param options - LTA configuration
+ * @returns LTAResult with pi, tau, rho, trajectories, posteriors, diagnostics
+ *
+ * Cross-validate with R:
+ * > library(seqHMM)
+ * > # or manual forward-backward on small synthetic example
+ */
+declare function fitLTA(data: readonly (readonly (readonly number[])[])[], options: LTAOptions): LTAResult;
+/**
+ * K-Means clustering with K-Means++ initialization and empty-cluster re-seeding.
+ *
+ * @param data - N × D numeric data matrix
+ * @param options - K-Means configuration
+ * @returns KMeansResult with centroids, labels, inertia
+ *
+ * Cross-validate with R:
+ * > km <- kmeans(data, centers=3, nstart=1, algorithm="Lloyd")
+ * > km$centers; km$cluster; km$tot.withinss
+ */
+declare function runKMeans(data: readonly (readonly number[])[], options: KMeansOptions): KMeansResult;
+/**
+ * Predict cluster assignments for new data given fitted K-Means centroids.
+ */
+declare function predictKMeans(data: readonly (readonly number[])[], centroids: readonly (readonly number[])[]): readonly number[];
+
+export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type GMMOptions, type GMMResult, type KMeansOptions, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, findBestGMM, fisherExactTest, fitGMM, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runKMeans, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };

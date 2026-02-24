@@ -1,91 +1,6 @@
 import { E as EffectInterpretation } from '../types-DC8rlZlK.cjs';
 export { A as AnalysisResult, a as AnalyzeOptions, D as DataMatrix, b as DescriptiveResult, c as EffectSize, F as Field, d as FieldType, e as FixedEffect, f as FrequencyRow, g as FrequencyTestResult, G as GroupData, h as GroupField, L as LMMResult, N as NumericField, P as PAdjMethod, i as PCAResult, j as PairwiseResult, R as RegressionCoef, k as RegressionResult, S as StatResult } from '../types-DC8rlZlK.cjs';
-export { N as NelderMeadOptions, a as NelderMeadResult, b as adjustPValues, c as betaFn, d as chiSqCDF, e as chiSqPValue, f as chiSqQuantile, g as clamp, h as cov, i as fDistCDF, j as fDistPValue, k as gamma, l as incompleteBeta, m as incompleteGamma, n as logBeta, o as logGamma, p as mean, q as median, r as nelderMead, s as normalCDF, t as normalQuantile, u as quantile, v as rank, w as roundTo, x as sd, y as se, z as sortAsc, A as ss, B as tDistCDF, C as tDistPValue, D as tDistQuantile, E as variance } from '../math-g4nrtyHp.cjs';
-
-/**
- * Matrix class for Carm.
- * Implements multiply, transpose, inverse (via Cholesky or LU), log-determinant, and SVD.
- * Pure computation — no DOM, no D3, no side effects.
- */
-declare class Matrix {
-    readonly rows: number;
-    readonly cols: number;
-    private readonly _data;
-    constructor(rows: number, cols: number, data?: readonly number[]);
-    /** Build from 2-D array (row-major). */
-    static fromArray(arr: readonly (readonly number[])[]): Matrix;
-    /** Identity matrix of size n. */
-    static identity(n: number): Matrix;
-    /** Zero matrix. */
-    static zeros(rows: number, cols: number): Matrix;
-    /** Get element at (i, j) — 0-indexed. */
-    get(i: number, j: number): number;
-    /** Return 2-D array representation. */
-    toArray(): number[][];
-    /** Return flat row-major copy. */
-    toFlat(): number[];
-    /** Matrix transpose. */
-    transpose(): Matrix;
-    /** Matrix multiplication: this × other. */
-    multiply(other: Matrix): Matrix;
-    /** Scalar multiplication. */
-    scale(s: number): Matrix;
-    /** Element-wise add. */
-    add(other: Matrix): Matrix;
-    /** Element-wise subtract. */
-    subtract(other: Matrix): Matrix;
-    /**
-     * Cholesky decomposition for symmetric positive-definite matrices.
-     * Returns lower-triangular L such that this = L * L^T.
-     * Throws if matrix is not SPD.
-     */
-    cholesky(): Matrix;
-    /**
-     * Log-determinant via Cholesky: log|A| = 2 * Σ log(L_ii).
-     * Only valid for symmetric positive-definite matrices.
-     */
-    logDet(): number;
-    /**
-     * Inverse via LU decomposition with partial pivoting.
-     * Works for any non-singular square matrix.
-     * Formula: Doolittle LU, then forward/back substitution for each column of I.
-     */
-    inverse(): Matrix;
-    /**
-     * Singular Value Decomposition: A = U · S · V^T
-     * Returns { U, S (diagonal values), V }.
-     * Algorithm: Golub-Reinsch (one-sided Jacobi for small matrices).
-     * Reference: Golub & Van Loan, "Matrix Computations", 4th ed., Algorithm 8.6.2
-     */
-    svd(): {
-        U: Matrix;
-        S: number[];
-        V: Matrix;
-    };
-    /**
-     * Pseudo-inverse via SVD: A+ = V · S^{-1} · U^T
-     */
-    pseudoInverse(tol?: number): Matrix;
-    /** Trace (sum of diagonal elements). */
-    trace(): number;
-    /** Extract diagonal as array. */
-    diagonal(): number[];
-    /** Column vector as Matrix from array. */
-    static colVec(data: readonly number[]): Matrix;
-    /** Row vector as Matrix from array. */
-    static rowVec(data: readonly number[]): Matrix;
-    /**
-     * Eigendecomposition for symmetric matrices via Jacobi iterations.
-     * Returns { values, vectors } where vectors are columns of the eigenvector matrix.
-     * Reference: Golub & Van Loan, Algorithm 8.4.1
-     */
-    eigen(): {
-        values: number[];
-        vectors: Matrix;
-    };
-}
-/** Solve linear system A·x = b using the (already computed) inverse.  */
-declare function solveLinear(A: Matrix, b: readonly number[]): number[];
+export { M as Matrix, N as NelderMeadOptions, a as NelderMeadResult, b as adjustPValues, c as betaFn, d as chiSqCDF, e as chiSqPValue, f as chiSqQuantile, g as clamp, h as cov, i as fDistCDF, j as fDistPValue, k as gamma, l as incompleteBeta, m as incompleteGamma, n as logBeta, o as logGamma, p as mean, q as median, r as nelderMead, s as normalCDF, t as normalQuantile, u as quantile, v as rank, w as roundTo, x as sd, y as se, z as solveLinear, A as sortAsc, B as ss, C as tDistCDF, D as tDistPValue, E as tDistQuantile, F as variance } from '../math-qKSJ70Vo.cjs';
 
 /**
  * APA 7th edition string formatting for statistical results.
@@ -171,4 +86,4 @@ declare function interpretCramerV(v: number, df: number): string;
 /** Generic effect size interpretation helper. */
 declare function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation;
 
-export { EffectInterpretation, Matrix, formatANOVA, formatCI, formatChiSq, formatCorrelation, formatDF, formatKruskalWallis, formatLMM, formatMannWhitney, formatP, formatRegression, formatStat, formatTTest, interpretCohensD, interpretCramerV, interpretEffect, interpretEtaSq, interpretR, solveLinear };
+export { EffectInterpretation, formatANOVA, formatCI, formatChiSq, formatCorrelation, formatDF, formatKruskalWallis, formatLMM, formatMannWhitney, formatP, formatRegression, formatStat, formatTTest, interpretCohensD, interpretCramerV, interpretEffect, interpretEtaSq, interpretR };

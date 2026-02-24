@@ -1,40 +1,37 @@
-# Session Handoff — 2026-02-24
+# Session Handoff — 2026-02-25
 
 ## Completed
-- **Configurable plot annotations**: All 8 plot types support conditional rendering of n-labels, median, mean diamond, jitter, brackets, outliers, density overlay, normal curve, CI band, equation, rug, legend, counts, percentages, values, significance.
-- **Numeric p-values on brackets**: `numericP` flag — shows `p = .025` instead of `***` stars. Default true.
-- **Mean diamond marker + median value labels**: White-filled diamond at group mean, numeric label next to median line and mean diamond.
-- **Redesigned plot toolbar**: Modern pill toggles, font family/size selects, subtitle toggle, SVG/PNG export.
-- **Floating gear settings panel**: ⚙ icon opens popover with sliders (jitter width, bandwidth, point size, opacity, bins, plot height) and bold/halo text styling toggles. Per-plot-type control registry.
-- **Editable plot title**: Click SVG title → inline text input → commit on blur.
-- **Git repos set up**: Carm pushed to `mohsaqr/Carm` (dev-clean). Aistatia initialized and pushed to `mohsaqr/aistatia` (private, main).
+- **Clustering module** (`src/stats/clustering.ts`): Full implementation of GMM (6 covariance models), LCA, LTA, KMeans with 7 exported functions.
+- **R cross-validation**: Near-exact to exact equivalence with R mclust/poLCA/kmeans on identical datasets. LCA matches to 10 decimal places.
+- **67 new tests**: 47 unit tests + 20 cross-validation tests. All 376/376 passing.
+- **LCA/LTA rho smoothing fix**: Changed from Beta(1,1) to raw MLE to match poLCA exactly.
 
 ## Current State
-- **JStats (Carm)**: All 309/309 tests passing. Build clean. Pushed to `origin/dev-clean`.
-- **Aistatia**: `tsc --noEmit` clean. `npm run build` clean. Pushed to `origin/main`.
-- **Carm dist in aistatia**: node_modules/carm/dist has the latest bracket/annotation changes.
+- **Carm**: All 376/376 tests passing. Build clean. Branch `dev-clean`.
+- **Clustering module fully functional**: fitGMM, predictGMM, findBestGMM, fitLCA, fitLTA, runKMeans, predictKMeans all exported and tested.
+- **Not yet committed**: Changes are local only — user needs to approve git operations.
 
 ## Key Decisions
-- **Two-tier toolbar**: Pill bar (quick booleans) + gear popover (sliders + text styling). Avoids overcrowding.
-- **defaultValue=0 = "auto"**: Bandwidth, bins, plotHeight use 0 to mean "let renderer decide".
-- **pointOpacity flows through CarmTheme**: Overridden in `buildTheme()`, affects all point renders.
-- **Bold/halo applied post-render**: `font-weight: 600` on SVG text, `paint-order: stroke` for halo.
+- **MLE over Beta(1,1) smoothing for LCA/LTA rho**: Chosen to match R poLCA exactly. Minimal floor (1e-10) prevents log(0) without biasing estimates.
+- **Multi-seed approach for cross-validation**: EM is init-dependent; try 6-9 seeds and take best LL for fair comparison.
+- **K-Means++ with splitmix32 PRNG**: Deterministic, reproducible initialization across platforms.
+- **LTA stays**: User insisted on enterprise-grade comprehensive library.
 
 ## Open Issues
-- **p-values may be hidden by stale localStorage**: If user toggled `showBrackets` off in a previous session, it persists. Clear with: `Object.keys(localStorage).filter(k => k.startsWith('aistatia-')).forEach(k => localStorage.removeItem(k))`
-- **LMM SEs**: Satterthwaite df approximation still crude.
-- **Random slopes**: Not yet implemented.
+- **LTA has no R cross-validation**: depmixS4 is non-deterministic. Need seqHMM or hand-computed reference.
+- **GMM VVV ΔLL = 0.004**: Tiny gap due to different initialization (K-Means++ vs mclust hierarchical). Our LL is marginally *better* — both valid optima.
+- **LMM SEs**: Satterthwaite df approximation still crude (from previous session).
 
 ## Next Steps
-1. Investigate p-values disappearing issue — likely stale localStorage.
-2. Visual verification of gear panel with real data.
-3. Consider adding "Reset defaults" button to gear panel.
+1. Commit and push clustering module (pending user approval).
+2. LTA cross-validation with seqHMM or manual hand-computation.
+3. Consider adding GMM covariance model selection to findBestGMM (currently supports K and model type).
+4. Integrate clustering into aistatia UI (wizard + plot panel).
 
 ## Context
-- JStats dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
+- Carm dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
 - Aistatia dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/aistatia`
-- Carm package: `carm` (v0.1.0), branch `dev-clean`
-- Aistatia: branch `main`, private repo `mohsaqr/aistatia`
-- `npm run build` (JStats) → `dist/` via tsup
-- `npm run build` (aistatia) → `dist/` via vite
-- Tests: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` → 309/309
+- Branch: `dev-clean`
+- Build: `npm run build` → dist/ via tsup
+- Tests: `npx vitest run` → 376/376
+- R reference: `tests/r_clustering_reference.R` → `tests/r_clustering_reference.json`
