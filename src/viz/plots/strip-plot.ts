@@ -19,6 +19,7 @@ export interface StripPlotConfig {
   readonly width?: number
   readonly height?: number
   readonly theme?: CarmTheme
+  readonly showN?: boolean
 }
 
 export interface StripGroup {
@@ -119,12 +120,14 @@ function renderStripPlotD3(
       .attr('opacity', 0.9)
 
     // n label below axis
-    g.append('text')
-      .attr('x', cx).attr('y', height + 52)
-      .attr('text-anchor', 'middle')
-      .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall)
-      .attr('fill', theme.textMuted)
-      .text(`n = ${gr.values.length}`)
+    if (config.showN !== false) {
+      g.append('text')
+        .attr('x', cx).attr('y', height + 52)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall)
+        .attr('fill', theme.textMuted)
+        .text(`n = ${gr.values.length}`)
+    }
   })
 
   // Axes

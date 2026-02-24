@@ -21,6 +21,7 @@ export interface ScatterStatsConfig {
   readonly showMarginals?: boolean
   readonly showCI?: boolean
   readonly pointSize?: number
+  readonly showEquation?: boolean
 }
 
 export interface ScatterStatsData {
@@ -132,7 +133,9 @@ function renderScatterD3(
       .attr('y1', yScale(lineData[0]![1]!)).attr('y2', yScale(lineData[1]![1]!))
       .attr('stroke', getColor(0, theme)).attr('stroke-width', 2)
 
-    addRegressionEquation(g as unknown as D3.Selection<SVGGElement, unknown, null, undefined>, b0, b1, r2, 10, 20, theme)
+    if (config.showEquation !== false) {
+      addRegressionEquation(g as unknown as D3.Selection<SVGGElement, unknown, null, undefined>, b0, b1, r2, 10, 20, theme)
+    }
   }
 
   // Data points

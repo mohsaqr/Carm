@@ -105,6 +105,7 @@ interface BracketConfig {
     readonly yBase: number;
     readonly bracketHeight: number;
     readonly significantOnly: boolean;
+    readonly numericP?: boolean;
 }
 /**
  * Render significance brackets onto an SVG group.
@@ -146,6 +147,10 @@ interface ViolinBoxConfig {
     readonly significantBracketsOnly?: boolean;
     readonly jitterWidth?: number;
     readonly violinBandwidth?: number;
+    readonly showN?: boolean;
+    readonly showMean?: boolean;
+    readonly showMedian?: boolean;
+    readonly numericP?: boolean;
 }
 interface ViolinBoxData {
     readonly groups: readonly GroupData[];
@@ -176,6 +181,7 @@ interface ScatterStatsConfig {
     readonly showMarginals?: boolean;
     readonly showCI?: boolean;
     readonly pointSize?: number;
+    readonly showEquation?: boolean;
 }
 interface ScatterStatsData {
     readonly x: readonly number[];
@@ -242,6 +248,7 @@ interface CorrelogramConfig {
     readonly theme?: CarmTheme;
     readonly showValues?: boolean;
     readonly showSignificance?: boolean;
+    readonly showLegend?: boolean;
 }
 declare function renderCorrelogram(container: HTMLElement, data: CorrelationMatrix, config?: CorrelogramConfig): void;
 
@@ -306,6 +313,9 @@ interface RaincloudConfig {
     readonly width?: number;
     readonly height?: number;
     readonly theme?: CarmTheme;
+    readonly showN?: boolean;
+    readonly showMean?: boolean;
+    readonly showJitter?: boolean;
 }
 interface RaincloudData {
     readonly groups: readonly GroupData[];
@@ -383,6 +393,7 @@ interface DensityConfig {
     readonly width?: number;
     readonly height?: number;
     readonly theme?: CarmTheme;
+    readonly showLegend?: boolean;
 }
 interface DensitySeries {
     readonly label: string;
@@ -407,6 +418,10 @@ interface BoxplotConfig {
     readonly width?: number;
     readonly height?: number;
     readonly theme?: CarmTheme;
+    readonly showN?: boolean;
+    readonly showMean?: boolean;
+    readonly showOutliers?: boolean;
+    readonly showMedian?: boolean;
 }
 interface BoxplotGroup {
     readonly label: string;
@@ -711,6 +726,7 @@ interface StripPlotConfig {
     readonly width?: number;
     readonly height?: number;
     readonly theme?: CarmTheme;
+    readonly showN?: boolean;
 }
 interface StripGroup {
     readonly label: string;
@@ -738,6 +754,8 @@ interface SwarmPlotConfig {
     readonly theme?: CarmTheme;
     readonly pointRadius?: number;
     readonly bandwidth?: number;
+    readonly showN?: boolean;
+    readonly showMean?: boolean;
 }
 interface SwarmPlotData {
     readonly groups: readonly {

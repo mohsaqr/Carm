@@ -26,6 +26,10 @@ export interface ViolinBoxConfig {
   readonly significantBracketsOnly?: boolean
   readonly jitterWidth?: number
   readonly violinBandwidth?: number
+  readonly showN?: boolean
+  readonly showMean?: boolean
+  readonly showMedian?: boolean
+  readonly numericP?: boolean
 }
 
 export interface ViolinBoxData {
@@ -204,10 +208,30 @@ function renderViolinBoxD3(
       .attr('stroke', color)
       .attr('stroke-width', 2)
 
-    // Median line
-    g.append('line').attr('x1', cx - boxW / 2).attr('x2', cx + boxW / 2)
-      .attr('y1', yScale(med)).attr('y2', yScale(med))
-      .attr('stroke', color).attr('stroke-width', 2.5)
+    // Median line + value
+    if (config.showMedian !== false) {
+      g.append('line').attr('x1', cx - boxW / 2).attr('x2', cx + boxW / 2)
+        .attr('y1', yScale(med)).attr('y2', yScale(med))
+        .attr('stroke', color).attr('stroke-width', 2.5)
+      g.append('text')
+        .attr('x', cx + boxW / 2 + 4).attr('y', yScale(med) + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(med.toFixed(2))
+    }
+
+    // Mean diamond marker + value
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length
+      const my = yScale(groupMean)
+      const ds = 5
+      g.append('polygon')
+        .attr('points', `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`)
+        .attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.5)
+      g.append('text')
+        .attr('x', cx + ds + 4).attr('y', my + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+    }
 
     // Jitter points
     if (config.showJitter !== false) {
@@ -232,7 +256,9 @@ function renderViolinBoxD3(
     }
 
     // n label
-    addNLabel(g, gr.values.length, cx, height + 60, theme)
+    if (config.showN !== false) {
+      addNLabel(g, gr.values.length, cx, height + 60, theme)
+    }
   })
 
   // Significance brackets
@@ -245,6 +271,7 @@ function renderViolinBoxD3(
       yBase: 0,
       bracketHeight: 22,
       significantOnly: config.significantBracketsOnly ?? false,
+      ...(config.numericP !== undefined && { numericP: config.numericP }),
     }, theme)
   }
 

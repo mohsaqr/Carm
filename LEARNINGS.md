@@ -1,3 +1,37 @@
+## 2026-02-24 (floating settings panel + bold/halo)
+
+### Gear popover architecture
+- Two-tier toolbar: pill bar (quick boolean toggles + selects) stays in `.plot-bar`, gear popover (sliders + text styling) floats absolutely positioned from the bar.
+- `position: relative` on `.plot-bar` is set dynamically in JS when the popover is attached, so it only applies to bars that have gear controls.
+- Slider controls with `defaultValue: 0` use "auto" display for bandwidth/bins/plotHeight — 0 means "let the renderer decide". Non-zero values pass through to the renderer config.
+- `pointOpacity` flows through `CarmTheme.pointOpacity` (overridden in `buildTheme()`). All other slider values pass directly to renderer config objects via conditional spread.
+- Bold labels: `font-weight: 600` on all `svg text` except `.plot-title` (which is already bold). Applied post-render.
+- Text halo: SVG `paint-order: stroke` + white stroke + `stroke-linejoin: round`. Creates a clean outline behind text for readability over data.
+- Close-on-outside-click uses `document.addEventListener('click')` — must check `!popover.contains(target)` and `target !== gearBtn` to avoid immediate close on open.
+
+## 2026-02-24 (configurable annotations + toolbar redesign)
+
+### Annotation toggle pattern
+- All new config booleans use `!== false` pattern (e.g. `if (config.showN !== false)`), which means `undefined` defaults to `true`. Only `showMean` uses `if (config.showMean)` to default to `false`.
+- Mean diamond marker uses SVG `<polygon>` with 4 points (top, right, bottom, left) rather than a rotated `<rect>` — simpler SVG and no transform needed.
+- When copying JStats dist/ to aistatia's node_modules/carm/dist/, TypeScript picks up the new types immediately without needing `npm install`. This is because `carm` is referenced via GitHub branch, not a versioned registry.
+- For categorical re-renders (bar/pie/lollipop), the context map stores `catVarName` and `catFreqTable` separately because these plots go through `renderCategoricalPlot` instead of the standard `renderPlot` dispatcher.
+
+### Toolbar design: pills > checkboxes
+- Pill-shaped buttons with `.on` CSS class toggle look much better than native checkbox inputs for boolean toggles. Use `border-radius: 10px`, subtle border, blue background when on.
+- For font control: construct a `CarmTheme` override from the user's selection and pass it as the `theme` field in each renderer's config. The renderer uses `theme.fontFamily` in D3 `.attr()` calls, so the theme must be set BEFORE rendering (CSS custom properties from `applyTheme` won't override inline SVG attributes).
+- To show/hide the statistics subtitle after render, add a CSS class (`.plot-subtitle`) to the subtitle text element in Carm's `addSubtitle()`, then toggle `style.display = 'none'` post-render. This avoids modifying every renderer's internal logic.
+- Merging toggle bar + export buttons into one unified toolbar reduces DOM complexity and looks cleaner than separate bars.
+
+### Numeric p-values vs stars
+- `formatBracketP(p, numeric)` — when `numeric=true`, shows `p = .025` or `p < .001`. When false, shows `***`/`**`/`*`/`ns`. Default to numeric since researchers need exact values.
+- For `exactOptionalPropertyTypes: true`, passing `config.numericP` (type `boolean | undefined`) directly to a `boolean` field errors. Use conditional spread: `...(config.numericP !== undefined && { numericP: config.numericP })`.
+
+### Editable title/subtitle
+- Custom title/subtitle stored as `customTitle`/`customSubtitle` in PlotConfig. Applied post-render by finding `.plot-title`/`.plot-subtitle` SVG text elements and setting `textContent`.
+- Live text update on `input` event (fast, just replaces text content in DOM). Full re-render on `blur` (for title that affects layout).
+- `escapeAttr()` needed when injecting user text into HTML attribute values (title/subtitle default values in input fields).
+
 ## 2026-02-23 (analyze dispatch)
 
 ### analyze() auto-routing via Shapiro-Wilk

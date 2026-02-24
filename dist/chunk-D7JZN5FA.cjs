@@ -1,4 +1,6 @@
-import { quantile, sortAsc, normalQuantile, mean, normalCDF } from './chunk-IRX4LIZX.js';
+'use strict';
+
+var chunkAVJH2SAO_cjs = require('./chunk-AVJH2SAO.cjs');
 
 // src/viz/themes/default.ts
 var CARM_PALETTE = [
@@ -133,9 +135,9 @@ function formatTooltipRow(label, value) {
 // src/viz/components/annotations.ts
 function addSubtitle(svg, title, subtitle, _width, theme = DEFAULT_THEME) {
   svg.append("rect").attr("x", 20).attr("y", 10).attr("width", 3).attr("height", 22).attr("rx", 1.5).attr("fill", theme.colors[0] ?? "#4e79a7");
-  svg.append("text").attr("x", 30).attr("y", 26).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeTitle).attr("font-weight", "700").attr("letter-spacing", "-0.3").attr("fill", theme.text).text(title);
+  svg.append("text").attr("class", "plot-title").attr("x", 30).attr("y", 26).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeTitle).attr("font-weight", "700").attr("letter-spacing", "-0.3").attr("fill", theme.text).text(title);
   if (subtitle) {
-    svg.append("text").attr("x", 30).attr("y", 45).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("font-style", "italic").attr("fill", theme.textAnnotation).text(subtitle);
+    svg.append("text").attr("class", "plot-subtitle").attr("x", 30).attr("y", 45).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("font-style", "italic").attr("fill", theme.textAnnotation).text(subtitle);
   }
 }
 function addCaption(svg, text, _width, height, theme = DEFAULT_THEME) {
@@ -166,7 +168,11 @@ function addStatBadge(g, lines, x, y, theme = DEFAULT_THEME) {
 }
 
 // src/viz/components/brackets.ts
-function formatBracketP(p) {
+function formatBracketP(p, numeric) {
+  if (numeric) {
+    if (p < 1e-3) return "p < .001";
+    return `p = ${p.toFixed(3).replace(/^0\./, ".")}`;
+  }
   if (p < 1e-3) return "***";
   if (p < 0.01) return "**";
   if (p < 0.05) return "*";
@@ -185,7 +191,7 @@ function renderBrackets(g, comparisons, config, theme = DEFAULT_THEME) {
       config.groupPositions.get(c.group2) ?? 0
     ),
     p: c.pValueAdj,
-    label: formatBracketP(c.pValueAdj),
+    label: formatBracketP(c.pValueAdj, config.numericP !== false),
     level: 0
   })).sort((a, b) => a.x2 - a.x1 - (b.x2 - b.x1));
   const levelMaxX = [];
@@ -281,9 +287,9 @@ function renderViolinBoxD3(d3, container, data, config) {
     const violinScale = maxDensity > 0 ? violinWidth / maxDensity : 1;
     const areaFn = d3.area().x0((d) => cx - d[1] * violinScale).x1((d) => cx + d[1] * violinScale).y((d) => yScale(d[0])).curve(d3.curveCatmullRom);
     g.append("path").datum(kdePoints).attr("d", areaFn).attr("fill", color).attr("opacity", theme.violinOpacity).attr("stroke", color).attr("stroke-width", 1);
-    const q1 = quantile(gr.values, 0.25);
-    const med = quantile(gr.values, 0.5);
-    const q3 = quantile(gr.values, 0.75);
+    const q1 = chunkAVJH2SAO_cjs.quantile(gr.values, 0.25);
+    const med = chunkAVJH2SAO_cjs.quantile(gr.values, 0.5);
+    const q3 = chunkAVJH2SAO_cjs.quantile(gr.values, 0.75);
     const iqr = q3 - q1;
     const whiskerLo = Math.min(...gr.values.filter((v) => v >= q1 - 1.5 * iqr));
     const whiskerHi = Math.max(...gr.values.filter((v) => v <= q3 + 1.5 * iqr));
@@ -291,7 +297,17 @@ function renderViolinBoxD3(d3, container, data, config) {
     g.append("line").attr("x1", cx).attr("x2", cx).attr("y1", yScale(whiskerLo)).attr("y2", yScale(q1)).attr("stroke", color).attr("stroke-width", 1.5);
     g.append("line").attr("x1", cx).attr("x2", cx).attr("y1", yScale(q3)).attr("y2", yScale(whiskerHi)).attr("stroke", color).attr("stroke-width", 1.5);
     g.append("rect").attr("x", cx - boxW / 2).attr("width", boxW).attr("y", yScale(q3)).attr("height", yScale(q1) - yScale(q3)).attr("fill", theme.background).attr("stroke", color).attr("stroke-width", 2);
-    g.append("line").attr("x1", cx - boxW / 2).attr("x2", cx + boxW / 2).attr("y1", yScale(med)).attr("y2", yScale(med)).attr("stroke", color).attr("stroke-width", 2.5);
+    if (config.showMedian !== false) {
+      g.append("line").attr("x1", cx - boxW / 2).attr("x2", cx + boxW / 2).attr("y1", yScale(med)).attr("y2", yScale(med)).attr("stroke", color).attr("stroke-width", 2.5);
+      g.append("text").attr("x", cx + boxW / 2 + 4).attr("y", yScale(med) + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(med.toFixed(2));
+    }
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length;
+      const my = yScale(groupMean);
+      const ds = 5;
+      g.append("polygon").attr("points", `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
+      g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+    }
     if (config.showJitter !== false) {
       const jw = (config.jitterWidth ?? 0.15) * xScale.bandwidth();
       const seed = gi * 12345;
@@ -305,7 +321,9 @@ function renderViolinBoxD3(d3, container, data, config) {
         }).on("mouseout", hideTooltip);
       });
     }
-    addNLabel(g, gr.values.length, cx, height + 60, theme);
+    if (config.showN !== false) {
+      addNLabel(g, gr.values.length, cx, height + 60, theme);
+    }
   });
   if (config.showBrackets !== false && data.pairwise && data.pairwise.length > 0) {
     const posMap = new Map(
@@ -315,7 +333,8 @@ function renderViolinBoxD3(d3, container, data, config) {
       groupPositions: posMap,
       yBase: 0,
       bracketHeight: 22,
-      significantOnly: config.significantBracketsOnly ?? false
+      significantOnly: config.significantBracketsOnly ?? false,
+      ...config.numericP !== void 0 && { numericP: config.numericP }
     }, theme);
   }
   if (config.caption) {
@@ -388,7 +407,9 @@ function renderScatterD3(d3, container, data, config) {
       g.append("path").datum(ciPoints).attr("d", area).attr("fill", getColor(0, theme)).attr("opacity", theme.ciOpacity);
     }
     g.append("line").attr("x1", xScale(lineData[0][0])).attr("x2", xScale(lineData[1][0])).attr("y1", yScale(lineData[0][1])).attr("y2", yScale(lineData[1][1])).attr("stroke", getColor(0, theme)).attr("stroke-width", 2);
-    addRegressionEquation(g, b0, b1, r2, 10, 20, theme);
+    if (config.showEquation !== false) {
+      addRegressionEquation(g, b0, b1, r2, 10, 20, theme);
+    }
   }
   const color = getColor(0, theme);
   data.x.forEach((xi, i) => {
@@ -541,19 +562,21 @@ function renderCorrelogramD3(d3, container, data, config) {
   data.labels.forEach((lbl, j) => {
     g.append("text").attr("x", j * cellSize + cellSize / 2).attr("y", -8).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.text).text(lbl);
   });
-  const legendW = 80, legendH = 12;
-  const legendX = W - 120, legendY = H - 35;
-  const defs = svg.append("defs");
-  const gradId = "corr-grad-" + Math.random().toString(36).slice(2);
-  const grad = defs.append("linearGradient").attr("id", gradId);
-  const stops = [-1, -0.5, 0, 0.5, 1];
-  stops.forEach((v) => {
-    grad.append("stop").attr("offset", `${((v + 1) / 2 * 100).toFixed(0)}%`).attr("stop-color", colorScale(v));
-  });
-  svg.append("rect").attr("x", legendX).attr("y", legendY).attr("width", legendW).attr("height", legendH).attr("fill", `url(#${gradId})`);
-  svg.append("text").attr("x", legendX).attr("y", legendY + legendH + 10).attr("font-size", 9).attr("fill", theme.textMuted).text("\u22121");
-  svg.append("text").attr("x", legendX + legendW / 2).attr("y", legendY + legendH + 10).attr("text-anchor", "middle").attr("font-size", 9).attr("fill", theme.textMuted).text("0");
-  svg.append("text").attr("x", legendX + legendW).attr("y", legendY + legendH + 10).attr("text-anchor", "end").attr("font-size", 9).attr("fill", theme.textMuted).text("+1");
+  if (config.showLegend !== false) {
+    const legendW = 80, legendH = 12;
+    const legendX = W - 120, legendY = H - 35;
+    const defs = svg.append("defs");
+    const gradId = "corr-grad-" + Math.random().toString(36).slice(2);
+    const grad = defs.append("linearGradient").attr("id", gradId);
+    const stops = [-1, -0.5, 0, 0.5, 1];
+    stops.forEach((v) => {
+      grad.append("stop").attr("offset", `${((v + 1) / 2 * 100).toFixed(0)}%`).attr("stop-color", colorScale(v));
+    });
+    svg.append("rect").attr("x", legendX).attr("y", legendY).attr("width", legendW).attr("height", legendH).attr("fill", `url(#${gradId})`);
+    svg.append("text").attr("x", legendX).attr("y", legendY + legendH + 10).attr("font-size", 9).attr("fill", theme.textMuted).text("\u22121");
+    svg.append("text").attr("x", legendX + legendW / 2).attr("y", legendY + legendH + 10).attr("text-anchor", "middle").attr("font-size", 9).attr("fill", theme.textMuted).text("0");
+    svg.append("text").attr("x", legendX + legendW).attr("y", legendY + legendH + 10).attr("text-anchor", "end").attr("font-size", 9).attr("fill", theme.textMuted).text("+1");
+  }
   if (config.caption) addCaption(svg, config.caption, W, H, theme);
 }
 
@@ -612,12 +635,12 @@ function renderQQD3(d3, container, values, config) {
   const width = W - margin.left - margin.right;
   const height = H - margin.top - margin.bottom;
   const n = values.length;
-  const sorted = sortAsc(values);
+  const sorted = chunkAVJH2SAO_cjs.sortAsc(values);
   const mean_ = sorted.reduce((s, v) => s + v, 0) / n;
   const sd_ = Math.sqrt(sorted.reduce((s, v) => s + (v - mean_) ** 2, 0) / (n - 1));
   const points = sorted.map((y, i) => {
     const p = (i + 1 - 0.375) / (n + 0.25);
-    const x = normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
+    const x = chunkAVJH2SAO_cjs.normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
     return { x, y };
   });
   container.innerHTML = "";
@@ -687,12 +710,12 @@ function renderResidualD3(d3, container, result, leverage, config) {
       xData = result.fitted;
       yData = result.residuals;
     } else if (idx === 1) {
-      const sorted = sortAsc(result.residuals);
+      const sorted = chunkAVJH2SAO_cjs.sortAsc(result.residuals);
       const n = sorted.length;
       yData = sorted;
       xData = sorted.map((_, i) => {
         const p = (i + 1 - 0.375) / (n + 0.25);
-        return normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
+        return chunkAVJH2SAO_cjs.normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
       });
     } else if (idx === 2) {
       xData = result.fitted;
@@ -712,7 +735,7 @@ function renderResidualD3(d3, container, result, leverage, config) {
       g.append("line").attr("x1", 0).attr("x2", pw).attr("y1", ys(0)).attr("y2", ys(0)).attr("stroke", theme.axisLine).attr("stroke-dasharray", "4,2");
     }
     if (idx === 1) {
-      const mean_ = mean(result.residuals);
+      const mean_ = chunkAVJH2SAO_cjs.mean(result.residuals);
       const sd_ = Math.sqrt(result.residuals.reduce((s, r) => s + (r - mean_) ** 2, 0) / (result.residuals.length - 1));
       const xd = xs.domain();
       const xd0 = xd[0] ?? 0, xd1 = xd[1] ?? 1;
@@ -759,9 +782,9 @@ function renderRaincloudD3(d3, container, data, config) {
     const dScale = maxD > 0 ? violinR / maxD : 1;
     const areaFn = d3.area().x0(cx).x1((d) => cx + d[1] * dScale).y((d) => yScale(d[0])).curve(d3.curveCatmullRom);
     g.append("path").datum(kdePoints).attr("d", areaFn).attr("fill", color).attr("opacity", theme.violinOpacity).attr("stroke", color).attr("stroke-width", 1);
-    const q1 = quantile(gr.values, 0.25);
-    const med = quantile(gr.values, 0.5);
-    const q3 = quantile(gr.values, 0.75);
+    const q1 = chunkAVJH2SAO_cjs.quantile(gr.values, 0.25);
+    const med = chunkAVJH2SAO_cjs.quantile(gr.values, 0.5);
+    const q3 = chunkAVJH2SAO_cjs.quantile(gr.values, 0.75);
     const iqr = q3 - q1;
     const wLo = Math.min(...gr.values.filter((v) => v >= q1 - 1.5 * iqr));
     const wHi = Math.max(...gr.values.filter((v) => v <= q3 + 1.5 * iqr));
@@ -770,15 +793,26 @@ function renderRaincloudD3(d3, container, data, config) {
     g.append("line").attr("x1", bx).attr("x2", bx).attr("y1", yScale(wLo)).attr("y2", yScale(wHi)).attr("stroke", color).attr("stroke-width", 1.5);
     g.append("rect").attr("x", bx - boxW / 2).attr("width", boxW).attr("y", yScale(q3)).attr("height", yScale(q1) - yScale(q3)).attr("fill", theme.background).attr("stroke", color).attr("stroke-width", 2);
     g.append("line").attr("x1", bx - boxW / 2).attr("x2", bx + boxW / 2).attr("y1", yScale(med)).attr("y2", yScale(med)).attr("stroke", color).attr("stroke-width", 2.5);
-    const jx = bx - boxW - 4;
-    const seed = gi * 99991;
-    gr.values.forEach((v, vi) => {
-      const jitter = (pseudoRnd(seed + vi) - 0.5) * xScale.bandwidth() * 0.12;
-      g.append("circle").attr("cx", jx + jitter).attr("cy", yScale(v)).attr("r", 2.5).attr("fill", color).attr("opacity", theme.pointOpacity).on("mouseover", (event) => {
-        showTooltip(event, [formatTooltipRow("Group", gr.label), formatTooltipRow("Value", v.toFixed(3))].join(""), theme);
-      }).on("mouseout", hideTooltip);
-    });
-    addNLabel(g, gr.values.length, cx, height + 60, theme);
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length;
+      const my = yScale(groupMean);
+      const ds = 5;
+      g.append("polygon").attr("points", `${bx},${my - ds} ${bx + ds},${my} ${bx},${my + ds} ${bx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
+      g.append("text").attr("x", bx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+    }
+    if (config.showJitter !== false) {
+      const jx = bx - boxW - 4;
+      const seed = gi * 99991;
+      gr.values.forEach((v, vi) => {
+        const jitter = (pseudoRnd(seed + vi) - 0.5) * xScale.bandwidth() * 0.12;
+        g.append("circle").attr("cx", jx + jitter).attr("cy", yScale(v)).attr("r", 2.5).attr("fill", color).attr("opacity", theme.pointOpacity).on("mouseover", (event) => {
+          showTooltip(event, [formatTooltipRow("Group", gr.label), formatTooltipRow("Value", v.toFixed(3))].join(""), theme);
+        }).on("mouseout", hideTooltip);
+      });
+    }
+    if (config.showN !== false) {
+      addNLabel(g, gr.values.length, cx, height + 60, theme);
+    }
   });
   g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
   g.append("g").call(d3.axisLeft(yScale).ticks(6)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
@@ -995,7 +1029,7 @@ function getDistributionFunctions(params) {
         xMin: mu - 4 * sigma,
         xMax: mu + 4 * sigma,
         pdf: (x) => Math.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * Math.sqrt(2 * Math.PI)),
-        cdf: (x) => normalCDF((x - mu) / sigma)
+        cdf: (x) => chunkAVJH2SAO_cjs.normalCDF((x - mu) / sigma)
       };
     }
     case "t": {
@@ -1213,7 +1247,7 @@ function renderDensityD3(d3, container, data, config) {
   g.append("g").call(d3.axisLeft(yScale).ticks(5)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
   g.append("text").attr("x", width / 2).attr("y", height + 44).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize).attr("fill", theme.text).text(config.xLabel ?? "");
   g.append("text").attr("transform", "rotate(-90)").attr("x", -height / 2).attr("y", -48).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize).attr("fill", theme.text).text(config.yLabel ?? "Density");
-  if (data.series.length > 1) {
+  if (config.showLegend !== false && data.series.length > 1) {
     data.series.forEach((s, i) => {
       const color = getColor(i, theme);
       const lx = width - 120;
@@ -1230,9 +1264,9 @@ function renderBoxplot(container, data, config = {}) {
   import('d3').then((d3) => renderBoxplotD3(d3, container, data, config));
 }
 function computeBoxStats(values) {
-  const q1 = quantile(values, 0.25);
-  const med = quantile(values, 0.5);
-  const q3 = quantile(values, 0.75);
+  const q1 = chunkAVJH2SAO_cjs.quantile(values, 0.25);
+  const med = chunkAVJH2SAO_cjs.quantile(values, 0.5);
+  const q3 = chunkAVJH2SAO_cjs.quantile(values, 0.75);
   const iqr = q3 - q1;
   const fence_lo = q1 - 1.5 * iqr;
   const fence_hi = q3 + 1.5 * iqr;
@@ -1280,16 +1314,30 @@ function renderBoxplotD3(d3, container, data, config) {
         formatTooltipRow("Q3", q3.toFixed(3))
       ].join(""), theme);
     }).on("mouseout", hideTooltip);
-    g.append("line").attr("x1", bx - boxW / 2).attr("x2", bx + boxW / 2).attr("y1", yScale(med)).attr("y2", yScale(med)).attr("stroke", theme.background).attr("stroke-width", 2.5);
-    outliers.forEach((v) => {
-      g.append("circle").attr("cx", bx).attr("cy", yScale(v)).attr("r", 3.5).attr("fill", "none").attr("stroke", color).attr("stroke-width", 1.5).on("mouseover", (event) => {
-        showTooltip(event, [
-          formatTooltipRow("Group", gr.label),
-          formatTooltipRow("Outlier", v.toFixed(3))
-        ].join(""), theme);
-      }).on("mouseout", hideTooltip);
-    });
-    g.append("text").attr("x", bx).attr("y", height + 44).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    if (config.showMedian !== false) {
+      g.append("line").attr("x1", bx - boxW / 2).attr("x2", bx + boxW / 2).attr("y1", yScale(med)).attr("y2", yScale(med)).attr("stroke", theme.background).attr("stroke-width", 2.5);
+      g.append("text").attr("x", bx + boxW / 2 + 4).attr("y", yScale(med) + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(med.toFixed(2));
+    }
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length;
+      const my = yScale(groupMean);
+      const ds = 5;
+      g.append("polygon").attr("points", `${bx},${my - ds} ${bx + ds},${my} ${bx},${my + ds} ${bx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
+      g.append("text").attr("x", bx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+    }
+    if (config.showOutliers !== false) {
+      outliers.forEach((v) => {
+        g.append("circle").attr("cx", bx).attr("cy", yScale(v)).attr("r", 3.5).attr("fill", "none").attr("stroke", color).attr("stroke-width", 1.5).on("mouseover", (event) => {
+          showTooltip(event, [
+            formatTooltipRow("Group", gr.label),
+            formatTooltipRow("Outlier", v.toFixed(3))
+          ].join(""), theme);
+        }).on("mouseout", hideTooltip);
+      });
+    }
+    if (config.showN !== false) {
+      g.append("text").attr("x", bx).attr("y", height + 44).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    }
   });
   g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
   g.append("g").call(d3.axisLeft(yScale).ticks(6)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
@@ -2171,7 +2219,9 @@ function renderStripPlotD3(d3, container, data, config) {
     });
     const lineHalfW = xScale.bandwidth() * 0.32;
     g.append("line").attr("x1", cx - lineHalfW).attr("x2", cx + lineHalfW).attr("y1", yScale(mean2)).attr("y2", yScale(mean2)).attr("stroke", color).attr("stroke-width", 2.5).attr("opacity", 0.9);
-    g.append("text").attr("x", cx).attr("y", height + 52).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    if (config.showN !== false) {
+      g.append("text").attr("x", cx).attr("y", height + 52).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    }
   });
   g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
   g.append("g").call(d3.axisLeft(yScale).ticks(6)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
@@ -2230,7 +2280,16 @@ function renderSwarmPlotD3(d3, container, data, config) {
         ].join(""), theme);
       }).on("mouseout", hideTooltip);
     });
-    svg.append("text").attr("x", margin.left + cx).attr("y", H - theme.marginBottom + 28).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length;
+      const my = yScale(groupMean);
+      const ds = 5;
+      g.append("polygon").attr("points", `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
+      g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+    }
+    if (config.showN !== false) {
+      svg.append("text").attr("x", margin.left + cx).attr("y", H - theme.marginBottom + 28).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text(`n = ${gr.values.length}`);
+    }
   });
   if (config.caption) addCaption(svg, config.caption, W, H, theme);
 }
@@ -3661,6 +3720,67 @@ function triggerDownload(url, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 
-export { CARM_PALETTE, DARK_THEME, DEFAULT_THEME, OKABE_ITO, addCaption, addNLabel, addRegressionEquation, addStatBadge, addSubtitle, applyTheme, exportPNG, exportSVG, formatTooltipRow, getColor, hideTooltip, renderAlluvialPlot, renderArcDiagram, renderAreaChart, renderBarStats, renderBoxplot, renderBrackets, renderBubbleChart, renderChordDiagram, renderCoefPlot, renderCorrelogram, renderDensity, renderDistribution, renderDotPlot, renderEdgeBundling, renderForestPlot, renderFunnel, renderGridLines, renderGroupedBar, renderHistogram, renderLineChart, renderLollipop, renderMarimekko, renderMixedPlot, renderMosaicPlot, renderPCAPlot, renderPairPlot, renderParallelCoords, renderPareto, renderPieChart, renderQQPlot, renderROCCurve, renderRadarChart, renderRaincloud, renderResidualPanel, renderScatterStats, renderSparkline, renderStripPlot, renderSunburst, renderSwarmPlot, renderTreemap, renderViolinBox, renderWaffleChart, renderXAxis, renderYAxis, showTooltip, themeColorScale, totalBracketHeight };
-//# sourceMappingURL=chunk-RZEFMTGS.js.map
-//# sourceMappingURL=chunk-RZEFMTGS.js.map
+exports.CARM_PALETTE = CARM_PALETTE;
+exports.DARK_THEME = DARK_THEME;
+exports.DEFAULT_THEME = DEFAULT_THEME;
+exports.OKABE_ITO = OKABE_ITO;
+exports.addCaption = addCaption;
+exports.addNLabel = addNLabel;
+exports.addRegressionEquation = addRegressionEquation;
+exports.addStatBadge = addStatBadge;
+exports.addSubtitle = addSubtitle;
+exports.applyTheme = applyTheme;
+exports.exportPNG = exportPNG;
+exports.exportSVG = exportSVG;
+exports.formatTooltipRow = formatTooltipRow;
+exports.getColor = getColor;
+exports.hideTooltip = hideTooltip;
+exports.renderAlluvialPlot = renderAlluvialPlot;
+exports.renderArcDiagram = renderArcDiagram;
+exports.renderAreaChart = renderAreaChart;
+exports.renderBarStats = renderBarStats;
+exports.renderBoxplot = renderBoxplot;
+exports.renderBrackets = renderBrackets;
+exports.renderBubbleChart = renderBubbleChart;
+exports.renderChordDiagram = renderChordDiagram;
+exports.renderCoefPlot = renderCoefPlot;
+exports.renderCorrelogram = renderCorrelogram;
+exports.renderDensity = renderDensity;
+exports.renderDistribution = renderDistribution;
+exports.renderDotPlot = renderDotPlot;
+exports.renderEdgeBundling = renderEdgeBundling;
+exports.renderForestPlot = renderForestPlot;
+exports.renderFunnel = renderFunnel;
+exports.renderGridLines = renderGridLines;
+exports.renderGroupedBar = renderGroupedBar;
+exports.renderHistogram = renderHistogram;
+exports.renderLineChart = renderLineChart;
+exports.renderLollipop = renderLollipop;
+exports.renderMarimekko = renderMarimekko;
+exports.renderMixedPlot = renderMixedPlot;
+exports.renderMosaicPlot = renderMosaicPlot;
+exports.renderPCAPlot = renderPCAPlot;
+exports.renderPairPlot = renderPairPlot;
+exports.renderParallelCoords = renderParallelCoords;
+exports.renderPareto = renderPareto;
+exports.renderPieChart = renderPieChart;
+exports.renderQQPlot = renderQQPlot;
+exports.renderROCCurve = renderROCCurve;
+exports.renderRadarChart = renderRadarChart;
+exports.renderRaincloud = renderRaincloud;
+exports.renderResidualPanel = renderResidualPanel;
+exports.renderScatterStats = renderScatterStats;
+exports.renderSparkline = renderSparkline;
+exports.renderStripPlot = renderStripPlot;
+exports.renderSunburst = renderSunburst;
+exports.renderSwarmPlot = renderSwarmPlot;
+exports.renderTreemap = renderTreemap;
+exports.renderViolinBox = renderViolinBox;
+exports.renderWaffleChart = renderWaffleChart;
+exports.renderXAxis = renderXAxis;
+exports.renderYAxis = renderYAxis;
+exports.showTooltip = showTooltip;
+exports.themeColorScale = themeColorScale;
+exports.totalBracketHeight = totalBracketHeight;
+//# sourceMappingURL=chunk-D7JZN5FA.cjs.map
+//# sourceMappingURL=chunk-D7JZN5FA.cjs.map

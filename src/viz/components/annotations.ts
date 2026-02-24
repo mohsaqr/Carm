@@ -38,6 +38,7 @@ export function addSubtitle(
 
   // Title — left-aligned (indented past the accent bar)
   svg.append('text')
+    .attr('class', 'plot-title')
     .attr('x', 30)
     .attr('y', 26)
     .attr('font-family', theme.fontFamily)
@@ -50,6 +51,7 @@ export function addSubtitle(
   // Subtitle — left-aligned, italic, regular (not mono), slate color
   if (subtitle) {
     svg.append('text')
+      .attr('class', 'plot-subtitle')
       .attr('x', 30)
       .attr('y', 45)
       .attr('font-family', theme.fontFamily)

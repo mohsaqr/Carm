@@ -19,6 +19,10 @@ export interface BoxplotConfig {
   readonly width?: number
   readonly height?: number
   readonly theme?: CarmTheme
+  readonly showN?: boolean
+  readonly showMean?: boolean
+  readonly showOutliers?: boolean
+  readonly showMedian?: boolean
 }
 
 export interface BoxplotGroup {
@@ -133,31 +137,55 @@ function renderBoxplotD3(
       })
       .on('mouseout', hideTooltip)
 
-    // Median line
-    g.append('line')
-      .attr('x1', bx - boxW / 2).attr('x2', bx + boxW / 2)
-      .attr('y1', yScale(med)).attr('y2', yScale(med))
-      .attr('stroke', theme.background).attr('stroke-width', 2.5)
+    // Median line + value
+    if (config.showMedian !== false) {
+      g.append('line')
+        .attr('x1', bx - boxW / 2).attr('x2', bx + boxW / 2)
+        .attr('y1', yScale(med)).attr('y2', yScale(med))
+        .attr('stroke', theme.background).attr('stroke-width', 2.5)
+      g.append('text')
+        .attr('x', bx + boxW / 2 + 4).attr('y', yScale(med) + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(med.toFixed(2))
+    }
+
+    // Mean diamond marker + value
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length
+      const my = yScale(groupMean)
+      const ds = 5
+      g.append('polygon')
+        .attr('points', `${bx},${my - ds} ${bx + ds},${my} ${bx},${my + ds} ${bx - ds},${my}`)
+        .attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.5)
+      g.append('text')
+        .attr('x', bx + ds + 4).attr('y', my + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+    }
 
     // Outliers
-    outliers.forEach((v) => {
-      g.append('circle')
-        .attr('cx', bx).attr('cy', yScale(v))
-        .attr('r', 3.5).attr('fill', 'none').attr('stroke', color).attr('stroke-width', 1.5)
-        .on('mouseover', (event: MouseEvent) => {
-          showTooltip(event, [
-            formatTooltipRow('Group', gr.label),
-            formatTooltipRow('Outlier', v.toFixed(3)),
-          ].join(''), theme)
-        })
-        .on('mouseout', hideTooltip)
-    })
+    if (config.showOutliers !== false) {
+      outliers.forEach((v) => {
+        g.append('circle')
+          .attr('cx', bx).attr('cy', yScale(v))
+          .attr('r', 3.5).attr('fill', 'none').attr('stroke', color).attr('stroke-width', 1.5)
+          .on('mouseover', (event: MouseEvent) => {
+            showTooltip(event, [
+              formatTooltipRow('Group', gr.label),
+              formatTooltipRow('Outlier', v.toFixed(3)),
+            ].join(''), theme)
+          })
+          .on('mouseout', hideTooltip)
+      })
+    }
 
     // n label
-    g.append('text').attr('x', bx).attr('y', height + 44)
-      .attr('text-anchor', 'middle').attr('font-family', theme.fontFamily)
-      .attr('font-size', theme.fontSizeSmall).attr('fill', theme.textMuted)
-      .text(`n = ${gr.values.length}`)
+    if (config.showN !== false) {
+      g.append('text').attr('x', bx).attr('y', height + 44)
+        .attr('text-anchor', 'middle').attr('font-family', theme.fontFamily)
+        .attr('font-size', theme.fontSizeSmall).attr('fill', theme.textMuted)
+        .text(`n = ${gr.values.length}`)
+    }
   })
 
   // Axes

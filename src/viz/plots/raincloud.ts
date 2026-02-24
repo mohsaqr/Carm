@@ -19,6 +19,9 @@ export interface RaincloudConfig {
   readonly width?: number
   readonly height?: number
   readonly theme?: CarmTheme
+  readonly showN?: boolean
+  readonly showMean?: boolean
+  readonly showJitter?: boolean
 }
 
 export interface RaincloudData {
@@ -112,21 +115,39 @@ function renderRaincloudD3(
       .attr('y1', yScale(med)).attr('y2', yScale(med))
       .attr('stroke', color).attr('stroke-width', 2.5)
 
-    // Jitter (the "rain" — left of box)
-    const jx = bx - boxW - 4
-    const seed = gi * 99991
-    gr.values.forEach((v, vi) => {
-      const jitter = (pseudoRnd(seed + vi) - 0.5) * xScale.bandwidth() * 0.12
-      g.append('circle')
-        .attr('cx', jx + jitter).attr('cy', yScale(v))
-        .attr('r', 2.5).attr('fill', color).attr('opacity', theme.pointOpacity)
-        .on('mouseover', (event: MouseEvent) => {
-          showTooltip(event, [formatTooltipRow('Group', gr.label), formatTooltipRow('Value', v.toFixed(3))].join(''), theme)
-        })
-        .on('mouseout', hideTooltip)
-    })
+    // Mean diamond marker + value
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length
+      const my = yScale(groupMean)
+      const ds = 5
+      g.append('polygon')
+        .attr('points', `${bx},${my - ds} ${bx + ds},${my} ${bx},${my + ds} ${bx - ds},${my}`)
+        .attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.5)
+      g.append('text')
+        .attr('x', bx + ds + 4).attr('y', my + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+    }
 
-    addNLabel(g, gr.values.length, cx, height + 60, theme)
+    // Jitter (the "rain" — left of box)
+    if (config.showJitter !== false) {
+      const jx = bx - boxW - 4
+      const seed = gi * 99991
+      gr.values.forEach((v, vi) => {
+        const jitter = (pseudoRnd(seed + vi) - 0.5) * xScale.bandwidth() * 0.12
+        g.append('circle')
+          .attr('cx', jx + jitter).attr('cy', yScale(v))
+          .attr('r', 2.5).attr('fill', color).attr('opacity', theme.pointOpacity)
+          .on('mouseover', (event: MouseEvent) => {
+            showTooltip(event, [formatTooltipRow('Group', gr.label), formatTooltipRow('Value', v.toFixed(3))].join(''), theme)
+          })
+          .on('mouseout', hideTooltip)
+      })
+    }
+
+    if (config.showN !== false) {
+      addNLabel(g, gr.values.length, cx, height + 60, theme)
+    }
   })
 
   // Axes

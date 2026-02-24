@@ -17,6 +17,7 @@ export interface CorrelogramConfig {
   readonly theme?: CarmTheme
   readonly showValues?: boolean
   readonly showSignificance?: boolean
+  readonly showLegend?: boolean
 }
 
 export function renderCorrelogram(
@@ -127,26 +128,28 @@ function renderCorrelogramD3(
   })
 
   // Color legend (gradient bar)
-  const legendW = 80, legendH = 12
-  const legendX = W - 120, legendY = H - 35
-  const defs = svg.append('defs')
-  const gradId = 'corr-grad-' + Math.random().toString(36).slice(2)
-  const grad = defs.append('linearGradient').attr('id', gradId)
-  const stops = [-1, -0.5, 0, 0.5, 1]
-  stops.forEach(v => {
-    grad.append('stop')
-      .attr('offset', `${((v + 1) / 2 * 100).toFixed(0)}%`)
-      .attr('stop-color', colorScale(v))
-  })
-  svg.append('rect').attr('x', legendX).attr('y', legendY)
-    .attr('width', legendW).attr('height', legendH)
-    .attr('fill', `url(#${gradId})`)
-  svg.append('text').attr('x', legendX).attr('y', legendY + legendH + 10)
-    .attr('font-size', 9).attr('fill', theme.textMuted).text('−1')
-  svg.append('text').attr('x', legendX + legendW / 2).attr('y', legendY + legendH + 10)
-    .attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', theme.textMuted).text('0')
-  svg.append('text').attr('x', legendX + legendW).attr('y', legendY + legendH + 10)
-    .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', theme.textMuted).text('+1')
+  if (config.showLegend !== false) {
+    const legendW = 80, legendH = 12
+    const legendX = W - 120, legendY = H - 35
+    const defs = svg.append('defs')
+    const gradId = 'corr-grad-' + Math.random().toString(36).slice(2)
+    const grad = defs.append('linearGradient').attr('id', gradId)
+    const stops = [-1, -0.5, 0, 0.5, 1]
+    stops.forEach(v => {
+      grad.append('stop')
+        .attr('offset', `${((v + 1) / 2 * 100).toFixed(0)}%`)
+        .attr('stop-color', colorScale(v))
+    })
+    svg.append('rect').attr('x', legendX).attr('y', legendY)
+      .attr('width', legendW).attr('height', legendH)
+      .attr('fill', `url(#${gradId})`)
+    svg.append('text').attr('x', legendX).attr('y', legendY + legendH + 10)
+      .attr('font-size', 9).attr('fill', theme.textMuted).text('−1')
+    svg.append('text').attr('x', legendX + legendW / 2).attr('y', legendY + legendH + 10)
+      .attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', theme.textMuted).text('0')
+    svg.append('text').attr('x', legendX + legendW).attr('y', legendY + legendH + 10)
+      .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', theme.textMuted).text('+1')
+  }
 
   if (config.caption) addCaption(svg, config.caption, W, H, theme)
 }

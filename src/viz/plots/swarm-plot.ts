@@ -21,6 +21,8 @@ export interface SwarmPlotConfig {
   readonly theme?: CarmTheme
   readonly pointRadius?: number
   readonly bandwidth?: number
+  readonly showN?: boolean
+  readonly showMean?: boolean
 }
 
 export interface SwarmPlotData {
@@ -163,15 +165,31 @@ function renderSwarmPlotD3(
         .on('mouseout', hideTooltip)
     })
 
+    // Mean diamond marker + value
+    if (config.showMean) {
+      const groupMean = gr.values.reduce((s, v) => s + v, 0) / gr.values.length
+      const my = yScale(groupMean)
+      const ds = 5
+      g.append('polygon')
+        .attr('points', `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`)
+        .attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.5)
+      g.append('text')
+        .attr('x', cx + ds + 4).attr('y', my + 3.5)
+        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+        .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+    }
+
     // n label below x-axis
-    svg.append('text')
-      .attr('x', margin.left + cx)
-      .attr('y', H - theme.marginBottom + 28)
-      .attr('text-anchor', 'middle')
-      .attr('font-family', theme.fontFamily)
-      .attr('font-size', theme.fontSizeSmall)
-      .attr('fill', theme.textMuted)
-      .text(`n = ${gr.values.length}`)
+    if (config.showN !== false) {
+      svg.append('text')
+        .attr('x', margin.left + cx)
+        .attr('y', H - theme.marginBottom + 28)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', theme.fontFamily)
+        .attr('font-size', theme.fontSizeSmall)
+        .attr('fill', theme.textMuted)
+        .text(`n = ${gr.values.length}`)
+    }
   })
 
   if (config.caption) addCaption(svg, config.caption, W, H, theme)

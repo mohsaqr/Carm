@@ -20,6 +20,7 @@ export interface DensityConfig {
   readonly width?: number
   readonly height?: number
   readonly theme?: CarmTheme
+  readonly showLegend?: boolean
 }
 
 export interface DensitySeries {
@@ -153,7 +154,7 @@ function renderDensityD3(
     .attr('fill', theme.text).text(config.yLabel ?? 'Density')
 
   // Legend (if multiple series)
-  if (data.series.length > 1) {
+  if (config.showLegend !== false && data.series.length > 1) {
     data.series.forEach((s, i) => {
       const color = getColor(i, theme)
       const lx = width - 120

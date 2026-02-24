@@ -1,3 +1,65 @@
+### 2026-02-24 — Floating settings panel with sliders + bold/halo toggles
+
+**Aistatia — Gear icon settings popover:**
+- `src/results/annotation-toggles.ts`: Added `slider` variant to `PlotControl` union. Added 7 slider constants (jitter width, violin/density bandwidth, point size, opacity, bins, plot height). Added `BOLD_LABELS` and `LABEL_HALO` toggles. New `PANEL_MAP` + `getPanelControls()` export.
+- `src/data/types.ts`: Added `labelBold`, `labelHalo`, `pointSize`, `pointOpacity`, `jitterWidth`, `violinBandwidth`, `plotHeight` to `PlotConfig`.
+- `src/results/plot-panel.ts`: Gear button injected into toolbar's right section. Popover panel built from `getPanelControls()` with checkboxes and range sliders. Wired `input`/`change` events → config update → live re-render. `buildTheme()` now passes `pointOpacity`. `applyPostRender()` applies bold labels (`font-weight: 600`) and text halo (`paint-order: stroke`). All renderers now pass through `height`, `jitterWidth`, `violinBandwidth`, `pointSize`, `pointRadius`, `bandwidth` from config.
+- `src/style.css`: Added `.pb-gear`, `.plot-settings-pop`, `.ps-title`, `.ps-close`, `.ps-row`, `.ps-lbl`, `.ps-slider-row`, `.ps-slider` (with thumb styling), `.ps-val`, `.ps-check` styles.
+
+- Tests: Build clean (`tsc --noEmit` + `vite build`). Zero errors.
+
+### 2026-02-24 — Numeric value labels, p-values, editable title/subtitle
+
+**JStats (Carm) — Numeric annotations:**
+- `src/viz/components/brackets.ts`: Added `numericP?: boolean` to `BracketConfig`. `formatBracketP` now shows `p = .025` instead of `***` when numeric. Default: true.
+- `src/viz/components/annotations.ts`: Added `.plot-title` CSS class to title text element.
+- `src/viz/plots/violin-box.ts`: Added `numericP` to config. Added value labels (text elements) next to median line and mean diamond.
+- `src/viz/plots/boxplot.ts`: Added value labels next to median line and mean diamond.
+- `src/viz/plots/raincloud.ts`: Added value label next to mean diamond.
+- `src/viz/plots/swarm-plot.ts`: Added value label next to mean diamond.
+
+**Aistatia — Editable title/subtitle + numeric p toggle:**
+- `src/data/types.ts`: Added `numericP`, `customTitle`, `customSubtitle` to PlotConfig.
+- `src/results/annotation-toggles.ts`: Added `NUMERIC_P` toggle to violin plot type.
+- `src/results/plot-panel.ts`: Added editable title/subtitle input row above toolbar. Live text update on `input`, full re-render on `blur`. Passes `numericP` to violin renderer. Added `escapeAttr()` helper.
+- `src/style.css`: Added `.plot-edit-row`, `.pe-fields`, `.pe-field`, `.pe-lbl`, `.pe-input` styles.
+
+- Tests: 309/309 (JStats). Build clean (both repos).
+
+### 2026-02-24 — Redesigned plot toolbar: pill toggles, font controls, subtitle toggle
+
+**JStats (Carm) — Subtitle class:**
+- `src/viz/components/annotations.ts`: Added `.plot-subtitle` CSS class to the subtitle text element in `addSubtitle()`. Enables post-render show/hide from the toolbar.
+
+**Aistatia — Plot toolbar v2:**
+- `src/results/annotation-toggles.ts`: Rewritten — discriminated union `PlotControl` (`'toggle' | 'select'`). Added `FONT_FAMILY` select (Sans/Serif/Mono), `FONT_SIZE` select (S/M/L), `SHOW_SUBTITLE` toggle. Common controls auto-appended to every plot type. Added subtitle, mean/median line toggles to more plot types (density, qq, forest, residuals, coefplot).
+- `src/results/plot-panel.ts`: Replaced checkbox toggle bar + separate export buttons with unified pill-toggle toolbar (`wirePlotBars`). Added `buildTheme(cfg)` that constructs `CarmTheme` with font overrides. Added `postRender()` for subtitle visibility and theme application. Every Carm renderer call now receives `theme` config. Removed `wireExportButtons` and `wireToggleBars` (merged into `wirePlotBars`).
+- `src/data/types.ts`: Added `fontFamily`, `fontSize`, `showSubtitle` fields to PlotConfig.
+- `src/style.css`: Replaced `.plot-toggles`/`.plot-tog` with `.plot-bar`/`.pb-pill`/`.pb-sel`/`.pb-exp` styles. Removed old `.plot-toolbar`/`.plot-export-btn`.
+
+- Tests: 309/309 (JStats unchanged). Build clean (both repos).
+
+### 2026-02-24 — Configurable plot annotations with inline settings popover
+
+**JStats (Carm) — Config interface expansion + conditional rendering:**
+- `src/viz/plots/violin-box.ts`: Added `showN`, `showMean`, `showMedian` to ViolinBoxConfig. Wrapped median line, n-label in conditionals. Added mean diamond marker (white fill, group-colored stroke polygon).
+- `src/viz/plots/raincloud.ts`: Added `showN`, `showMean`, `showJitter` to RaincloudConfig. Wrapped jitter and n-label in conditionals. Added mean diamond marker.
+- `src/viz/plots/boxplot.ts`: Added `showN`, `showMean`, `showOutliers`, `showMedian` to BoxplotConfig. Wrapped median, outliers, n-label in conditionals. Added mean diamond marker.
+- `src/viz/plots/swarm-plot.ts`: Added `showN`, `showMean` to SwarmPlotConfig. Wrapped n-label in conditional. Added mean diamond marker.
+- `src/viz/plots/strip-plot.ts`: Added `showN` to StripPlotConfig. Wrapped n-label in conditional.
+- `src/viz/plots/scatter-stats.ts`: Added `showEquation` to ScatterStatsConfig. Wrapped regression equation call in conditional.
+- `src/viz/plots/density.ts`: Added `showLegend` to DensityConfig. Wrapped legend rendering in conditional.
+- `src/viz/plots/correlogram.ts`: Added `showLegend` to CorrelogramConfig. Wrapped gradient bar legend in conditional.
+
+**Aistatia — Annotation toggle system:**
+- `src/data/types.ts`: Added 11 new optional fields to PlotConfig (showN, showMean, showMedian, showBrackets, showEquation, showCI, showOutliers, showLegend, showSignificance, showValues, showRug).
+- `src/results/annotation-toggles.ts`: New file — toggle registry mapping 12 plot types to their relevant annotation toggles with labels and defaults.
+- `src/results/plot-panel.ts`: Added gear icon (⚙) to every plot card toolbar. Popover dynamically populated from toggle registry. Stored per-card render context for scoped re-renders. Passed all annotation config fields through to Carm renderers.
+- `src/style.css`: Added `.plot-anno-wrap`, `.plot-anno-btn`, `.plot-anno-pop`, `.pop-toggle` styles for the popover.
+- `src/views/wizard-defs.ts`: Added 11 new wizard toggle constants (SHOW_N, SHOW_BRACKETS, SHOW_MEAN_M, SHOW_EQUATION, SHOW_CI_BAND, SHOW_OUTLIERS, SHOW_LEGEND, SHOW_RUG, SHOW_VALUES, SHOW_SIG). Added to group comparison, correlation, regression, and other test defs.
+
+- Tests: 309/309 (unchanged — all Carm changes are backward-compatible with `!== false` defaults).
+
 ### 2026-02-23 — Add analyze() field-based dispatch layer (309 tests)
 
 - `src/core/types.ts`: Added `FieldType`, `NumericField`, `GroupField`, `Field`, `AnalyzeOptions`, `AnalysisResult` interfaces at end of file.

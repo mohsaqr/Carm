@@ -14,10 +14,15 @@ export interface BracketConfig {
   readonly yBase: number              // y coordinate of the top of data (plot top)
   readonly bracketHeight: number      // vertical space per bracket level
   readonly significantOnly: boolean   // show only p < 0.05 brackets
+  readonly numericP?: boolean         // true = "p = .025", false = "***" stars (default true)
 }
 
 /** Format p-value for bracket label. */
-function formatBracketP(p: number): string {
+function formatBracketP(p: number, numeric: boolean): string {
+  if (numeric) {
+    if (p < 0.001) return 'p < .001'
+    return `p = ${p.toFixed(3).replace(/^0\./, '.')}`
+  }
   if (p < 0.001) return '***'
   if (p < 0.01)  return '**'
   if (p < 0.05)  return '*'
@@ -59,7 +64,7 @@ export function renderBrackets(
       config.groupPositions.get(c.group2) ?? 0
     ),
     p: c.pValueAdj,
-    label: formatBracketP(c.pValueAdj),
+    label: formatBracketP(c.pValueAdj, config.numericP !== false),
     level: 0,
   })).sort((a, b) => (a.x2 - a.x1) - (b.x2 - b.x1))  // shortest first
 
