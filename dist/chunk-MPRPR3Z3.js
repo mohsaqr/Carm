@@ -304,7 +304,11 @@ function renderViolinBoxD3(d3, container, data, config) {
       const my = yScale(groupMean);
       const ds = 5;
       g.append("polygon").attr("points", `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
-      g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+      const medY = yScale(med);
+      const tooClose = config.showMedian !== false && Math.abs(my - medY) < 14;
+      if (!tooClose) {
+        g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+      }
     }
     if (config.showJitter !== false) {
       const jw = (config.jitterWidth ?? 0.15) * xScale.bandwidth();
@@ -3719,5 +3723,5 @@ function triggerDownload(url, filename) {
 }
 
 export { CARM_PALETTE, DARK_THEME, DEFAULT_THEME, OKABE_ITO, addCaption, addNLabel, addRegressionEquation, addStatBadge, addSubtitle, applyTheme, exportPNG, exportSVG, formatTooltipRow, getColor, hideTooltip, renderAlluvialPlot, renderArcDiagram, renderAreaChart, renderBarStats, renderBoxplot, renderBrackets, renderBubbleChart, renderChordDiagram, renderCoefPlot, renderCorrelogram, renderDensity, renderDistribution, renderDotPlot, renderEdgeBundling, renderForestPlot, renderFunnel, renderGridLines, renderGroupedBar, renderHistogram, renderLineChart, renderLollipop, renderMarimekko, renderMixedPlot, renderMosaicPlot, renderPCAPlot, renderPairPlot, renderParallelCoords, renderPareto, renderPieChart, renderQQPlot, renderROCCurve, renderRadarChart, renderRaincloud, renderResidualPanel, renderScatterStats, renderSparkline, renderStripPlot, renderSunburst, renderSwarmPlot, renderTreemap, renderViolinBox, renderWaffleChart, renderXAxis, renderYAxis, showTooltip, themeColorScale, totalBracketHeight };
-//# sourceMappingURL=chunk-L7LQ5UKA.js.map
-//# sourceMappingURL=chunk-L7LQ5UKA.js.map
+//# sourceMappingURL=chunk-MPRPR3Z3.js.map
+//# sourceMappingURL=chunk-MPRPR3Z3.js.map

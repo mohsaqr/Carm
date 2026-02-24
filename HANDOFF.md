@@ -1,42 +1,40 @@
 # Session Handoff — 2026-02-24
 
 ## Completed
-- **Floating settings panel**: Gear icon (⚙) in each plot's toolbar. Clicking opens a floating popover with plot-type-specific controls.
-- **Slider controls**: Jitter Width, Violin/Density Bandwidth, Point Size, Point Opacity, Bins, Plot Height — all with real-time live re-render on drag.
-- **Bold labels toggle**: Semi-bold (`font-weight: 600`) on all SVG text except title. Toggled via checkbox in gear panel.
-- **Text halo toggle**: White stroke outline behind all SVG text for readability. Uses SVG `paint-order: stroke`.
-- **Per-plot-type panel map**: Each plot type gets only its relevant controls (violin gets jitter+bandwidth, histogram gets bins, scatter gets point size, etc.).
-- **PlotControl union extended**: `type: 'slider'` variant with min/max/step/defaultValue.
-- **PlotConfig extended**: `labelBold`, `labelHalo`, `pointSize`, `pointOpacity`, `jitterWidth`, `violinBandwidth`, `plotHeight`.
-- **All renderer calls updated**: Height, jitterWidth, violinBandwidth, pointSize, pointRadius, bandwidth, pointOpacity all pass through from config to Carm renderers.
-- **Settings persist**: All config stored in localStorage per plot type.
+- **Configurable plot annotations**: All 8 plot types support conditional rendering of n-labels, median, mean diamond, jitter, brackets, outliers, density overlay, normal curve, CI band, equation, rug, legend, counts, percentages, values, significance.
+- **Numeric p-values on brackets**: `numericP` flag — shows `p = .025` instead of `***` stars. Default true.
+- **Mean diamond marker + median value labels**: White-filled diamond at group mean, numeric label next to median line and mean diamond.
+- **Redesigned plot toolbar**: Modern pill toggles, font family/size selects, subtitle toggle, SVG/PNG export.
+- **Floating gear settings panel**: ⚙ icon opens popover with sliders (jitter width, bandwidth, point size, opacity, bins, plot height) and bold/halo text styling toggles. Per-plot-type control registry.
+- **Editable plot title**: Click SVG title → inline text input → commit on blur.
+- **Git repos set up**: Carm pushed to `mohsaqr/Carm` (dev-clean). Aistatia initialized and pushed to `mohsaqr/aistatia` (private, main).
 
 ## Current State
-- **JStats**: Build clean. 309/309 tests.
-- **Aistatia**: `tsc --noEmit` clean. `npm run build` clean.
-- **No JStats code changes this session**: All changes in aistatia only (annotation-toggles.ts, types.ts, plot-panel.ts, style.css).
+- **JStats (Carm)**: All 309/309 tests passing. Build clean. Pushed to `origin/dev-clean`.
+- **Aistatia**: `tsc --noEmit` clean. `npm run build` clean. Pushed to `origin/main`.
+- **Carm dist in aistatia**: node_modules/carm/dist has the latest bracket/annotation changes.
 
 ## Key Decisions
-- **Two-tier system**: Pill bar for quick boolean toggles + selects. Gear popover for continuous controls + text styling. Avoids overcrowding the toolbar.
-- **defaultValue=0 means "auto"**: For bandwidth, bins, and plotHeight, 0 means "let the renderer decide". Display shows "auto" instead of "0".
-- **pointOpacity flows through CarmTheme**: Since all renderers already read `theme.pointOpacity`, overriding it in `buildTheme()` automatically affects all point renders.
-- **Close-on-outside-click**: Document-level click listener filters out clicks inside popover or on gear button.
+- **Two-tier toolbar**: Pill bar (quick booleans) + gear popover (sliders + text styling). Avoids overcrowding.
+- **defaultValue=0 = "auto"**: Bandwidth, bins, plotHeight use 0 to mean "let renderer decide".
+- **pointOpacity flows through CarmTheme**: Overridden in `buildTheme()`, affects all point renders.
+- **Bold/halo applied post-render**: `font-weight: 600` on SVG text, `paint-order: stroke` for halo.
 
 ## Open Issues
-- **Visual verification needed**: Run the app live and test gear panel interaction with real data.
+- **p-values may be hidden by stale localStorage**: If user toggled `showBrackets` off in a previous session, it persists. Clear with: `Object.keys(localStorage).filter(k => k.startsWith('aistatia-')).forEach(k => localStorage.removeItem(k))`
 - **LMM SEs**: Satterthwaite df approximation still crude.
 - **Random slopes**: Not yet implemented.
 
 ## Next Steps
-1. Run app live — test gear panel with violin (jitter/bandwidth sliders), scatter (point size), histogram (bins).
-2. Verify bold/halo toggles visually.
-3. Test localStorage persistence across page refresh.
-4. Git commit when ready (ask user first).
+1. Investigate p-values disappearing issue — likely stale localStorage.
+2. Visual verification of gear panel with real data.
+3. Consider adding "Reset defaults" button to gear panel.
 
 ## Context
-- Working directory: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
-- Aistatia directory: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/aistatia`
-- Package name: `carm` (v0.1.0)
-- Branch: `dev-clean`
-- `npm run build` → `dist/`
-- `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` → 309/309 (44s)
+- JStats dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
+- Aistatia dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/aistatia`
+- Carm package: `carm` (v0.1.0), branch `dev-clean`
+- Aistatia: branch `main`, private repo `mohsaqr/aistatia`
+- `npm run build` (JStats) → `dist/` via tsup
+- `npm run build` (aistatia) → `dist/` via vite
+- Tests: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` → 309/309

@@ -227,10 +227,16 @@ function renderViolinBoxD3(
       g.append('polygon')
         .attr('points', `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`)
         .attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.5)
-      g.append('text')
-        .attr('x', cx + ds + 4).attr('y', my + 3.5)
-        .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
-        .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+
+      // Only show mean value label if median label is hidden or far enough away
+      const medY = yScale(med)
+      const tooClose = config.showMedian !== false && Math.abs(my - medY) < 14
+      if (!tooClose) {
+        g.append('text')
+          .attr('x', cx + ds + 4).attr('y', my + 3.5)
+          .attr('font-family', theme.fontFamily).attr('font-size', theme.fontSizeSmall - 1)
+          .attr('fill', theme.textAnnotation).text(groupMean.toFixed(2))
+      }
     }
 
     // Jitter points

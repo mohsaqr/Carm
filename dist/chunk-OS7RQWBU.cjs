@@ -306,7 +306,11 @@ function renderViolinBoxD3(d3, container, data, config) {
       const my = yScale(groupMean);
       const ds = 5;
       g.append("polygon").attr("points", `${cx},${my - ds} ${cx + ds},${my} ${cx},${my + ds} ${cx - ds},${my}`).attr("fill", "white").attr("stroke", color).attr("stroke-width", 1.5);
-      g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+      const medY = yScale(med);
+      const tooClose = config.showMedian !== false && Math.abs(my - medY) < 14;
+      if (!tooClose) {
+        g.append("text").attr("x", cx + ds + 4).attr("y", my + 3.5).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.textAnnotation).text(groupMean.toFixed(2));
+      }
     }
     if (config.showJitter !== false) {
       const jw = (config.jitterWidth ?? 0.15) * xScale.bandwidth();
@@ -3782,5 +3786,5 @@ exports.renderYAxis = renderYAxis;
 exports.showTooltip = showTooltip;
 exports.themeColorScale = themeColorScale;
 exports.totalBracketHeight = totalBracketHeight;
-//# sourceMappingURL=chunk-D7JZN5FA.cjs.map
-//# sourceMappingURL=chunk-D7JZN5FA.cjs.map
+//# sourceMappingURL=chunk-OS7RQWBU.cjs.map
+//# sourceMappingURL=chunk-OS7RQWBU.cjs.map
