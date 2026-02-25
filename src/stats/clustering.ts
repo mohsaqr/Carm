@@ -47,7 +47,8 @@ function logSumExp(arr: ArrayLike<number>): number {
   return max + Math.log(sum)
 }
 
-function computeEntropy(resp: ArrayLike<number>[], k: number): number {
+/** Raw entropy E = -sum_i sum_k (z_ik * log(z_ik)). Used for ICL = BIC + 2E. */
+function computeRawEntropy(resp: ArrayLike<number>[], k: number): number {
   let ent = 0
   for (let i = 0; i < resp.length; i++) {
     for (let j = 0; j < k; j++) {
@@ -56,6 +57,15 @@ function computeEntropy(resp: ArrayLike<number>[], k: number): number {
     }
   }
   return ent
+}
+
+/** Normalized entropy = 1 - E / (N * log(K)), in [0,1]. 1 = perfect separation. */
+function computeNormalizedEntropy(resp: ArrayLike<number>[], k: number): number {
+  if (k <= 1) return 1  // trivial case: one cluster
+  const rawE = computeRawEntropy(resp, k)
+  const n = resp.length
+  const denom = n * Math.log(k)
+  return denom > 0 ? 1 - rawE / denom : 1
 }
 
 function computeAvePP(resp: ArrayLike<number>[], k: number): number[] {
@@ -456,10 +466,11 @@ export function fitGMM(
     'EII': 1,
   }
   const df = (k - 1) + (k * d) + dfMap[modelType]
-  const entropy = computeEntropy(resp, k)
+  const rawEntropy = computeRawEntropy(resp, k)
+  const entropy = computeNormalizedEntropy(resp, k)
   const bic = df * Math.log(n) - 2 * logL
   const aic = 2 * df - 2 * logL
-  const icl = bic + 2 * entropy
+  const icl = bic + 2 * rawEntropy
 
   return {
     weights: Array.from(weights),
@@ -653,10 +664,11 @@ export function fitLCA(
 
   const logL = prevLogL === -Infinity ? 0 : prevLogL
   const df = (k - 1) + (k * m)
-  const entropy = computeEntropy(resp, k)
+  const rawEntropy = computeRawEntropy(resp, k)
+  const entropy = computeNormalizedEntropy(resp, k)
   const bic = df * Math.log(n) - 2 * logL
   const aic = 2 * df - 2 * logL
-  const icl = bic + 2 * entropy
+  const icl = bic + 2 * rawEntropy
 
   return {
     rho: rho.map(r => [...r]),
@@ -910,10 +922,11 @@ export function fitLTA(
       flatGamma.push(finalGamma[i]![t]!)
     }
   }
-  const entropy = computeEntropy(flatGamma, k)
+  const rawEntropy = computeRawEntropy(flatGamma, k)
+  const entropy = computeNormalizedEntropy(flatGamma, k)
   const bic = df * Math.log(n) - 2 * logL
   const aic = 2 * df - 2 * logL
-  const icl = bic + 2 * entropy
+  const icl = bic + 2 * rawEntropy
 
   return {
     pi: Array.from(pi),
@@ -1043,6 +1056,75 @@ export function runKMeans(
 /**
  * Predict cluster assignments for new data given fitted K-Means centroids.
  */
+// ═════════════════════════════════════════════════════════════════════════
+// Range-fitting (auto-K selection)
+// ═════════════════════════════════════════════════════════════════════════
+
+/** A single entry from fitting GMM at one K value. */
+export interface GMMRangeEntry {
+  readonly k: number
+  readonly model: CovarianceModel
+  readonly result: GMMResult
+}
+
+/** A single entry from fitting KMeans at one K value. */
+export interface KMeansRangeEntry {
+  readonly k: number
+  readonly result: KMeansResult
+}
+
+/**
+ * Fit GMM for each K in kRange and return results sorted by K.
+ * Skips failed fits (singular covariance etc). Throws only if ALL fail.
+ *
+ * @param data - N × D numeric data matrix
+ * @param kRange - Array of K values to try, e.g. [2,3,4,5,6,7,8,9,10]
+ * @param model - Covariance model (default 'VVV')
+ * @returns GMMRangeEntry[] sorted by K
+ */
+export function fitGMMRange(
+  data: readonly (readonly number[])[],
+  kRange: readonly number[],
+  model: CovarianceModel = 'VVV',
+): readonly GMMRangeEntry[] {
+  const entries: GMMRangeEntry[] = []
+  for (const k of kRange) {
+    try {
+      const result = fitGMM(data, { k, model, seed: 42 })
+      entries.push({ k, model, result })
+    } catch {
+      // Skip failed fits (e.g. k > n, singular covariance)
+    }
+  }
+  if (entries.length === 0) throw new Error('fitGMMRange: all fits failed')
+  return entries.sort((a, b) => a.k - b.k)
+}
+
+/**
+ * Fit KMeans for each K in kRange and return results sorted by K.
+ * Skips failed fits. Throws only if ALL fail.
+ *
+ * @param data - N × D numeric data matrix
+ * @param kRange - Array of K values to try
+ * @returns KMeansRangeEntry[] sorted by K
+ */
+export function fitKMeansRange(
+  data: readonly (readonly number[])[],
+  kRange: readonly number[],
+): readonly KMeansRangeEntry[] {
+  const entries: KMeansRangeEntry[] = []
+  for (const k of kRange) {
+    try {
+      const result = runKMeans(data, { k, seed: 42 })
+      entries.push({ k, result })
+    } catch {
+      // Skip failed fits
+    }
+  }
+  if (entries.length === 0) throw new Error('fitKMeansRange: all fits failed')
+  return entries.sort((a, b) => a.k - b.k)
+}
+
 export function predictKMeans(
   data: readonly (readonly number[])[],
   centroids: readonly (readonly number[])[]

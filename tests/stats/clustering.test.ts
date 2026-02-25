@@ -155,8 +155,9 @@ describe('fitGMM', () => {
     expect(d.df).toBeGreaterThan(0)
     expect(d.bic).toBeGreaterThan(0)
     expect(d.aic).toBeGreaterThan(0)
-    expect(d.icl).toBeGreaterThanOrEqual(d.bic)  // ICL >= BIC since entropy >= 0
-    expect(d.entropy).toBeGreaterThanOrEqual(0)
+    expect(d.icl).toBeGreaterThanOrEqual(d.bic)  // ICL >= BIC since raw entropy >= 0
+    expect(d.entropy).toBeGreaterThanOrEqual(0)  // normalized entropy in [0, 1]
+    expect(d.entropy).toBeLessThanOrEqual(1)
     expect(d.avepp.length).toBe(3)
     for (const a of d.avepp) {
       expect(a).toBeGreaterThanOrEqual(0)
@@ -436,7 +437,8 @@ describe('fitLTA', () => {
     expect(d.df).toBe(9)
     expect(d.logLikelihood).toBeLessThan(0)
     expect(d.bic).toBeGreaterThan(0)
-    expect(d.entropy).toBeGreaterThanOrEqual(0)
+    expect(d.entropy).toBeGreaterThanOrEqual(0)  // normalized entropy in [0, 1]
+    expect(d.entropy).toBeLessThanOrEqual(1)
     expect(d.icl).toBeGreaterThanOrEqual(d.bic)
     expect(d.formatted).toContain('LTA')
   })

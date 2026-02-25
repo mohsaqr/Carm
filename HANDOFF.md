@@ -1,37 +1,41 @@
 # Session Handoff — 2026-02-25
 
 ## Completed
-- **Clustering module** (`src/stats/clustering.ts`): Full implementation of GMM (6 covariance models), LCA, LTA, KMeans with 7 exported functions.
-- **R cross-validation**: Near-exact to exact equivalence with R mclust/poLCA/kmeans on identical datasets. LCA matches to 10 decimal places.
-- **67 new tests**: 47 unit tests + 20 cross-validation tests. All 376/376 passing.
-- **LCA/LTA rho smoothing fix**: Changed from Beta(1,1) to raw MLE to match poLCA exactly.
+- **Cluster Finder Wizard (Auto K Selection)**: Full implementation across Carm + Aistatia (15+ files).
+  - Carm: Added `fitGMMRange` and `fitKMeansRange` to clustering.ts. Built and copied dist.
+  - Aistatia: Two new test types (`gmm-find`, `kmeans-find`). Full UI flow: wizard → runner → comparison table → line chart → APA banner → copy panel → narrative.
+  - GMM: Fits across K range, selects best K by lowest BIC. Renders BIC/AIC/ICL line chart.
+  - KMeans: Fits across K range, selects best K by elbow method (max second derivative of inertia). Renders inertia elbow plot.
+  - Comparison tables with `.row-best` highlight on suggested K.
+- **Previous sessions**: Clustering module in Carm (GMM/LCA/LTA/KMeans), clustering UI in aistatia (6 plot types per model).
 
 ## Current State
-- **Carm**: All 376/376 tests passing. Build clean. Branch `dev-clean`.
-- **Clustering module fully functional**: fitGMM, predictGMM, findBestGMM, fitLCA, fitLTA, runKMeans, predictKMeans all exported and tested.
-- **Not yet committed**: Changes are local only — user needs to approve git operations.
+- **Carm**: 376/376 tests passing. Clustering module + range fitters fully functional. Branch `dev-clean`.
+- **Aistatia**: Build clean (`tsc --noEmit` + `vite build`). Cluster finder UI functional.
+- **Test HTML**: `tmp/test-cluster-finder.html` exercises fitGMMRange + fitKMeansRange with synthetic 3-cluster data (K=2..8).
+- **Not committed**: All changes are local in both repos.
 
 ## Key Decisions
-- **MLE over Beta(1,1) smoothing for LCA/LTA rho**: Chosen to match R poLCA exactly. Minimal floor (1e-10) prevents log(0) without biasing estimates.
-- **Multi-seed approach for cross-validation**: EM is init-dependent; try 6-9 seeds and take best LL for fair comparison.
-- **K-Means++ with splitmix32 PRNG**: Deterministic, reproducible initialization across platforms.
-- **LTA stays**: User insisted on enterprise-grade comprehensive library.
+- **Elbow heuristic**: Max second derivative of inertia (needs ≥3 entries). Falls back to first K otherwise.
+- **fitGMMRange/fitKMeansRange**: Skip failed fits silently, only throw if ALL fail. Important for high-K stability.
+- **clusterMinK/clusterMaxK as top-level state**: Same pattern as clusterK/clusterModel, not in plotConfig.
+- **Line chart from Carm**: Reused existing `renderLineChart` for both fit-indices and elbow plots.
 
 ## Open Issues
-- **LTA has no R cross-validation**: depmixS4 is non-deterministic. Need seqHMM or hand-computed reference.
-- **GMM VVV ΔLL = 0.004**: Tiny gap due to different initialization (K-Means++ vs mclust hierarchical). Our LL is marginally *better* — both valid optima.
-- **LMM SEs**: Satterthwaite df approximation still crude (from previous session).
+- **LCA/LTA deferred**: Need binary/time-series data handling in the UI. Carm module is ready.
+- **Scatter regression line suppression**: May still draw faint line even with `showEquation: false`.
+- **Cluster label stability**: GMM/KMeans label ordering depends on initialization.
+- **Not yet committed**: Changes are local only — user needs to approve git operations.
 
 ## Next Steps
-1. Commit and push clustering module (pending user approval).
-2. LTA cross-validation with seqHMM or manual hand-computation.
-3. Consider adding GMM covariance model selection to findBestGMM (currently supports K and model type).
-4. Integrate clustering into aistatia UI (wizard + plot panel).
+1. User review of `tmp/test-cluster-finder.html` to verify visual output.
+2. Commit both repos (pending user approval).
+3. Consider adding silhouette score visualization.
+4. LCA/LTA UI (requires binary variable detection and time-series input).
 
 ## Context
 - Carm dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
 - Aistatia dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/aistatia`
 - Branch: `dev-clean`
-- Build: `npm run build` → dist/ via tsup
-- Tests: `npx vitest run` → 376/376
-- R reference: `tests/r_clustering_reference.R` → `tests/r_clustering_reference.json`
+- Build: `npm run build` → both repos clean
+- Tests: `npx vitest run` → 376/376 (Carm)

@@ -624,6 +624,36 @@ declare function runKMeans(data: readonly (readonly number[])[], options: KMeans
 /**
  * Predict cluster assignments for new data given fitted K-Means centroids.
  */
+/** A single entry from fitting GMM at one K value. */
+interface GMMRangeEntry {
+    readonly k: number;
+    readonly model: CovarianceModel;
+    readonly result: GMMResult;
+}
+/** A single entry from fitting KMeans at one K value. */
+interface KMeansRangeEntry {
+    readonly k: number;
+    readonly result: KMeansResult;
+}
+/**
+ * Fit GMM for each K in kRange and return results sorted by K.
+ * Skips failed fits (singular covariance etc). Throws only if ALL fail.
+ *
+ * @param data - N × D numeric data matrix
+ * @param kRange - Array of K values to try, e.g. [2,3,4,5,6,7,8,9,10]
+ * @param model - Covariance model (default 'VVV')
+ * @returns GMMRangeEntry[] sorted by K
+ */
+declare function fitGMMRange(data: readonly (readonly number[])[], kRange: readonly number[], model?: CovarianceModel): readonly GMMRangeEntry[];
+/**
+ * Fit KMeans for each K in kRange and return results sorted by K.
+ * Skips failed fits. Throws only if ALL fail.
+ *
+ * @param data - N × D numeric data matrix
+ * @param kRange - Array of K values to try
+ * @returns KMeansRangeEntry[] sorted by K
+ */
+declare function fitKMeansRange(data: readonly (readonly number[])[], kRange: readonly number[]): readonly KMeansRangeEntry[];
 declare function predictKMeans(data: readonly (readonly number[])[], centroids: readonly (readonly number[])[]): readonly number[];
 
-export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type GMMOptions, type GMMResult, type KMeansOptions, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, findBestGMM, fisherExactTest, fitGMM, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runKMeans, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type GMMOptions, type GMMRangeEntry, type GMMResult, type KMeansOptions, type KMeansRangeEntry, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runKMeans, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };

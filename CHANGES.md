@@ -1,3 +1,49 @@
+### 2026-02-25 — Fix entropy normalization (mclust convention)
+
+- `JStats/src/stats/clustering.ts`: Split `computeEntropy` into `computeRawEntropy` (for ICL) and `computeNormalizedEntropy` (for diagnostics.entropy). Formula: `1 - E/(N*log(K))`, range [0,1], matches mclust. Applied to GMM, LCA, LTA.
+- `JStats/tests/stats/clustering.test.ts`: Added `entropy <= 1` assertions. 47/47 pass.
+
+### 2026-02-25 — Cluster Finder Wizard (Auto K Selection)
+
+**Carm:**
+- `src/stats/clustering.ts`: Added `fitGMMRange(data, kRange, model)` and `fitKMeansRange(data, kRange)` functions. New interfaces `GMMRangeEntry` and `KMeansRangeEntry`. These loop over K values, skip failed fits, and return sorted arrays of results.
+
+**Aistatia (15 files):**
+- `src/analysis/registry.ts`: Added `gmm-find` and `kmeans-find` test definitions in `cluster` family.
+- `src/data/types.ts`: Added `clustering-comparison` result kind with `GMMRangeEntry[]`/`KMeansRangeEntry[]`, `bestK`, `dataMatrix`.
+- `src/state.ts`: Added `clusterMinK: 2`, `clusterMaxK: 10` state fields.
+- `src/views/wizard-defs.ts`: Added `fit-indices` and `elbow` plot type defs, wizard defs for `gmm-find` (minK, maxK, covariance model) and `kmeans-find` (minK, maxK).
+- `src/views/modal.ts`: Wired `clusterMinK`/`clusterMaxK` through ModalLocal → ModalConfig.
+- `src/main.ts`: Added `clusterMinK`/`clusterMaxK` to modal commit → setState.
+- `src/analysis/runner.ts`: Added dispatch branch for `gmm-find`/`kmeans-find` — builds kRange, calls fitGMMRange/fitKMeansRange, selects bestK via lowest BIC (GMM) or elbow heuristic (KMeans max second derivative of inertia).
+- `src/views/results.ts`: Added clustering-comparison rendering — banner → comparison table → line chart → copy panel. Updated getTestLabel, getTagHtml, getApaString.
+- `src/results/tables.ts`: Added `renderClusterComparisonTable()` — GMM: K/BIC/AIC/ICL/Entropy/AvePP/Conv with row-best highlight. KMeans: K/Inertia/Converged/Iterations with row-best highlight.
+- `src/results/plot-panel.ts`: Added `renderGMMFitIndicesPlot()` (3-series BIC/AIC/ICL line chart) and `renderKMeansElbowPlot()` (1-series inertia line chart) using Carm's `renderLineChart`.
+- `src/results/annotation-toggles.ts`: Added `fit-indices` and `elbow` entries to TOGGLE_MAP and PANEL_MAP.
+- `src/results/apa-banner.ts`: Added `clustering-comparison` branch for both GMM and KMeans.
+- `src/results/copy-paper.ts`: Added `clustering-comparison` branch to `extractCheckState`.
+- `src/interpret/rules.ts`: Added `buildClusteringComparisonNarrative()` for GMM range and KMeans range.
+- `src/style.css`: Added `.row-best { background: #e8f4fd; font-weight: 600; }`.
+- Tests: `tsc --noEmit` clean, `vite build` clean in both repos.
+
+### 2026-02-25 — Clustering UI in Aistatia (GMM + KMeans)
+
+- `aistatia/src/analysis/registry.ts`: Added `cluster` family with `gmm` and `kmeans` test definitions.
+- `aistatia/src/data/types.ts`: Added `clustering` kind to `AppRunResult` union with labels, k, means, SDs, sizes, diagnostics, inertia, dataMatrix.
+- `aistatia/src/state.ts`: Added `clusterK` (default 3) and `clusterModel` (default 'VVV') state fields.
+- `aistatia/src/views/wizard-defs.ts`: Added `cluster-profile` and `cluster-scatter` plot types, GMM wizard (K + covariance model select), KMeans wizard (K only).
+- `aistatia/src/views/modal.ts`: Wired `clusterK`/`clusterModel` through ModalLocal → ModalConfig → setState.
+- `aistatia/src/main.ts`: Added `clusterK`/`clusterModel` to modal commit → setState.
+- `aistatia/src/analysis/runner.ts`: Added clustering dispatch — aligned row iteration, fitGMM/runKMeans call, per-cluster M/SD computation.
+- `aistatia/src/views/results.ts`: Added clustering flow — APA banner → cluster profile table → plots → copy panel. Updated getTestLabel, getTagHtml, getApaString.
+- `aistatia/src/results/tables.ts`: Added `renderClusterProfileTable()` — M(SD) per variable per cluster.
+- `aistatia/src/results/plot-panel.ts`: Added cluster-profile (grouped bar) and cluster-scatter (PCA + colored points) renderers with inline simplePCA2.
+- `aistatia/src/results/annotation-toggles.ts`: Added TOGGLE_MAP and PANEL_MAP entries for cluster-profile and cluster-scatter.
+- `aistatia/src/interpret/rules.ts`: Added `buildClusteringNarrative()` for GMM/KMeans.
+- `aistatia/src/results/copy-paper.ts`: Added clustering extractCheckState (methods + results paragraphs).
+- `aistatia/src/results/apa-banner.ts`: Added clustering APA rendering (LL/BIC/entropy for GMM, inertia for KMeans).
+- Tests: tsc --noEmit clean, vite build clean.
+
 ### 2026-02-25 — Clustering module: GMM, LCA, LTA, KMeans (R-equivalent)
 
 - `src/stats/clustering.ts`: New file (~1050 lines). Implements:

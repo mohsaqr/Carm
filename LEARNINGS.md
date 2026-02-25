@@ -1,3 +1,34 @@
+## 2026-02-25 (cluster finder wizard)
+
+### Normalized entropy (mclust convention)
+- The `diagnostics.entropy` field must be **normalized**: `1 - E / (N * log(K))`, range [0,1], higher = better separation. This matches mclust's `1 + sum(probs * log(probs)) / (n * log(K))`.
+- The **raw** entropy `E = -sum(z * log(z))` is only used internally for ICL = BIC + 2E. Never expose it directly.
+- With well-separated data, posteriors are near one-hot → rawE ≈ 0 → normalizedE ≈ 1.0.
+- Vite pre-bundling cache (`node_modules/.vite/`) must be cleared after rebuilding Carm, otherwise the dev server serves stale code.
+
+### Elbow heuristic for KMeans
+- The elbow method uses the maximum second derivative of inertia: `d2 = inertia[i-1] - 2*inertia[i] + inertia[i+1]`. Requires at least 3 entries in the range to compute. Falls back to first K if fewer than 3.
+
+### clusterMinK/clusterMaxK state routing
+- Same pattern as `clusterK` and `clusterModel`: top-level state fields routed through ModalLocal → ModalConfig → setState, not through plotConfig. The modal number input handler needs a special-case lookup for `curVal` (reading from `local.clusterMinK` / `local.clusterMaxK` instead of `local.plotConfig[opt]`).
+
+### fitGMMRange/fitKMeansRange error handling
+- These functions silently skip failed fits (e.g. singular covariance for large K relative to data). Only throws if ALL fits fail. This is important because high-K fits can be unstable with small datasets.
+
+## 2026-02-25 (clustering UI in aistatia)
+
+### Wizard option routing for non-plotConfig fields
+- `clusterK` and `clusterModel` are top-level state fields, not PlotConfig fields. The modal's `data-opt` change handler must special-case them (like `ciLevel` and `pAdjMethod`) rather than routing through `local.plotConfig[opt]`.
+- WizardOptionSelect `id` union must include the new option IDs (added `'clusterModel'`).
+- WizardOptionNumber with `id: 'clusterK'` flows through the standard number-input codepath but with a special-case read from `local.clusterK` instead of `local.plotConfig.clusterK`.
+
+### ClusterDiagnostics type
+- `ClusterDiagnostics` does not have a `model` field — the covariance model name is not stored in the diagnostics struct. It's embedded in the `formatted` string instead.
+
+### Scatter plot cluster coloring
+- Carm's `renderScatterStats` renders points as `<circle>` elements in data order. Post-render coloring by cluster label works by iterating circles and matching index to `labels[i]`.
+- Must use requestAnimationFrame polling because D3 renders asynchronously via `import('d3').then(...)`.
+
 ## 2026-02-25 (clustering module)
 
 ### GMM cross-validation with R mclust
