@@ -1,3 +1,28 @@
+## 2026-02-25 (DBSCAN + HAC + preprocessing)
+
+### HAC R reference heights
+- When hard-coding R reference values from JSON, **always extract programmatically** — never type-transcribe. In this session, the first 10 ward heights were correct but the remaining 19 were wrong (likely copy-paste from a different dataset or prior run). Debug was painful because the values were plausible but slightly off.
+- HAC is fully deterministic — heights must match R to 1e-10. Any deviation means the reference data is wrong, not the algorithm.
+- Ward.D2 last 3 heights for the 30-observation test data: 2.9423, 21.3337, 38.8347. The wrong values (5.86, 6.14, 8.20) were dramatically different — always sanity-check scale.
+
+### DBSCAN label conventions
+- R dbscan: 0 = noise, 1-indexed clusters. Carm: -1 = noise, 0-indexed clusters. Conversion: `rLabel === 0 ? -1 : rLabel - 1`.
+- Silhouette scores exclude noise points (label === -1). The mean silhouette is computed only over non-noise points.
+
+### ClusterPlotData adapter pattern
+- When 4+ clustering result kinds (GMM, KMeans, DBSCAN, Hierarchical) need the same plot rendering (profile bar, scatter), use an adapter interface (`ClusterPlotData`) with a `toClusterPlotData(runResult)` converter. This avoids duplicating plot code 4x and handles the discriminated union narrowing in one place.
+
+### Preprocessing integration
+- Added `preprocess?` option to all clustering wizards (GMM, KMeans, DBSCAN, Hierarchical). Preprocessing runs on the data matrix before the clustering algorithm, but per-cluster means/SDs are computed on the **original** (unpreprocessed) data for interpretability.
+- `preprocessData` returns `{ data, colMeans, colSDs, method, centered, scaled }` — the `data` field is the transformed matrix.
+
+### Lance-Williams recurrence for HAC
+- Ward coefficients use dynamic cluster sizes: `α_i = (n_i + n_k)/N_t`, `α_j = (n_j + n_k)/N_t`, `β = -n_k/N_t`, `γ = 0` where `N_t = n_i + n_j + n_k`.
+- Ward.D2: squared Euclidean internally, final heights = `sqrt(merge_distance)`. This matches R `hclust(method="ward.D2")`.
+
+### TypeScript narrowing with discriminated unions
+- When a function returns early for multiple `kind` values, TypeScript doesn't always narrow the remaining type. Adding explicit `if (runResult.kind === 'clustering') return` guards before accessing `.result` on a standard result kind is needed to satisfy the compiler.
+
 ## 2026-02-25 (cluster finder wizard)
 
 ### Normalized entropy (mclust convention)

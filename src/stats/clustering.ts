@@ -1144,3 +1144,707 @@ export function predictKMeans(
     return best
   })
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// Shared Utilities: Distance Matrix & Silhouette
+// ═════════════════════════════════════════════════════════════════════════
+
+/**
+ * Compute Euclidean distance matrix (N × N, row-major Float64Array).
+ *
+ * @param data - N × D numeric data matrix
+ * @returns flat Float64Array of size N*N with dist[i*N+j] = euclidean(i,j)
+ *
+ * Cross-validate with R:
+ * > as.matrix(dist(data))
+ */
+export function euclideanDistMatrix(
+  data: readonly (readonly number[])[]
+): Float64Array {
+  const n = data.length
+  const d = data[0]?.length ?? 0
+  const dist = new Float64Array(n * n)
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      let sq = 0
+      for (let dim = 0; dim < d; dim++) {
+        const diff = data[i]![dim]! - data[j]![dim]!
+        sq += diff * diff
+      }
+      const val = Math.sqrt(sq)
+      dist[i * n + j] = val
+      dist[j * n + i] = val
+    }
+  }
+  return dist
+}
+
+/**
+ * Compute silhouette scores for each point (excluding noise labels = -1).
+ *
+ * For each non-noise point i:
+ *   a(i) = mean dist to points in same cluster
+ *   b(i) = min over other clusters of mean dist to that cluster
+ *   s(i) = (b(i) - a(i)) / max(a(i), b(i))
+ *
+ * @param data - N × D data matrix
+ * @param labels - cluster assignments (0-indexed, -1 = noise)
+ * @returns scores per point (NaN for noise) and mean silhouette (excluding noise)
+ *
+ * Cross-validate with R:
+ * > library(cluster)
+ * > silhouette(labels, dist(data))
+ */
+export function silhouetteScores(
+  data: readonly (readonly number[])[],
+  labels: readonly number[]
+): { readonly scores: readonly number[]; readonly mean: number } {
+  const n = data.length
+  const dist = euclideanDistMatrix(data)
+
+  // Find unique non-noise labels
+  const labelSet = new Set<number>()
+  for (let i = 0; i < n; i++) {
+    if (labels[i]! >= 0) labelSet.add(labels[i]!)
+  }
+  const uniqueLabels = [...labelSet].sort((a, b) => a - b)
+  const nClusters = uniqueLabels.length
+
+  if (nClusters < 2) {
+    // Silhouette undefined for < 2 clusters
+    return { scores: new Array(n).fill(0) as number[], mean: 0 }
+  }
+
+  const scores: number[] = new Array(n).fill(NaN) as number[]
+  let sumSil = 0
+  let countNonNoise = 0
+
+  for (let i = 0; i < n; i++) {
+    const ci = labels[i]!
+    if (ci < 0) continue // noise
+
+    // a(i) = mean distance to same cluster
+    let aSum = 0, aCount = 0
+    for (let j = 0; j < n; j++) {
+      if (j === i || labels[j] !== ci) continue
+      aSum += dist[i * n + j]!
+      aCount++
+    }
+    const ai = aCount > 0 ? aSum / aCount : 0
+
+    // b(i) = min mean-distance to other clusters
+    let bi = Infinity
+    for (const cl of uniqueLabels) {
+      if (cl === ci) continue
+      let bSum = 0, bCount = 0
+      for (let j = 0; j < n; j++) {
+        if (labels[j] !== cl) continue
+        bSum += dist[i * n + j]!
+        bCount++
+      }
+      if (bCount > 0) {
+        const meanDist = bSum / bCount
+        if (meanDist < bi) bi = meanDist
+      }
+    }
+
+    const maxAB = Math.max(ai, bi)
+    scores[i] = maxAB > 0 ? (bi - ai) / maxAB : 0
+    sumSil += scores[i]!
+    countNonNoise++
+  }
+
+  return {
+    scores,
+    mean: countNonNoise > 0 ? sumSil / countNonNoise : 0,
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// DBSCAN
+// ═════════════════════════════════════════════════════════════════════════
+
+export type PointType = 'core' | 'border' | 'noise'
+
+export interface DBSCANOptions {
+  readonly eps: number
+  readonly minPts: number
+  readonly seed?: number
+  readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt'
+}
+
+export interface DBSCANResult {
+  readonly labels: readonly number[]           // -1 = noise, 0-indexed clusters
+  readonly pointTypes: readonly PointType[]
+  readonly nClusters: number
+  readonly nNoise: number
+  readonly clusterSizes: readonly number[]
+  readonly silhouette: { readonly scores: readonly number[]; readonly mean: number }
+  readonly formatted: string
+}
+
+/**
+ * DBSCAN clustering (Ester et al. 1996).
+ *
+ * Algorithm:
+ * 1. For each point, compute eps-neighborhood via distance scan.
+ * 2. Core points: |neighbors| >= minPts. BFS expansion from cores.
+ * 3. Border points: not core, but within eps of a core point.
+ * 4. Noise: neither core nor border.
+ *
+ * Labels: -1 = noise, 0, 1, 2, ... = cluster IDs (0-indexed).
+ *
+ * @param data - N × D numeric data matrix
+ * @param options - DBSCAN configuration (eps, minPts)
+ * @returns DBSCANResult with labels, point types, silhouette
+ *
+ * Cross-validate with R:
+ * > library(dbscan)
+ * > db <- dbscan(data, eps = 1.5, minPts = 5)
+ * > db$cluster  # R: 0=noise, 1-indexed → Carm: -1=noise, 0-indexed
+ */
+export function runDBSCAN(
+  data: readonly (readonly number[])[],
+  options: DBSCANOptions
+): DBSCANResult {
+  const n = data.length
+  if (n === 0) throw new Error('runDBSCAN: data cannot be empty')
+  const { eps, minPts } = options
+  if (eps <= 0) throw new Error('runDBSCAN: eps must be > 0')
+  if (minPts < 1) throw new Error('runDBSCAN: minPts must be >= 1')
+
+  // Compute pairwise distance matrix
+  const dist = euclideanDistMatrix(data)
+
+  // Find eps-neighborhoods
+  const neighbors: number[][] = new Array(n)
+  for (let i = 0; i < n; i++) {
+    const nb: number[] = []
+    for (let j = 0; j < n; j++) {
+      if (dist[i * n + j]! <= eps) nb.push(j)
+    }
+    neighbors[i] = nb
+  }
+
+  // Identify core points
+  const isCore = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    if (neighbors[i]!.length >= minPts) isCore[i] = 1
+  }
+
+  // BFS cluster expansion
+  const labels = new Int32Array(n).fill(-1)  // -1 = unvisited/noise
+  let clusterId = 0
+
+  for (let i = 0; i < n; i++) {
+    if (!isCore[i] || labels[i] !== -1) continue
+
+    // Start new cluster from this core point
+    const queue: number[] = [i]
+    labels[i] = clusterId
+
+    let head = 0
+    while (head < queue.length) {
+      const current = queue[head]!
+      head++
+
+      for (const nb of neighbors[current]!) {
+        if (labels[nb] === -1) {
+          labels[nb] = clusterId
+          // If neighbor is also core, expand from it
+          if (isCore[nb]) queue.push(nb)
+        }
+      }
+    }
+    clusterId++
+  }
+
+  // Classify point types
+  const pointTypes: PointType[] = new Array(n)
+  for (let i = 0; i < n; i++) {
+    if (isCore[i]) {
+      pointTypes[i] = 'core'
+    } else if (labels[i]! >= 0) {
+      pointTypes[i] = 'border'
+    } else {
+      pointTypes[i] = 'noise'
+    }
+  }
+
+  // Cluster sizes
+  const nClusters = clusterId
+  const clusterSizes = new Array<number>(nClusters).fill(0)
+  let nNoise = 0
+  for (let i = 0; i < n; i++) {
+    if (labels[i]! >= 0) clusterSizes[labels[i]!]!++
+    else nNoise++
+  }
+
+  // Silhouette (only if >= 2 clusters and some non-noise points)
+  const sil = nClusters >= 2
+    ? silhouetteScores(data, Array.from(labels))
+    : { scores: new Array(n).fill(NaN) as number[], mean: NaN }
+
+  const formatted = `DBSCAN (eps = ${roundTo(eps, 3)}, minPts = ${minPts}): ${nClusters} clusters, ${nNoise} noise points, silhouette = ${isNaN(sil.mean) ? 'N/A' : roundTo(sil.mean, 3)}`
+
+  return {
+    labels: Array.from(labels),
+    pointTypes,
+    nClusters,
+    nNoise,
+    clusterSizes,
+    silhouette: sil,
+    formatted,
+  }
+}
+
+/**
+ * Compute k-distance plot data for epsilon estimation.
+ *
+ * For each point, compute the distance to its k-th nearest neighbor,
+ * then return these distances sorted in ascending order.
+ * The "elbow" in the sorted plot suggests a good epsilon.
+ *
+ * @param data - N × D numeric data matrix
+ * @param k - neighbor index (typically minPts)
+ * @returns sorted k-NN distances (ascending)
+ *
+ * Cross-validate with R:
+ * > library(dbscan)
+ * > kNNdist(data, k = 5)  # sorted externally
+ */
+export function kDistancePlot(
+  data: readonly (readonly number[])[],
+  k: number
+): readonly number[] {
+  const n = data.length
+  if (k < 1 || k >= n) throw new Error(`kDistancePlot: k must be in [1, n-1], got ${k}`)
+
+  const dist = euclideanDistMatrix(data)
+  const kDists: number[] = new Array(n)
+
+  for (let i = 0; i < n; i++) {
+    // Collect distances from point i to all others
+    const dists: number[] = new Array(n - 1)
+    let idx = 0
+    for (let j = 0; j < n; j++) {
+      if (j !== i) dists[idx++] = dist[i * n + j]!
+    }
+    dists.sort((a, b) => a - b)
+    kDists[i] = dists[k - 1]!  // k-th nearest (0-indexed, so k-1)
+  }
+
+  return kDists.sort((a, b) => a - b)
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Hierarchical Agglomerative Clustering (HAC)
+// ═════════════════════════════════════════════════════════════════════════
+
+export type LinkageMethod = 'single' | 'complete' | 'average' | 'ward'
+
+export interface HACOptions {
+  readonly linkage?: LinkageMethod
+  readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt'
+}
+
+export interface HACMerge {
+  readonly a: number   // index of first cluster merged (0..n-1 = obs, n+ = intermediate)
+  readonly b: number   // index of second cluster merged
+  readonly height: number  // merge height
+}
+
+export interface HACResult {
+  readonly merges: readonly HACMerge[]
+  readonly heights: readonly number[]
+  readonly order: readonly number[]   // leaf order for dendrogram (DFS)
+  readonly copheneticCorrelation: number
+  readonly formatted: string
+}
+
+/**
+ * Hierarchical agglomerative clustering using Lance-Williams recurrence.
+ *
+ * Linkage methods and their Lance-Williams coefficients:
+ * | Method   | α_i           | α_j           | β        | γ    |
+ * |----------|---------------|---------------|----------|------|
+ * | single   | 0.5           | 0.5           | 0        | -0.5 |
+ * | complete | 0.5           | 0.5           | 0        | 0.5  |
+ * | average  | n_i/(n_i+n_j) | n_j/(n_i+n_j) | 0        | 0    |
+ * | ward     | (n_i+n_k)/N_t | (n_j+n_k)/N_t | -n_k/N_t | 0    |
+ *
+ * Ward's method uses squared Euclidean distances internally.
+ * Final merge heights are sqrt(distance) to match R's hclust(method="ward.D2").
+ *
+ * @param data - N × D numeric data matrix
+ * @param options - linkage method (default: ward)
+ * @returns HACResult with merges, heights, leaf order, cophenetic correlation
+ *
+ * Cross-validate with R:
+ * > hc <- hclust(dist(data), method = "ward.D2")
+ * > hc$merge; hc$height; hc$order
+ * > cor(cophenetic(hc), dist(data))
+ */
+export function runHierarchical(
+  data: readonly (readonly number[])[],
+  options?: HACOptions
+): HACResult {
+  const n = data.length
+  if (n < 2) throw new Error('runHierarchical: need at least 2 observations')
+
+  const linkage = options?.linkage ?? 'ward'
+
+  // Compute initial pairwise distance matrix (Euclidean)
+  const origDist = euclideanDistMatrix(data)
+
+  // For ward, we work with squared distances internally
+  const useSquared = linkage === 'ward'
+  // Active distance matrix — condensed upper triangle
+  // We use a full N×N mutable copy for simplicity during merges
+  const D = new Float64Array(n * n)
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const val = useSquared
+        ? origDist[i * n + j]! * origDist[i * n + j]!
+        : origDist[i * n + j]!
+      D[i * n + j] = val
+      D[j * n + i] = val
+    }
+  }
+
+  // Cluster sizes
+  const sizes = new Float64Array(2 * n - 1)
+  for (let i = 0; i < n; i++) sizes[i] = 1
+
+  // Active cluster set
+  const active = new Set<number>()
+  for (let i = 0; i < n; i++) active.add(i)
+
+  // Merge tracking
+  const merges: HACMerge[] = []
+  const mergeHeights: number[] = []
+
+  // Current dimension for distance lookups (grows as we add merged clusters)
+  // We'll extend D as needed using a map for merged cluster distances
+  const distMap = new Map<string, number>()
+
+  function getDist(a: number, b: number): number {
+    if (a < n && b < n) return D[a * n + b]!
+    const key = a < b ? `${a},${b}` : `${b},${a}`
+    return distMap.get(key) ?? Infinity
+  }
+
+  function setDist(a: number, b: number, val: number): void {
+    if (a < n && b < n) {
+      D[a * n + b] = val
+      D[b * n + a] = val
+    } else {
+      const key = a < b ? `${a},${b}` : `${b},${a}`
+      distMap.set(key, val)
+    }
+  }
+
+  let nextCluster = n  // merged clusters start at index n
+
+  for (let step = 0; step < n - 1; step++) {
+    // Find closest pair among active clusters
+    let minDist = Infinity
+    let mergeA = -1, mergeB = -1
+    const activeArr = [...active]
+    for (let ii = 0; ii < activeArr.length; ii++) {
+      const ci = activeArr[ii]!
+      for (let jj = ii + 1; jj < activeArr.length; jj++) {
+        const cj = activeArr[jj]!
+        const d = getDist(ci, cj)
+        if (d < minDist) {
+          minDist = d
+          mergeA = ci
+          mergeB = cj
+        }
+      }
+    }
+
+    // Record merge height
+    const height = useSquared ? Math.sqrt(minDist) : minDist
+    merges.push({ a: mergeA, b: mergeB, height })
+    mergeHeights.push(height)
+
+    // New merged cluster
+    const newCluster = nextCluster++
+    sizes[newCluster] = sizes[mergeA]! + sizes[mergeB]!
+    active.delete(mergeA)
+    active.delete(mergeB)
+
+    // Update distances to new cluster via Lance-Williams
+    const ni = sizes[mergeA]!
+    const nj = sizes[mergeB]!
+
+    for (const ck of active) {
+      const nk = sizes[ck]!
+      const dik = getDist(mergeA, ck)
+      const djk = getDist(mergeB, ck)
+      const dij = getDist(mergeA, mergeB)
+
+      let newDist: number
+      if (linkage === 'single') {
+        newDist = 0.5 * dik + 0.5 * djk - 0.5 * Math.abs(dik - djk)
+      } else if (linkage === 'complete') {
+        newDist = 0.5 * dik + 0.5 * djk + 0.5 * Math.abs(dik - djk)
+      } else if (linkage === 'average') {
+        const ai = ni / (ni + nj)
+        const aj = nj / (ni + nj)
+        newDist = ai * dik + aj * djk
+      } else {
+        // ward
+        const nt = ni + nj + nk
+        newDist = ((ni + nk) / nt) * dik + ((nj + nk) / nt) * djk - (nk / nt) * dij
+      }
+      setDist(newCluster, ck, newDist)
+    }
+
+    active.add(newCluster)
+  }
+
+  // Build leaf order via DFS of the dendrogram tree
+  const order = buildLeafOrder(merges, n)
+
+  // Cophenetic correlation
+  const cophCorr = computeCopheneticCorrelation(merges, n, origDist)
+
+  const formatted = `HAC (${linkage}): ${n} observations, cophenetic r = ${roundTo(cophCorr, 3)}`
+
+  return {
+    merges,
+    heights: mergeHeights,
+    order,
+    copheneticCorrelation: cophCorr,
+    formatted,
+  }
+}
+
+/**
+ * Cut a dendrogram at K clusters.
+ *
+ * @param result - HACResult from runHierarchical
+ * @param k - number of clusters desired
+ * @returns 0-indexed cluster labels
+ *
+ * Cross-validate with R:
+ * > cutree(hc, k = 3)  # R is 1-indexed → Carm 0-indexed
+ */
+export function cutTree(
+  result: HACResult,
+  k: number
+): readonly number[] {
+  const nMerges = result.merges.length
+  const n = nMerges + 1
+  if (k < 1 || k > n) throw new Error(`cutTree: k must be in [1, ${n}], got ${k}`)
+
+  // Apply the first (n - k) merges using union-find
+  const parent = new Int32Array(2 * n - 1)
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i
+
+  function find(x: number): number {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]!]!
+      x = parent[x]!
+    }
+    return x
+  }
+
+  const nMergesToApply = n - k
+  for (let s = 0; s < nMergesToApply; s++) {
+    const merge = result.merges[s]!
+    const newCluster = n + s
+    parent[find(merge.a)] = newCluster
+    parent[find(merge.b)] = newCluster
+  }
+
+  // Assign labels: find root of each original observation
+  const rootToLabel = new Map<number, number>()
+  let nextLabel = 0
+  const labels = new Array<number>(n)
+
+  for (let i = 0; i < n; i++) {
+    const root = find(i)
+    let label = rootToLabel.get(root)
+    if (label === undefined) {
+      label = nextLabel++
+      rootToLabel.set(root, label)
+    }
+    labels[i] = label
+  }
+
+  return labels
+}
+
+/**
+ * Cut a dendrogram at a specific height.
+ *
+ * @param result - HACResult from runHierarchical
+ * @param h - height threshold
+ * @returns 0-indexed cluster labels
+ *
+ * Cross-validate with R:
+ * > cutree(hc, h = 5.0)
+ */
+export function cutTreeHeight(
+  result: HACResult,
+  h: number
+): readonly number[] {
+  const nMerges = result.merges.length
+  const n = nMerges + 1
+
+  // Apply all merges with height <= h
+  const parent = new Int32Array(2 * n - 1)
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i
+
+  function find(x: number): number {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]!]!
+      x = parent[x]!
+    }
+    return x
+  }
+
+  for (let s = 0; s < nMerges; s++) {
+    const merge = result.merges[s]!
+    if (merge.height > h) break
+    const newCluster = n + s
+    parent[find(merge.a)] = newCluster
+    parent[find(merge.b)] = newCluster
+  }
+
+  const rootToLabel = new Map<number, number>()
+  let nextLabel = 0
+  const labels = new Array<number>(n)
+
+  for (let i = 0; i < n; i++) {
+    const root = find(i)
+    let label = rootToLabel.get(root)
+    if (label === undefined) {
+      label = nextLabel++
+      rootToLabel.set(root, label)
+    }
+    labels[i] = label
+  }
+
+  return labels
+}
+
+// ─── HAC helpers ─────────────────────────────────────────────────────────
+
+/** Build leaf order via DFS traversal of the dendrogram. */
+function buildLeafOrder(merges: readonly HACMerge[], n: number): number[] {
+  // Build tree structure: children[nodeId] = [left, right]
+  const children = new Map<number, [number, number]>()
+  for (let s = 0; s < merges.length; s++) {
+    const merge = merges[s]!
+    const nodeId = n + s
+    children.set(nodeId, [merge.a, merge.b])
+  }
+
+  const root = n + merges.length - 1
+  const order: number[] = []
+
+  function dfs(node: number): void {
+    const ch = children.get(node)
+    if (ch) {
+      dfs(ch[0])
+      dfs(ch[1])
+    } else {
+      order.push(node)
+    }
+  }
+
+  dfs(root)
+  return order
+}
+
+/**
+ * Compute cophenetic correlation: Pearson(original distances, cophenetic distances).
+ * The cophenetic distance between two points is the merge height at which
+ * they first join the same cluster.
+ */
+function computeCopheneticCorrelation(
+  merges: readonly HACMerge[],
+  n: number,
+  origDist: Float64Array
+): number {
+  // Build union-find to track when pairs merge
+  const parent = new Int32Array(2 * n - 1)
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i
+
+  function find(x: number): number {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]!]!
+      x = parent[x]!
+    }
+    return x
+  }
+
+  // Members of each active cluster node
+  const members = new Map<number, number[]>()
+  for (let i = 0; i < n; i++) members.set(i, [i])
+
+  // Cophenetic distance matrix (flat upper triangle)
+  const nPairs = n * (n - 1) / 2
+  const cophDist = new Float64Array(nPairs)
+  const origFlat = new Float64Array(nPairs)
+
+  // Fill original flat distances
+  let idx = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      origFlat[idx] = origDist[i * n + j]!
+      idx++
+    }
+  }
+
+  // Process merges
+  for (let s = 0; s < merges.length; s++) {
+    const merge = merges[s]!
+    const newCluster = n + s
+    const rootA = find(merge.a)
+    const rootB = find(merge.b)
+    const membersA = members.get(rootA) ?? []
+    const membersB = members.get(rootB) ?? []
+
+    // Set cophenetic distance for all pairs (one from A, one from B)
+    for (const a of membersA) {
+      for (const b of membersB) {
+        const i = Math.min(a, b)
+        const j = Math.max(a, b)
+        // Flat index: sum of (n-1) + (n-2) + ... + (n-i) + (j - i - 1)
+        const flatIdx = i * n - i * (i + 1) / 2 + (j - i - 1)
+        cophDist[flatIdx] = merge.height
+      }
+    }
+
+    // Union
+    parent[rootA] = newCluster
+    parent[rootB] = newCluster
+    members.set(newCluster, [...membersA, ...membersB])
+    members.delete(rootA)
+    members.delete(rootB)
+  }
+
+  // Pearson correlation between origFlat and cophDist
+  return pearsonR(origFlat, cophDist, nPairs)
+}
+
+/** Pearson correlation between two Float64Arrays. */
+function pearsonR(x: Float64Array, y: Float64Array, n: number): number {
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0
+  for (let i = 0; i < n; i++) {
+    sx += x[i]!
+    sy += y[i]!
+    sxx += x[i]! * x[i]!
+    syy += y[i]! * y[i]!
+    sxy += x[i]! * y[i]!
+  }
+  const num = n * sxy - sx * sy
+  const den = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy))
+  return den > 0 ? num / den : 0
+}

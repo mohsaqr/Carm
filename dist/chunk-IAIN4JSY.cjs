@@ -1271,28 +1271,100 @@ function regressionDiagnostics(result, predictors) {
   return { leverage, cooksDistance, standardizedResiduals, vif };
 }
 
-// src/stats/pca.ts
-function standardize(data, scale = true) {
-  const k = data[0].length;
-  const colMeans = Array.from({ length: k }, (_, j) => chunkAVJH2SAO_cjs.mean(data.map((row) => row[j] ?? 0)));
-  const colSDs = Array.from({ length: k }, (_, j) => chunkAVJH2SAO_cjs.sd(data.map((row) => row[j] ?? 0)));
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
-    data.map(
-      (row) => row.map((v, j) => {
-        const centered = v - (colMeans[j] ?? 0);
-        const s = colSDs[j] ?? 1;
-        return scale && s !== 0 ? centered / s : centered;
-      })
-    )
+// src/stats/preprocess.ts
+function preprocessData(data, options) {
+  const n = data.length;
+  if (n === 0) throw new Error("preprocessData: data cannot be empty");
+  const d = data[0].length;
+  const method = options?.method ?? "none";
+  if (method === "log") {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < d; j++) {
+        if (data[i][j] <= 0) {
+          throw new Error(`preprocessData: log requires all values > 0, found ${data[i][j]} at row ${i}, col ${j}`);
+        }
+      }
+    }
+    const transformed = data.map((row) => row.map((v) => Math.log(v)));
+    const colMeans2 = computeColMeans(transformed, n, d);
+    const colSDs2 = computeColSDs(transformed, colMeans2, n, d);
+    return { data: transformed, colMeans: colMeans2, colSDs: colSDs2, method, centered: false, scaled: false };
+  }
+  if (method === "sqrt") {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < d; j++) {
+        if (data[i][j] < 0) {
+          throw new Error(`preprocessData: sqrt requires all values >= 0, found ${data[i][j]} at row ${i}, col ${j}`);
+        }
+      }
+    }
+    const transformed = data.map((row) => row.map((v) => Math.sqrt(v)));
+    const colMeans2 = computeColMeans(transformed, n, d);
+    const colSDs2 = computeColSDs(transformed, colMeans2, n, d);
+    return { data: transformed, colMeans: colMeans2, colSDs: colSDs2, method, centered: false, scaled: false };
+  }
+  const colMeans = computeColMeans(data, n, d);
+  const colSDs = computeColSDs(data, colMeans, n, d);
+  if (method === "none") {
+    return { data, colMeans, colSDs, method, centered: false, scaled: false };
+  }
+  if (method === "center") {
+    const centered = data.map(
+      (row) => row.map((v, j) => v - colMeans[j])
+    );
+    return { data: centered, colMeans, colSDs, method, centered: true, scaled: false };
+  }
+  const safeSDs = colSDs.map((s) => s === 0 ? 1 : s);
+  const standardized = data.map(
+    (row) => row.map((v, j) => (v - colMeans[j]) / safeSDs[j])
   );
-  return { X, colMeans, colSDs };
+  return { data: standardized, colMeans, colSDs: safeSDs, method, centered: true, scaled: true };
 }
+function inverseTransform(data, params) {
+  const { method, colMeans, colSDs } = params;
+  if (method === "none") return data;
+  if (method === "log") {
+    return data.map((row) => row.map((v) => Math.exp(v)));
+  }
+  if (method === "sqrt") {
+    return data.map((row) => row.map((v) => v * v));
+  }
+  if (method === "center") {
+    return data.map(
+      (row) => row.map((v, j) => v + colMeans[j])
+    );
+  }
+  return data.map(
+    (row) => row.map((v, j) => v * colSDs[j] + colMeans[j])
+  );
+}
+function computeColMeans(data, n, d) {
+  return Array.from({ length: d }, (_, j) => {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += data[i][j];
+    return sum / n;
+  });
+}
+function computeColSDs(data, colMeans, n, d) {
+  if (n < 2) return new Array(d).fill(0);
+  return Array.from({ length: d }, (_, j) => {
+    let ss = 0;
+    for (let i = 0; i < n; i++) {
+      const diff = data[i][j] - colMeans[j];
+      ss += diff * diff;
+    }
+    return Math.sqrt(ss / (n - 1));
+  });
+}
+
+// src/stats/pca.ts
 function runPCA(data, nComponents, scale = true) {
   if (data.length < 2) throw new Error("runPCA: need at least 2 observations");
   const n = data.length;
   const k = data[0].length;
   if (k < 2) throw new Error("runPCA: need at least 2 variables");
-  const { X } = standardize(data, scale);
+  const pp = preprocessData(data, { method: scale ? "standardize" : "center" });
+  const X = chunkBL33AEKS_cjs.Matrix.fromArray(pp.data);
   const Xs = X.scale(1 / Math.sqrt(n - 1));
   const { U: _U, S, V } = Xs.svd();
   const nc = nComponents ?? Math.min(n - 1, k);
@@ -2512,6 +2584,396 @@ function predictKMeans(data, centroids) {
     return best;
   });
 }
+function euclideanDistMatrix(data) {
+  const n = data.length;
+  const d = data[0]?.length ?? 0;
+  const dist = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      let sq = 0;
+      for (let dim = 0; dim < d; dim++) {
+        const diff = data[i][dim] - data[j][dim];
+        sq += diff * diff;
+      }
+      const val = Math.sqrt(sq);
+      dist[i * n + j] = val;
+      dist[j * n + i] = val;
+    }
+  }
+  return dist;
+}
+function silhouetteScores(data, labels) {
+  const n = data.length;
+  const dist = euclideanDistMatrix(data);
+  const labelSet = /* @__PURE__ */ new Set();
+  for (let i = 0; i < n; i++) {
+    if (labels[i] >= 0) labelSet.add(labels[i]);
+  }
+  const uniqueLabels = [...labelSet].sort((a, b) => a - b);
+  const nClusters = uniqueLabels.length;
+  if (nClusters < 2) {
+    return { scores: new Array(n).fill(0), mean: 0 };
+  }
+  const scores = new Array(n).fill(NaN);
+  let sumSil = 0;
+  let countNonNoise = 0;
+  for (let i = 0; i < n; i++) {
+    const ci = labels[i];
+    if (ci < 0) continue;
+    let aSum = 0, aCount = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === i || labels[j] !== ci) continue;
+      aSum += dist[i * n + j];
+      aCount++;
+    }
+    const ai = aCount > 0 ? aSum / aCount : 0;
+    let bi = Infinity;
+    for (const cl of uniqueLabels) {
+      if (cl === ci) continue;
+      let bSum = 0, bCount = 0;
+      for (let j = 0; j < n; j++) {
+        if (labels[j] !== cl) continue;
+        bSum += dist[i * n + j];
+        bCount++;
+      }
+      if (bCount > 0) {
+        const meanDist = bSum / bCount;
+        if (meanDist < bi) bi = meanDist;
+      }
+    }
+    const maxAB = Math.max(ai, bi);
+    scores[i] = maxAB > 0 ? (bi - ai) / maxAB : 0;
+    sumSil += scores[i];
+    countNonNoise++;
+  }
+  return {
+    scores,
+    mean: countNonNoise > 0 ? sumSil / countNonNoise : 0
+  };
+}
+function runDBSCAN(data, options) {
+  const n = data.length;
+  if (n === 0) throw new Error("runDBSCAN: data cannot be empty");
+  const { eps, minPts } = options;
+  if (eps <= 0) throw new Error("runDBSCAN: eps must be > 0");
+  if (minPts < 1) throw new Error("runDBSCAN: minPts must be >= 1");
+  const dist = euclideanDistMatrix(data);
+  const neighbors = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const nb = [];
+    for (let j = 0; j < n; j++) {
+      if (dist[i * n + j] <= eps) nb.push(j);
+    }
+    neighbors[i] = nb;
+  }
+  const isCore = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (neighbors[i].length >= minPts) isCore[i] = 1;
+  }
+  const labels = new Int32Array(n).fill(-1);
+  let clusterId = 0;
+  for (let i = 0; i < n; i++) {
+    if (!isCore[i] || labels[i] !== -1) continue;
+    const queue = [i];
+    labels[i] = clusterId;
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head];
+      head++;
+      for (const nb of neighbors[current]) {
+        if (labels[nb] === -1) {
+          labels[nb] = clusterId;
+          if (isCore[nb]) queue.push(nb);
+        }
+      }
+    }
+    clusterId++;
+  }
+  const pointTypes = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (isCore[i]) {
+      pointTypes[i] = "core";
+    } else if (labels[i] >= 0) {
+      pointTypes[i] = "border";
+    } else {
+      pointTypes[i] = "noise";
+    }
+  }
+  const nClusters = clusterId;
+  const clusterSizes = new Array(nClusters).fill(0);
+  let nNoise = 0;
+  for (let i = 0; i < n; i++) {
+    if (labels[i] >= 0) clusterSizes[labels[i]]++;
+    else nNoise++;
+  }
+  const sil = nClusters >= 2 ? silhouetteScores(data, Array.from(labels)) : { scores: new Array(n).fill(NaN), mean: NaN };
+  const formatted = `DBSCAN (eps = ${chunkAVJH2SAO_cjs.roundTo(eps, 3)}, minPts = ${minPts}): ${nClusters} clusters, ${nNoise} noise points, silhouette = ${isNaN(sil.mean) ? "N/A" : chunkAVJH2SAO_cjs.roundTo(sil.mean, 3)}`;
+  return {
+    labels: Array.from(labels),
+    pointTypes,
+    nClusters,
+    nNoise,
+    clusterSizes,
+    silhouette: sil,
+    formatted
+  };
+}
+function kDistancePlot(data, k) {
+  const n = data.length;
+  if (k < 1 || k >= n) throw new Error(`kDistancePlot: k must be in [1, n-1], got ${k}`);
+  const dist = euclideanDistMatrix(data);
+  const kDists = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const dists = new Array(n - 1);
+    let idx = 0;
+    for (let j = 0; j < n; j++) {
+      if (j !== i) dists[idx++] = dist[i * n + j];
+    }
+    dists.sort((a, b) => a - b);
+    kDists[i] = dists[k - 1];
+  }
+  return kDists.sort((a, b) => a - b);
+}
+function runHierarchical(data, options) {
+  const n = data.length;
+  if (n < 2) throw new Error("runHierarchical: need at least 2 observations");
+  const linkage = options?.linkage ?? "ward";
+  const origDist = euclideanDistMatrix(data);
+  const useSquared = linkage === "ward";
+  const D = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const val = useSquared ? origDist[i * n + j] * origDist[i * n + j] : origDist[i * n + j];
+      D[i * n + j] = val;
+      D[j * n + i] = val;
+    }
+  }
+  const sizes = new Float64Array(2 * n - 1);
+  for (let i = 0; i < n; i++) sizes[i] = 1;
+  const active = /* @__PURE__ */ new Set();
+  for (let i = 0; i < n; i++) active.add(i);
+  const merges = [];
+  const mergeHeights = [];
+  const distMap = /* @__PURE__ */ new Map();
+  function getDist(a, b) {
+    if (a < n && b < n) return D[a * n + b];
+    const key = a < b ? `${a},${b}` : `${b},${a}`;
+    return distMap.get(key) ?? Infinity;
+  }
+  function setDist(a, b, val) {
+    if (a < n && b < n) {
+      D[a * n + b] = val;
+      D[b * n + a] = val;
+    } else {
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      distMap.set(key, val);
+    }
+  }
+  let nextCluster = n;
+  for (let step = 0; step < n - 1; step++) {
+    let minDist = Infinity;
+    let mergeA = -1, mergeB = -1;
+    const activeArr = [...active];
+    for (let ii = 0; ii < activeArr.length; ii++) {
+      const ci = activeArr[ii];
+      for (let jj = ii + 1; jj < activeArr.length; jj++) {
+        const cj = activeArr[jj];
+        const d = getDist(ci, cj);
+        if (d < minDist) {
+          minDist = d;
+          mergeA = ci;
+          mergeB = cj;
+        }
+      }
+    }
+    const height = useSquared ? Math.sqrt(minDist) : minDist;
+    merges.push({ a: mergeA, b: mergeB, height });
+    mergeHeights.push(height);
+    const newCluster = nextCluster++;
+    sizes[newCluster] = sizes[mergeA] + sizes[mergeB];
+    active.delete(mergeA);
+    active.delete(mergeB);
+    const ni = sizes[mergeA];
+    const nj = sizes[mergeB];
+    for (const ck of active) {
+      const nk = sizes[ck];
+      const dik = getDist(mergeA, ck);
+      const djk = getDist(mergeB, ck);
+      const dij = getDist(mergeA, mergeB);
+      let newDist;
+      if (linkage === "single") {
+        newDist = 0.5 * dik + 0.5 * djk - 0.5 * Math.abs(dik - djk);
+      } else if (linkage === "complete") {
+        newDist = 0.5 * dik + 0.5 * djk + 0.5 * Math.abs(dik - djk);
+      } else if (linkage === "average") {
+        const ai = ni / (ni + nj);
+        const aj = nj / (ni + nj);
+        newDist = ai * dik + aj * djk;
+      } else {
+        const nt = ni + nj + nk;
+        newDist = (ni + nk) / nt * dik + (nj + nk) / nt * djk - nk / nt * dij;
+      }
+      setDist(newCluster, ck, newDist);
+    }
+    active.add(newCluster);
+  }
+  const order = buildLeafOrder(merges, n);
+  const cophCorr = computeCopheneticCorrelation(merges, n, origDist);
+  const formatted = `HAC (${linkage}): ${n} observations, cophenetic r = ${chunkAVJH2SAO_cjs.roundTo(cophCorr, 3)}`;
+  return {
+    merges,
+    heights: mergeHeights,
+    order,
+    copheneticCorrelation: cophCorr,
+    formatted
+  };
+}
+function cutTree(result, k) {
+  const nMerges = result.merges.length;
+  const n = nMerges + 1;
+  if (k < 1 || k > n) throw new Error(`cutTree: k must be in [1, ${n}], got ${k}`);
+  const parent = new Int32Array(2 * n - 1);
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i;
+  function find(x) {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  }
+  const nMergesToApply = n - k;
+  for (let s = 0; s < nMergesToApply; s++) {
+    const merge = result.merges[s];
+    const newCluster = n + s;
+    parent[find(merge.a)] = newCluster;
+    parent[find(merge.b)] = newCluster;
+  }
+  const rootToLabel = /* @__PURE__ */ new Map();
+  let nextLabel = 0;
+  const labels = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    let label = rootToLabel.get(root);
+    if (label === void 0) {
+      label = nextLabel++;
+      rootToLabel.set(root, label);
+    }
+    labels[i] = label;
+  }
+  return labels;
+}
+function cutTreeHeight(result, h) {
+  const nMerges = result.merges.length;
+  const n = nMerges + 1;
+  const parent = new Int32Array(2 * n - 1);
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i;
+  function find(x) {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  }
+  for (let s = 0; s < nMerges; s++) {
+    const merge = result.merges[s];
+    if (merge.height > h) break;
+    const newCluster = n + s;
+    parent[find(merge.a)] = newCluster;
+    parent[find(merge.b)] = newCluster;
+  }
+  const rootToLabel = /* @__PURE__ */ new Map();
+  let nextLabel = 0;
+  const labels = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    let label = rootToLabel.get(root);
+    if (label === void 0) {
+      label = nextLabel++;
+      rootToLabel.set(root, label);
+    }
+    labels[i] = label;
+  }
+  return labels;
+}
+function buildLeafOrder(merges, n) {
+  const children = /* @__PURE__ */ new Map();
+  for (let s = 0; s < merges.length; s++) {
+    const merge = merges[s];
+    const nodeId = n + s;
+    children.set(nodeId, [merge.a, merge.b]);
+  }
+  const root = n + merges.length - 1;
+  const order = [];
+  function dfs(node) {
+    const ch = children.get(node);
+    if (ch) {
+      dfs(ch[0]);
+      dfs(ch[1]);
+    } else {
+      order.push(node);
+    }
+  }
+  dfs(root);
+  return order;
+}
+function computeCopheneticCorrelation(merges, n, origDist) {
+  const parent = new Int32Array(2 * n - 1);
+  for (let i = 0; i < 2 * n - 1; i++) parent[i] = i;
+  function find(x) {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  }
+  const members = /* @__PURE__ */ new Map();
+  for (let i = 0; i < n; i++) members.set(i, [i]);
+  const nPairs = n * (n - 1) / 2;
+  const cophDist = new Float64Array(nPairs);
+  const origFlat = new Float64Array(nPairs);
+  let idx = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      origFlat[idx] = origDist[i * n + j];
+      idx++;
+    }
+  }
+  for (let s = 0; s < merges.length; s++) {
+    const merge = merges[s];
+    const newCluster = n + s;
+    const rootA = find(merge.a);
+    const rootB = find(merge.b);
+    const membersA = members.get(rootA) ?? [];
+    const membersB = members.get(rootB) ?? [];
+    for (const a of membersA) {
+      for (const b of membersB) {
+        const i = Math.min(a, b);
+        const j = Math.max(a, b);
+        const flatIdx = i * n - i * (i + 1) / 2 + (j - i - 1);
+        cophDist[flatIdx] = merge.height;
+      }
+    }
+    parent[rootA] = newCluster;
+    parent[rootB] = newCluster;
+    members.set(newCluster, [...membersA, ...membersB]);
+    members.delete(rootA);
+    members.delete(rootB);
+  }
+  return pearsonR(origFlat, cophDist, nPairs);
+}
+function pearsonR(x, y, n) {
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += x[i];
+    sy += y[i];
+    sxx += x[i] * x[i];
+    syy += y[i] * y[i];
+    sxy += x[i] * y[i];
+  }
+  const num = n * sxy - sx * sy;
+  const den = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+  return den > 0 ? num / den : 0;
+}
 
 exports.analyze = analyze;
 exports.chiSquareTest = chiSquareTest;
@@ -2522,11 +2984,14 @@ exports.cohensDPaired = cohensDPaired;
 exports.computeBLUPs = computeBLUPs;
 exports.contingencyTable = contingencyTable;
 exports.correlationMatrix = correlationMatrix;
+exports.cutTree = cutTree;
+exports.cutTreeHeight = cutTreeHeight;
 exports.describe = describe;
 exports.detectFieldType = detectFieldType;
 exports.dunnTest = dunnTest;
 exports.etaSquared = etaSquared;
 exports.etaSquaredKW = etaSquaredKW;
+exports.euclideanDistMatrix = euclideanDistMatrix;
 exports.findBestGMM = findBestGMM;
 exports.fisherExactTest = fisherExactTest;
 exports.fitGMM = fitGMM;
@@ -2539,6 +3004,8 @@ exports.friedmanTest = friedmanTest;
 exports.gamesHowell = gamesHowell;
 exports.goodnessOfFit = goodnessOfFit;
 exports.hedgesG = hedgesG;
+exports.inverseTransform = inverseTransform;
+exports.kDistancePlot = kDistancePlot;
 exports.kendallTau = kendallTau;
 exports.kruskalWallis = kruskalWallis;
 exports.kurtosis = kurtosis;
@@ -2554,14 +3021,18 @@ exports.phiCoefficient = phiCoefficient;
 exports.polynomialRegression = polynomialRegression;
 exports.predictGMM = predictGMM;
 exports.predictKMeans = predictKMeans;
+exports.preprocessData = preprocessData;
 exports.rankBiserial = rankBiserial;
 exports.rankBiserialWilcoxon = rankBiserialWilcoxon;
 exports.regressionDiagnostics = regressionDiagnostics;
+exports.runDBSCAN = runDBSCAN;
+exports.runHierarchical = runHierarchical;
 exports.runKMeans = runKMeans;
 exports.runLMM = runLMM;
 exports.runPCA = runPCA;
 exports.screeData = screeData;
 exports.shapiroWilk = shapiroWilk;
+exports.silhouetteScores = silhouetteScores;
 exports.skewness = skewness;
 exports.spearmanCorrelation = spearmanCorrelation;
 exports.tTestIndependent = tTestIndependent;
@@ -2570,5 +3041,5 @@ exports.trimmedMean = trimmedMean;
 exports.tukeyHSD = tukeyHSD;
 exports.varimaxRotation = varimaxRotation;
 exports.wilcoxonSignedRank = wilcoxonSignedRank;
-//# sourceMappingURL=chunk-QIQ2A5TS.cjs.map
-//# sourceMappingURL=chunk-QIQ2A5TS.cjs.map
+//# sourceMappingURL=chunk-IAIN4JSY.cjs.map
+//# sourceMappingURL=chunk-IAIN4JSY.cjs.map

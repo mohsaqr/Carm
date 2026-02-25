@@ -1,3 +1,35 @@
+### 2026-02-25 — DBSCAN, Hierarchical Clustering & Preprocessing
+
+**Carm — new files:**
+- `src/stats/preprocess.ts`: `preprocessData()` (center/standardize/log/sqrt) and `inverseTransform()`. Replaces PCA's internal standardize.
+- `tests/stats/preprocess.test.ts`: 15 tests, cross-validated against R `scale()`.
+- `tests/stats/dbscan.test.ts`: 20 tests, cross-validated against R `dbscan::dbscan()`.
+- `tests/stats/hac.test.ts`: 29 tests, cross-validated against R `hclust()` for all 4 linkages (ward/single/complete/average). Heights match R to 1e-10.
+- `tests/r_dbscan_reference.R` + `.json`: R reference data for DBSCAN.
+- `tests/r_hac_reference.R` + `.json`: R reference data for HAC (4 linkages + cophenetic + silhouette).
+
+**Carm — modified:**
+- `src/stats/clustering.ts` (~600 lines added): `euclideanDistMatrix()`, `silhouetteScores()`, `runDBSCAN()`, `kDistancePlot()`, `runHierarchical()` (Lance-Williams), `cutTree()`, `cutTreeHeight()`. Types: `PointType`, `DBSCANOptions/Result`, `LinkageMethod`, `HACOptions/Merge/Result`.
+- `src/stats/pca.ts`: Replaced internal `standardize()` with `preprocessData()`.
+- `src/stats/index.ts`: Exported preprocess module.
+- Build: 496/496 tests passing, `npm run build` clean.
+
+**Aistatia — 12 files modified:**
+- `src/data/types.ts`: Added `clustering-dbscan` and `clustering-hierarchical` result kinds.
+- `src/state.ts`: Added `dbscanEps`, `dbscanMinPts`, `hacLinkage`, `clusterPreprocess`.
+- `src/analysis/registry.ts`: Added `dbscan` and `hierarchical` test defs.
+- `src/views/wizard-defs.ts`: DBSCAN wizard (eps, minPts, preprocess), Hierarchical wizard (K, linkage, preprocess). Added preprocess to existing GMM/KMeans wizards. Added `dendrogram` plot type.
+- `src/views/modal.ts`: Wired 4 new fields.
+- `src/main.ts`: Pass new fields to setState.
+- `src/analysis/runner.ts`: DBSCAN and Hierarchical dispatch with preprocessing.
+- `src/results/tables.ts`: `renderDBSCANProfileTable()`, `renderHierarchicalProfileTable()`.
+- `src/views/results.ts`: Full rendering flows for both new kinds.
+- `src/results/apa-banner.ts`: APA strings for DBSCAN and Hierarchical.
+- `src/results/copy-paper.ts`: Copy-for-paper extraction for both.
+- `src/results/plot-panel.ts`: `ClusterPlotData` adapter, unified cluster plot rendering, dendrogram placeholder.
+- `src/interpret/rules.ts`: Narrative generation for DBSCAN and Hierarchical.
+- Build: `tsc --noEmit` clean, 0 errors.
+
 ### 2026-02-25 — Fix entropy normalization (mclust convention)
 
 - `JStats/src/stats/clustering.ts`: Split `computeEntropy` into `computeRawEntropy` (for ICL) and `computeNormalizedEntropy` (for diagnostics.entropy). Formula: `1 - E/(N*log(K))`, range [0,1], matches mclust. Applied to GMM, LCA, LTA.

@@ -3,29 +3,10 @@
  * Also provides varimax rotation and factor loading computation.
  */
 
-import { mean as _mean, sd as _sd, roundTo } from '../core/math.js'
+import { roundTo } from '../core/math.js'
 import { Matrix } from '../core/matrix.js'
 import type { PCAResult } from '../core/types.js'
-
-// ─── Standardize matrix ───────────────────────────────────────────────────
-
-/** Center and optionally scale each column. */
-function standardize(data: readonly (readonly number[])[], scale = true): { X: Matrix; colMeans: number[]; colSDs: number[] } {
-  const k = data[0]!.length
-  const colMeans = Array.from({ length: k }, (_, j) => _mean(data.map(row => row[j] ?? 0)))
-  const colSDs = Array.from({ length: k }, (_, j) => _sd(data.map(row => row[j] ?? 0)))
-
-  const X = Matrix.fromArray(
-    data.map(row =>
-      row.map((v, j) => {
-        const centered = v - (colMeans[j] ?? 0)
-        const s = colSDs[j] ?? 1
-        return scale && s !== 0 ? centered / s : centered
-      })
-    )
-  )
-  return { X, colMeans, colSDs }
-}
+import { preprocessData } from './preprocess.js'
 
 // ─── PCA via SVD ──────────────────────────────────────────────────────────
 
@@ -47,7 +28,8 @@ export function runPCA(
   const k = data[0]!.length
   if (k < 2) throw new Error('runPCA: need at least 2 variables')
 
-  const { X } = standardize(data, scale)
+  const pp = preprocessData(data, { method: scale ? 'standardize' : 'center' })
+  const X = Matrix.fromArray(pp.data as number[][])
 
   // Scale by 1/sqrt(n-1) so SVD gives principal components equivalent to eigen(cov)
   const Xs = X.scale(1 / Math.sqrt(n - 1))

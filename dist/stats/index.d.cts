@@ -655,5 +655,203 @@ declare function fitGMMRange(data: readonly (readonly number[])[], kRange: reado
  */
 declare function fitKMeansRange(data: readonly (readonly number[])[], kRange: readonly number[]): readonly KMeansRangeEntry[];
 declare function predictKMeans(data: readonly (readonly number[])[], centroids: readonly (readonly number[])[]): readonly number[];
+/**
+ * Compute Euclidean distance matrix (N × N, row-major Float64Array).
+ *
+ * @param data - N × D numeric data matrix
+ * @returns flat Float64Array of size N*N with dist[i*N+j] = euclidean(i,j)
+ *
+ * Cross-validate with R:
+ * > as.matrix(dist(data))
+ */
+declare function euclideanDistMatrix(data: readonly (readonly number[])[]): Float64Array;
+/**
+ * Compute silhouette scores for each point (excluding noise labels = -1).
+ *
+ * For each non-noise point i:
+ *   a(i) = mean dist to points in same cluster
+ *   b(i) = min over other clusters of mean dist to that cluster
+ *   s(i) = (b(i) - a(i)) / max(a(i), b(i))
+ *
+ * @param data - N × D data matrix
+ * @param labels - cluster assignments (0-indexed, -1 = noise)
+ * @returns scores per point (NaN for noise) and mean silhouette (excluding noise)
+ *
+ * Cross-validate with R:
+ * > library(cluster)
+ * > silhouette(labels, dist(data))
+ */
+declare function silhouetteScores(data: readonly (readonly number[])[], labels: readonly number[]): {
+    readonly scores: readonly number[];
+    readonly mean: number;
+};
+type PointType = 'core' | 'border' | 'noise';
+interface DBSCANOptions {
+    readonly eps: number;
+    readonly minPts: number;
+    readonly seed?: number;
+    readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt';
+}
+interface DBSCANResult {
+    readonly labels: readonly number[];
+    readonly pointTypes: readonly PointType[];
+    readonly nClusters: number;
+    readonly nNoise: number;
+    readonly clusterSizes: readonly number[];
+    readonly silhouette: {
+        readonly scores: readonly number[];
+        readonly mean: number;
+    };
+    readonly formatted: string;
+}
+/**
+ * DBSCAN clustering (Ester et al. 1996).
+ *
+ * Algorithm:
+ * 1. For each point, compute eps-neighborhood via distance scan.
+ * 2. Core points: |neighbors| >= minPts. BFS expansion from cores.
+ * 3. Border points: not core, but within eps of a core point.
+ * 4. Noise: neither core nor border.
+ *
+ * Labels: -1 = noise, 0, 1, 2, ... = cluster IDs (0-indexed).
+ *
+ * @param data - N × D numeric data matrix
+ * @param options - DBSCAN configuration (eps, minPts)
+ * @returns DBSCANResult with labels, point types, silhouette
+ *
+ * Cross-validate with R:
+ * > library(dbscan)
+ * > db <- dbscan(data, eps = 1.5, minPts = 5)
+ * > db$cluster  # R: 0=noise, 1-indexed → Carm: -1=noise, 0-indexed
+ */
+declare function runDBSCAN(data: readonly (readonly number[])[], options: DBSCANOptions): DBSCANResult;
+/**
+ * Compute k-distance plot data for epsilon estimation.
+ *
+ * For each point, compute the distance to its k-th nearest neighbor,
+ * then return these distances sorted in ascending order.
+ * The "elbow" in the sorted plot suggests a good epsilon.
+ *
+ * @param data - N × D numeric data matrix
+ * @param k - neighbor index (typically minPts)
+ * @returns sorted k-NN distances (ascending)
+ *
+ * Cross-validate with R:
+ * > library(dbscan)
+ * > kNNdist(data, k = 5)  # sorted externally
+ */
+declare function kDistancePlot(data: readonly (readonly number[])[], k: number): readonly number[];
+type LinkageMethod = 'single' | 'complete' | 'average' | 'ward';
+interface HACOptions {
+    readonly linkage?: LinkageMethod;
+    readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt';
+}
+interface HACMerge {
+    readonly a: number;
+    readonly b: number;
+    readonly height: number;
+}
+interface HACResult {
+    readonly merges: readonly HACMerge[];
+    readonly heights: readonly number[];
+    readonly order: readonly number[];
+    readonly copheneticCorrelation: number;
+    readonly formatted: string;
+}
+/**
+ * Hierarchical agglomerative clustering using Lance-Williams recurrence.
+ *
+ * Linkage methods and their Lance-Williams coefficients:
+ * | Method   | α_i           | α_j           | β        | γ    |
+ * |----------|---------------|---------------|----------|------|
+ * | single   | 0.5           | 0.5           | 0        | -0.5 |
+ * | complete | 0.5           | 0.5           | 0        | 0.5  |
+ * | average  | n_i/(n_i+n_j) | n_j/(n_i+n_j) | 0        | 0    |
+ * | ward     | (n_i+n_k)/N_t | (n_j+n_k)/N_t | -n_k/N_t | 0    |
+ *
+ * Ward's method uses squared Euclidean distances internally.
+ * Final merge heights are sqrt(distance) to match R's hclust(method="ward.D2").
+ *
+ * @param data - N × D numeric data matrix
+ * @param options - linkage method (default: ward)
+ * @returns HACResult with merges, heights, leaf order, cophenetic correlation
+ *
+ * Cross-validate with R:
+ * > hc <- hclust(dist(data), method = "ward.D2")
+ * > hc$merge; hc$height; hc$order
+ * > cor(cophenetic(hc), dist(data))
+ */
+declare function runHierarchical(data: readonly (readonly number[])[], options?: HACOptions): HACResult;
+/**
+ * Cut a dendrogram at K clusters.
+ *
+ * @param result - HACResult from runHierarchical
+ * @param k - number of clusters desired
+ * @returns 0-indexed cluster labels
+ *
+ * Cross-validate with R:
+ * > cutree(hc, k = 3)  # R is 1-indexed → Carm 0-indexed
+ */
+declare function cutTree(result: HACResult, k: number): readonly number[];
+/**
+ * Cut a dendrogram at a specific height.
+ *
+ * @param result - HACResult from runHierarchical
+ * @param h - height threshold
+ * @returns 0-indexed cluster labels
+ *
+ * Cross-validate with R:
+ * > cutree(hc, h = 5.0)
+ */
+declare function cutTreeHeight(result: HACResult, h: number): readonly number[];
 
-export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type GMMOptions, type GMMRangeEntry, type GMMResult, type KMeansOptions, type KMeansRangeEntry, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runKMeans, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+/**
+ * Data preprocessing for clustering and PCA.
+ *
+ * Provides center, standardize, log, and sqrt transforms with inverse.
+ * Uses mean/sd from core/math.ts.
+ *
+ * Cross-validate with R:
+ * > scale(data)                      # standardize
+ * > scale(data, scale = FALSE)       # center only
+ * > log(data)                        # log transform
+ * > sqrt(data)                       # sqrt transform
+ */
+type PreprocessMethod = 'none' | 'center' | 'standardize' | 'log' | 'sqrt';
+interface PreprocessOptions {
+    readonly method?: PreprocessMethod;
+}
+interface PreprocessResult {
+    readonly data: readonly (readonly number[])[];
+    readonly colMeans: readonly number[];
+    readonly colSDs: readonly number[];
+    readonly method: PreprocessMethod;
+    readonly centered: boolean;
+    readonly scaled: boolean;
+}
+/**
+ * Preprocess a numeric data matrix.
+ *
+ * - 'none':        pass-through (colMeans/colSDs still computed for reference)
+ * - 'center':      subtract column mean (R: scale(x, scale=FALSE))
+ * - 'standardize': subtract mean, divide by SD (R: scale(x))
+ * - 'log':         natural log (requires all values > 0)
+ * - 'sqrt':        square root (requires all values >= 0)
+ *
+ * Zero-variance columns get SD = 1 to avoid division by zero.
+ *
+ * @param data - N × D numeric matrix
+ * @param options - preprocessing configuration
+ * @returns PreprocessResult with transformed data and parameters
+ */
+declare function preprocessData(data: readonly (readonly number[])[], options?: PreprocessOptions): PreprocessResult;
+/**
+ * Inverse transform preprocessed data back to the original scale.
+ *
+ * @param data - N × D preprocessed matrix
+ * @param params - the PreprocessResult containing transform parameters
+ * @returns data in original scale
+ */
+declare function inverseTransform(data: readonly (readonly number[])[], params: PreprocessResult): readonly (readonly number[])[];
+
+export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type DBSCANOptions, type DBSCANResult, type GMMOptions, type GMMRangeEntry, type GMMResult, type HACMerge, type HACOptions, type HACResult, type KMeansOptions, type KMeansRangeEntry, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type LinkageMethod, type PointType, type PreprocessMethod, type PreprocessOptions, type PreprocessResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, cutTree, cutTreeHeight, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, euclideanDistMatrix, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kDistancePlot, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runDBSCAN, runHierarchical, runKMeans, runLMM, runPCA, screeData, shapiroWilk, silhouetteScores, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
