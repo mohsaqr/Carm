@@ -24,11 +24,16 @@ import { fitGMM, fitLCA, runKMeans } from '../../src/stats/clustering.js'
 
 // Load R reference
 const refPath = join(__dirname, '..', 'r_clustering_reference.json')
+interface GMMRef {
+  model: string; k: number; weights: number[]; means: number[][]
+  logLikelihood: number; bic: number; classification: number[]
+  entropy: number; caseEntropy: number[]; avepp: number[]; icl: number
+}
 const ref = JSON.parse(readFileSync(refPath, 'utf-8')) as {
   gmm_data: number[][]
-  gmm_vvv: { model: string; k: number; weights: number[]; means: number[][]; logLikelihood: number; bic: number; classification: number[] }
-  gmm_eii: { model: string; k: number; weights: number[]; means: number[][]; logLikelihood: number; bic: number; classification: number[] }
-  gmm_vvi: { model: string; k: number; weights: number[]; means: number[][]; logLikelihood: number; bic: number; classification: number[] }
+  gmm_vvv: GMMRef
+  gmm_eii: GMMRef
+  gmm_vvi: GMMRef
   lca_data: number[][]
   lca: { k: number; priorWeights: number[]; rho: number[][]; logLikelihood: number; bic: number; aic: number; df: number; classification: number[] }
   kmeans: { k: number; centroids: number[][]; labels: number[]; inertia: number; iterations: number }
@@ -306,4 +311,130 @@ describe('KMeans cross-validation with R stats::kmeans', () => {
     )
     expect(agreement).toBeGreaterThanOrEqual(0.95)
   })
+})
+
+// ═════════════════════════════════════════════════════════════════════════
+// Entropy Cross-Validation with R mclust
+//
+// R formula (mclust convention):
+//   E = 1 + sum(probs * log(probs)) / (n * log(K))
+//   Ei = 1 + rowSums(probs * log(probs)) / log(K)
+//   sum(Ei) / n = E
+//   AvePP[k] = mean(MAP posterior for obs assigned to k)
+//   ICL = BIC + 2 * rawEntropy  (where rawEntropy = -sum(probs * log(probs)))
+// ═════════════════════════════════════════════════════════════════════════
+
+describe('Entropy cross-validation with R mclust', () => {
+  const data = ref.gmm_data
+
+  // Helper: compute case-specific entropy from posteriors
+  function caseEntropy(posteriors: number[][], k: number): number[] {
+    return posteriors.map(row => {
+      let rowSum = 0
+      for (const p of row) {
+        if (p > 1e-300) rowSum += p * Math.log(p)
+      }
+      return 1 + rowSum / Math.log(k)
+    })
+  }
+
+  // Helper: compute AvePP from posteriors
+  function computeAvePP(posteriors: number[][], k: number): number[] {
+    const sums = new Array(k).fill(0)
+    const counts = new Array(k).fill(0)
+    for (const row of posteriors) {
+      let maxP = -1, best = 0
+      for (let j = 0; j < k; j++) {
+        if (row[j]! > maxP) { maxP = row[j]!; best = j }
+      }
+      sums[best] += maxP
+      counts[best]++
+    }
+    return sums.map((s, i) => counts[i] > 0 ? s / counts[i] : 0)
+  }
+
+  for (const [modelName, modelRef] of [
+    ['VVV', ref.gmm_vvv],
+    ['EII', ref.gmm_eii],
+    ['VVI', ref.gmm_vvi],
+  ] as const) {
+    describe(`${modelName} model`, () => {
+      // Multi-seed search for best LL (same as existing GMM tests)
+      let best: ReturnType<typeof fitGMM> | null = null
+      for (const seed of [42, 1, 7, 13, 99, 123, 256, 500, 1000]) {
+        const res = fitGMM(data, { k: 3, model: modelName as 'VVV' | 'EII' | 'VVI', seed, tol: 1e-8, maxIter: 500 })
+        if (!best || res.diagnostics.logLikelihood > best.diagnostics.logLikelihood) {
+          best = res
+        }
+      }
+      const res = best!
+
+      // R cross-validation reference:
+      // > library(mclust)
+      // > fit <- Mclust(gmm_data, G=3, modelNames="VVV", verbose=FALSE)
+      // > probs <- fit$z
+      // > E <- 1 + sum(probs * log(probs)) / (fit$n * log(fit$G))
+      // > Ei <- 1 + rowSums(probs * log(probs)) / log(fit$G)
+      // > avepp_k <- sapply(1:fit$G, function(k) {
+      // >   assigned <- which(fit$classification == k)
+      // >   mean(apply(probs[assigned, , drop=FALSE], 1, max))
+      // > })
+
+      it(`normalized entropy matches R (tol=0.02)`, () => {
+        // EM converges to similar (not identical) optima due to different init.
+        // Both entropies should be close since the data is well-separated.
+        expect(res.diagnostics.entropy).toBeCloseTo(modelRef.entropy, 1)
+        expect(Math.abs(res.diagnostics.entropy - modelRef.entropy)).toBeLessThan(0.02)
+      })
+
+      it(`entropy is in [0, 1]`, () => {
+        expect(res.diagnostics.entropy).toBeGreaterThanOrEqual(0)
+        expect(res.diagnostics.entropy).toBeLessThanOrEqual(1)
+      })
+
+      it(`case-specific entropies average to overall entropy`, () => {
+        const Ei = caseEntropy(res.posteriors as number[][], 3)
+        const meanEi = Ei.reduce((a, b) => a + b, 0) / Ei.length
+        expect(meanEi).toBeCloseTo(res.diagnostics.entropy, 10)
+      })
+
+      it(`all case entropies are in [0, 1]`, () => {
+        const Ei = caseEntropy(res.posteriors as number[][], 3)
+        for (const e of Ei) {
+          expect(e).toBeGreaterThanOrEqual(-1e-10)
+          expect(e).toBeLessThanOrEqual(1 + 1e-10)
+        }
+      })
+
+      it(`AvePP per component matches recomputation from posteriors`, () => {
+        const recomputed = computeAvePP(res.posteriors as number[][], 3)
+        for (let j = 0; j < 3; j++) {
+          expect(res.diagnostics.avepp[j]).toBeCloseTo(recomputed[j]!, 10)
+        }
+      })
+
+      it(`AvePP all above 0.7 (acceptable assignment certainty)`, () => {
+        for (const a of res.diagnostics.avepp) {
+          expect(a).toBeGreaterThan(0.7)
+        }
+      })
+
+      it(`ICL = BIC + 2 * rawEntropy (verified against R)`, () => {
+        // Recompute raw entropy from posteriors
+        let rawE = 0
+        for (const row of res.posteriors) {
+          for (const p of row) {
+            if (p > 1e-300) rawE -= p * Math.log(p)
+          }
+        }
+        const expectedICL = res.diagnostics.bic + 2 * rawE
+        expect(res.diagnostics.icl).toBeCloseTo(expectedICL, 6)
+      })
+
+      it(`ICL matches R within 15`, () => {
+        // ICL depends on both BIC and entropy, both of which differ slightly
+        expect(Math.abs(res.diagnostics.icl - modelRef.icl)).toBeLessThan(15)
+      })
+    })
+  }
 })

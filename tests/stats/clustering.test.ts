@@ -460,6 +460,157 @@ describe('fitLTA', () => {
 })
 
 // ═════════════════════════════════════════════════════════════════════════
+// Entropy Tests — mclust convention
+// Reference: 1 + sum(probs * log(probs)) / (n * log(K))
+// Case-specific: Ei = 1 + rowSums(probs * log(probs)) / log(K)
+// sum(Ei) / n = overall entropy
+// ═════════════════════════════════════════════════════════════════════════
+
+describe('normalized entropy (mclust convention)', () => {
+  const data = makeGMMData()
+
+  /**
+   * Recompute entropy from posteriors using the exact mclust formula:
+   * E = 1 + sum(probs * log(probs)) / (n * log(K))
+   * This is equivalent to 1 - rawE / (n * log(K)) since rawE = -sum(probs * log(probs))
+   */
+  function mclustEntropy(posteriors: number[][], k: number): number {
+    const n = posteriors.length
+    let sumPlogP = 0
+    for (const row of posteriors) {
+      for (const p of row) {
+        if (p > 1e-300) sumPlogP += p * Math.log(p)
+      }
+    }
+    return 1 + sumPlogP / (n * Math.log(k))
+  }
+
+  /**
+   * Case-specific entropy contributions:
+   * Ei = 1 + rowSums(probs * log(probs)) / log(K)
+   */
+  function caseEntropy(posteriors: number[][], k: number): number[] {
+    return posteriors.map(row => {
+      let rowSum = 0
+      for (const p of row) {
+        if (p > 1e-300) rowSum += p * Math.log(p)
+      }
+      return 1 + rowSum / Math.log(k)
+    })
+  }
+
+  /**
+   * Recompute AvePP from posteriors using the mclust definition:
+   * For each component k, average the MAP posterior for observations assigned to k.
+   */
+  function mclustAvePP(posteriors: number[][], k: number): number[] {
+    const sums = new Array(k).fill(0)
+    const counts = new Array(k).fill(0)
+    for (const row of posteriors) {
+      let maxP = -1, best = 0
+      for (let j = 0; j < k; j++) {
+        if (row[j]! > maxP) { maxP = row[j]!; best = j }
+      }
+      sums[best] += maxP
+      counts[best]++
+    }
+    return sums.map((s, i) => counts[i] > 0 ? s / counts[i] : 0)
+  }
+
+  it('GMM entropy matches mclust formula', () => {
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    const expected = mclustEntropy(res.posteriors as number[][], 3)
+    expect(res.diagnostics.entropy).toBeCloseTo(expected, 10)
+  })
+
+  it('GMM entropy is in [0, 1]', () => {
+    for (const k of [2, 3, 4]) {
+      const res = fitGMM(data, { k, seed: 42 })
+      expect(res.diagnostics.entropy).toBeGreaterThanOrEqual(0)
+      expect(res.diagnostics.entropy).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('case-specific entropies average to overall entropy', () => {
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    const Ei = caseEntropy(res.posteriors as number[][], 3)
+    const meanEi = Ei.reduce((a, b) => a + b, 0) / Ei.length
+    expect(meanEi).toBeCloseTo(res.diagnostics.entropy, 10)
+  })
+
+  it('case-specific entropies are in [0, 1]', () => {
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    const Ei = caseEntropy(res.posteriors as number[][], 3)
+    for (const e of Ei) {
+      expect(e).toBeGreaterThanOrEqual(-1e-10)  // allow tiny numerical noise
+      expect(e).toBeLessThanOrEqual(1 + 1e-10)
+    }
+  })
+
+  it('AvePP matches mclust formula', () => {
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    const expected = mclustAvePP(res.posteriors as number[][], 3)
+    for (let j = 0; j < 3; j++) {
+      expect(res.diagnostics.avepp[j]).toBeCloseTo(expected[j]!, 10)
+    }
+  })
+
+  it('well-separated clusters have entropy near 1', () => {
+    // 3-cluster data with true K=3 should have very high entropy
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    expect(res.diagnostics.entropy).toBeGreaterThan(0.8)
+  })
+
+  it('over-fitting (high K) decreases entropy', () => {
+    const r3 = fitGMM(data, { k: 3, seed: 42 })
+    const r6 = fitGMM(data, { k: 6, seed: 42 })
+    // K=6 on 3-cluster data should have lower entropy than K=3
+    expect(r6.diagnostics.entropy).toBeLessThan(r3.diagnostics.entropy)
+  })
+
+  it('ICL uses raw entropy (not normalized)', () => {
+    const res = fitGMM(data, { k: 3, seed: 42 })
+    // Recompute raw entropy from posteriors
+    let rawE = 0
+    for (const row of res.posteriors) {
+      for (const p of row) {
+        if (p > 1e-300) rawE -= p * Math.log(p)
+      }
+    }
+    // ICL = BIC + 2 * rawEntropy
+    const expectedICL = res.diagnostics.bic + 2 * rawE
+    expect(res.diagnostics.icl).toBeCloseTo(expectedICL, 6)
+  })
+
+  it('LCA entropy matches mclust formula', () => {
+    const lcaData = makeLCAData()
+    const res = fitLCA(lcaData, { k: 2, seed: 42 })
+    const expected = mclustEntropy(res.posteriors as number[][], 2)
+    expect(res.diagnostics.entropy).toBeCloseTo(expected, 10)
+  })
+
+  it('LCA case-specific entropies average to overall', () => {
+    const lcaData = makeLCAData()
+    const res = fitLCA(lcaData, { k: 2, seed: 42 })
+    const Ei = caseEntropy(res.posteriors as number[][], 2)
+    const meanEi = Ei.reduce((a, b) => a + b, 0) / Ei.length
+    expect(meanEi).toBeCloseTo(res.diagnostics.entropy, 10)
+  })
+
+  it('LTA entropy matches mclust formula', () => {
+    const ltaData = makeLTAData()
+    const res = fitLTA(ltaData, { k: 2, seed: 42 })
+    // LTA flattens gamma: N*T posteriors
+    const flat: number[][] = []
+    for (const subj of res.posteriors) {
+      for (const t of subj) flat.push(t as number[])
+    }
+    const expected = mclustEntropy(flat, 2)
+    expect(res.diagnostics.entropy).toBeCloseTo(expected, 10)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════
 // K-Means Tests
 // ═════════════════════════════════════════════════════════════════════════
 

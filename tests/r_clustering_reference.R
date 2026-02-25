@@ -26,16 +26,41 @@ fit_eii <- Mclust(gmm_data, G = 3, modelNames = "EII", verbose = FALSE)
 fit_vvi <- Mclust(gmm_data, G = 3, modelNames = "VVI", verbose = FALSE)
 
 extract_gmm <- function(fit, name) {
-  # mclust sorts components by mean — extract in that order
+  probs <- fit$z                        # posterior conditional probs (N × K)
+  n <- fit$n
+  K <- fit$G
+
+  # Normalized entropy: 1 + sum(probs * log(probs)) / (n * log(K))
+  entropy <- 1 + sum(probs * log(pmax(probs, 1e-300))) / (n * log(K))
+
+  # Case-specific entropy contributions: Ei = 1 + rowSums(probs * log(probs)) / log(K)
+  Ei <- 1 + rowSums(probs * log(pmax(probs, 1e-300))) / log(K)
+
+  # Average posterior probabilities per component
+  clusters <- fit$classification
+  avepp <- vapply(seq_len(K), function(k) {
+    assigned <- which(clusters == k)
+    if (length(assigned) == 0) return(0)
+    mean(apply(probs[assigned, , drop = FALSE], 1, max))
+  }, numeric(1))
+
+  # ICL = BIC + 2 * raw_entropy (where raw = -sum(probs * log(probs)))
+  raw_entropy <- -sum(probs * log(pmax(probs, 1e-300)))
+  icl <- (-fit$bic) + 2 * raw_entropy  # standard BIC + 2E
+
   list(
     model = name,
-    k = fit$G,
+    k = K,
     weights = as.numeric(fit$parameters$pro),
     means = t(fit$parameters$mean),  # K × D
     logLikelihood = fit$loglik,
     bic = -fit$bic,  # mclust returns negative BIC (higher = better), we want standard BIC (lower = better)
-    df = attr(fit$bic, "df"),  # mclust stores df
-    classification = as.numeric(fit$classification)
+    df = attr(fit$bic, "df"),
+    classification = as.numeric(fit$classification),
+    entropy = entropy,
+    caseEntropy = as.numeric(Ei),
+    avepp = as.numeric(avepp),
+    icl = icl
   )
 }
 
@@ -46,8 +71,13 @@ gmm_vvi <- extract_gmm(fit_vvi, "VVI")
 cat("GMM VVV LL:", gmm_vvv$logLikelihood, "\n")
 cat("GMM VVV BIC:", gmm_vvv$bic, "\n")
 cat("GMM VVV means:\n"); print(round(t(fit_vvv$parameters$mean), 4))
+cat("GMM VVV entropy:", gmm_vvv$entropy, "\n")
+cat("GMM VVV AvePP:", gmm_vvv$avepp, "\n")
+cat("GMM VVV ICL:", gmm_vvv$icl, "\n")
 cat("GMM EII LL:", gmm_eii$logLikelihood, "\n")
+cat("GMM EII entropy:", gmm_eii$entropy, "\n")
 cat("GMM VVI LL:", gmm_vvi$logLikelihood, "\n")
+cat("GMM VVI entropy:", gmm_vvi$entropy, "\n")
 
 # ─── 2. FIXED LCA DATA ───────────────────────────────────────────────────
 # Binary data: 2 classes, 5 items
