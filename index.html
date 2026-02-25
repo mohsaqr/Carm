@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carm Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #212529;
+      min-height: 100vh;
+    }
+    header {
+      background: #0d6efd;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 22px; font-weight: 700; }
+    header p  { font-size: 14px; opacity: 0.85; }
+    nav {
+      display: flex;
+      gap: 6px;
+      padding: 12px 32px;
+      background: white;
+      border-bottom: 1px solid #dee2e6;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    nav a {
+      padding: 6px 14px;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+      color: #212529;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    nav a:hover   { background: #e9ecef; }
+    nav a.active  { background: #0d6efd; color: white; border-color: #0d6efd; }
+    main {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 32px;
+    }
+    .section {
+      margin-bottom: 56px;
+      scroll-margin-top: 68px;   /* clears the sticky nav */
+    }
+    .plot-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e9ecef;
+    }
+    p.desc { color: #6c757d; font-size: 14px; margin-bottom: 20px; margin-top: 8px; }
+
+    /* ═══════════════════════════════════════════
+       Publication-quality statistical tables
+       ═══════════════════════════════════════════ */
+    .table-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 28px 32px 24px;
+      margin-bottom: 24px;
+    }
+
+    /* Individual table wrapper — stacked vertically */
+    .stat-table-wrap + .stat-table-wrap { margin-top: 32px; }
+
+    .stat-table-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 1px;
+      letter-spacing: 0.01em;
+    }
+    .stat-table-subtitle {
+      font-size: 12px;
+      color: #6c757d;
+      font-style: italic;
+      margin-bottom: 10px;
+    }
+
+    /* The table itself — APA style: only horizontal rules */
+    .stat-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      color: #212529;
+      margin-top: 8px;
+    }
+    .stat-table thead { border-top: 2px solid #1a1a2e; }
+    .stat-table thead th {
+      padding: 7px 13px;
+      font-weight: 600;
+      font-size: 12.5px;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      border-bottom: 1px solid #868e96;
+      background: transparent;
+    }
+    .stat-table tbody tr:last-child td {
+      border-bottom: 2px solid #1a1a2e;
+      padding-bottom: 9px;
+    }
+    .stat-table tbody td { padding: 5.5px 13px; }
+    .stat-table tbody tr:nth-child(even) td {
+      background: rgba(13,110,253,0.028);
+    }
+    .stat-table tbody tr:hover td {
+      background: rgba(13,110,253,0.06);
+      transition: background 0.1s;
+    }
+
+    /* Column alignment helpers */
+    .stat-table .l { text-align: left; }
+    .stat-table .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .stat-table .c { text-align: center; font-variant-numeric: tabular-nums; }
+
+    /* Significance stars */
+    .stat-sig { color: #0d6efd; font-weight: 700; font-size: 9.5px; }
+
+    /* Muted / dim cells (e.g. diagonal of correlation matrix) */
+    .stat-dim { color: #adb5bd; }
+
+    /* Table note (below table) */
+    .stat-table-note {
+      font-size: 11.5px;
+      color: #6c757d;
+      margin-top: 9px;
+      line-height: 1.6;
+      padding-top: 7px;
+      border-top: 1px solid #e9ecef;
+    }
+
+    /* Plot-level title label above each chart */
+    .plot-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #495057;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    /* Side-by-side plots row */
+    .plots-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .plots-row .plot-container { flex: 1; min-width: 300px; margin-bottom: 0; }
+    @media (max-width: 760px) { .stat-table-wrap { min-width: 100%; } }
+  </style>
+  <script type="module" crossorigin src="/Carm/assets/index-Dz8T1P9I.js"></script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Carm</h1>
+      <p>Statistical analysis &amp; visualization for TypeScript — publication-quality plots and tables</p>
+    </div>
+  </header>
+
+  <nav>
+    <a href="#descriptive">Descriptive</a>
+    <a href="#comparison">Group Comparison</a>
+    <a href="#correlation">Correlation</a>
+    <a href="#regression">Regression</a>
+    <a href="#lmm">Mixed Models</a>
+    <a href="#pca">PCA</a>
+    <a href="#distribution">Distributions</a>
+    <a href="#ranking">Ranking</a>
+    <a href="#composition">Composition</a>
+    <a href="#timeseries">Time Series</a>
+    <a href="#statistical">Statistical</a>
+    <a href="#multivariate">Multivariate</a>
+    <a href="#categorical">Categorical</a>
+    <a href="#hierarchical">Hierarchical</a>
+    <a href="#networks">Networks &amp; Flows</a>
+  </nav>
+
+  <main>
+
+    <!-- ─── DESCRIPTIVE ──────────────────────────────────────────────────── -->
+    <div id="descriptive" class="section">
+      <h2>Descriptive Statistics</h2>
+      <p class="desc">Histogram with normality curve, QQ plot, KDE density, standalone box plot, and summary tables.</p>
+      <div class="plot-container"><p class="plot-title">Histogram</p><div id="histogram-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Normal Q-Q Plot</p><div id="qq-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Kernel Density Estimation</p><div id="density-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Box Plot</p><div id="boxplot-plot"></div></div>
+      <div class="table-container" id="descriptive-tables"></div>
+    </div>
+
+    <!-- ─── COMPARISON ───────────────────────────────────────────────────── -->
+    <div id="comparison" class="section">
+      <h2>Group Comparison</h2>
+      <p class="desc">Violin + box + jitter, raincloud, grouped/stacked bar, and bubble chart.</p>
+      <div class="plot-container"><p class="plot-title">Violin + Box + Jitter</p><div id="violin-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Raincloud Plot</p><div id="raincloud-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Grouped Bar Chart</p><div id="grouped-bar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Stacked Bar Chart</p><div id="stacked-bar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Bubble Chart</p><div id="bubble-plot"></div></div>
+      <div class="table-container" id="comparison-tables"></div>
+    </div>
+
+    <!-- ─── CORRELATION ──────────────────────────────────────────────────── -->
+    <div id="correlation" class="section">
+      <h2>Correlation Analysis</h2>
+      <p class="desc">Scatter plot with regression line and correlation matrix heatmap.</p>
+      <div class="plot-container"><p class="plot-title">Scatter Plot with Regression Line</p><div id="scatter-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Correlation Matrix (Correlogram)</p><div id="correlogram-plot"></div></div>
+      <div class="table-container" id="correlation-tables"></div>
+    </div>
+
+    <!-- ─── REGRESSION ───────────────────────────────────────────────────── -->
+    <div id="regression" class="section">
+      <h2>Regression Analysis</h2>
+      <p class="desc">Coefficient plot and residual diagnostic panel.</p>
+      <div class="plot-container"><p class="plot-title">Coefficient Plot</p><div id="coef-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Regression Diagnostics Panel</p><div id="residual-plot"></div></div>
+      <div class="table-container" id="regression-tables"></div>
+    </div>
+
+    <!-- ─── LMM ──────────────────────────────────────────────────────────── -->
+    <div id="lmm" class="section">
+      <h2>Linear Mixed Models</h2>
+      <p class="desc">BLUPs caterpillar plot, variance components, and group distributions for a 3-group LMM estimated via REML.</p>
+      <div class="plot-container"><p class="plot-title">BLUPs Caterpillar Plot</p><div id="lmm-plot"></div></div>
+      <div class="plots-row">
+        <div class="plot-container"><p class="plot-title">Variance Components</p><div id="lmm-variance-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Observed Values by Group</p><div id="lmm-groups-plot"></div></div>
+      </div>
+      <div class="table-container" id="lmm-tables"></div>
+    </div>
+
+    <!-- ─── PCA ──────────────────────────────────────────────────────────── -->
+    <div id="pca" class="section">
+      <h2>Principal Component Analysis</h2>
+      <p class="desc">Scree plot, biplot, and component tables.</p>
+      <div class="plot-container"><p class="plot-title">Scree Plot</p><div id="scree-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">PCA Biplot</p><div id="biplot"></div></div>
+      <div class="table-container" id="pca-tables"></div>
+    </div>
+
+    <!-- ─── DISTRIBUTIONS ───────────────────────────────────────────────── -->
+    <div id="distribution" class="section">
+      <h2>Distribution Explorer</h2>
+      <p class="desc">Normal and t-distribution PDF with highlighted areas.</p>
+      <div class="plot-container"><p class="plot-title">Normal Distribution</p><div id="dist-normal"></div></div>
+      <div class="plot-container"><p class="plot-title">t-Distribution</p><div id="dist-t"></div></div>
+    </div>
+
+    <!-- ─── RANKING ──────────────────────────────────────────────────────── -->
+    <div id="ranking" class="section">
+      <h2>Ranking Charts</h2>
+      <p class="desc">Lollipop, Cleveland dot plot, Pareto chart, and funnel chart.</p>
+      <div class="plot-container"><p class="plot-title">Lollipop Chart</p><div id="lollipop-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Cleveland Dot Plot</p><div id="dot-plot-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Pareto Chart</p><div id="pareto-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Funnel Chart</p><div id="funnel-plot"></div></div>
+    </div>
+
+    <!-- ─── COMPOSITION ──────────────────────────────────────────────────── -->
+    <div id="composition" class="section">
+      <h2>Composition Charts</h2>
+      <p class="desc">Pie/donut chart, area chart, treemap, and waffle chart.</p>
+      <div class="plots-row">
+        <div class="plot-container"><p class="plot-title">Pie Chart</p><div id="pie-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Donut Chart</p><div id="donut-plot"></div></div>
+      </div>
+      <div class="plot-container"><p class="plot-title">Area Chart</p><div id="area-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Treemap</p><div id="treemap-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Waffle Chart</p><div id="waffle-plot"></div></div>
+    </div>
+
+    <!-- ─── TIME SERIES ──────────────────────────────────────────────────── -->
+    <div id="timeseries" class="section">
+      <h2>Time Series</h2>
+      <p class="desc">Multi-line time series chart and sparklines.</p>
+      <div class="plot-container"><p class="plot-title">Line Chart</p><div id="linechart-plot"></div></div>
+      <div class="plot-container">
+        <p class="plot-title">Sparklines</p>
+        <div id="sparkline-a"></div>
+        <div id="sparkline-b" style="margin-top:8px;"></div>
+        <div id="sparkline-c" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <!-- ─── STATISTICAL ──────────────────────────────────────────────────── -->
+    <div id="statistical" class="section">
+      <h2>Statistical Plots</h2>
+      <p class="desc">Forest plot for meta-analysis and ROC curve for classification evaluation.</p>
+      <div class="plot-container"><p class="plot-title">Forest Plot</p><div id="forest-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">ROC Curve</p><div id="roc-plot"></div></div>
+    </div>
+
+    <!-- ─── MULTIVARIATE ─────────────────────────────────────────────────── -->
+    <div id="multivariate" class="section">
+      <h2>Multivariate Plots</h2>
+      <p class="desc">Radar chart, parallel coordinates, and scatter matrix (pair plot).</p>
+      <div class="plot-container"><p class="plot-title">Radar Chart</p><div id="radar-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Parallel Coordinates</p><div id="parallel-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Scatter Matrix (Pair Plot)</p><div id="pair-plot"></div></div>
+    </div>
+
+    <!-- ─── CATEGORICAL ──────────────────────────────────────────────────── -->
+    <div id="categorical" class="section">
+      <h2>Categorical Plots</h2>
+      <p class="desc">Strip plot (jittered dots), beeswarm plot, and mosaic plot.</p>
+      <div class="plot-container"><p class="plot-title">Strip Plot</p><div id="strip-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Beeswarm Plot</p><div id="swarm-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Mosaic Plot</p><div id="mosaic-plot"></div></div>
+    </div>
+
+    <!-- ─── HIERARCHICAL ─────────────────────────────────────────────────── -->
+    <div id="hierarchical" class="section">
+      <h2>Hierarchical &amp; Proportional</h2>
+      <p class="desc">Sunburst chart for hierarchical part-to-whole relationships, and Marimekko chart (variable-width 100% stacked bars) for bivariate composition.</p>
+      <div class="plots-row">
+        <div class="plot-container"><p class="plot-title">Sunburst Chart</p><div id="sunburst-plot"></div></div>
+        <div class="plot-container"><p class="plot-title">Marimekko Chart</p><div id="marimekko-plot"></div></div>
+      </div>
+    </div>
+
+    <!-- ─── NETWORKS & FLOWS ──────────────────────────────────────────────── -->
+    <div id="networks" class="section">
+      <h2>Networks &amp; Flows</h2>
+      <p class="desc">Chord diagram for symmetric flow matrices, alluvial plot for multi-stage flows, arc diagram for network topology, and hierarchical edge bundling.</p>
+      <div class="plot-container"><p class="plot-title">Chord Diagram</p><div id="chord-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Alluvial Plot</p><div id="alluvial-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Arc Diagram</p><div id="arc-plot"></div></div>
+      <div class="plot-container"><p class="plot-title">Hierarchical Edge Bundling</p><div id="edge-bundling-plot"></div></div>
+    </div>
+
+  </main>
+
+  <script>
+    // Highlight the nav link whose section is most visible in the viewport
+    const sections = document.querySelectorAll('.section')
+    const navLinks = document.querySelectorAll('nav a')
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(a => a.classList.remove('active'))
+          const active = document.querySelector(`nav a[href="#${entry.target.id}"]`)
+          if (active) active.classList.add('active')
+        }
+      })
+    }, { rootMargin: '-20% 0px -70% 0px' })
+
+    sections.forEach(s => observer.observe(s))
+
+    // Mark first link active on load
+    if (navLinks.length) navLinks[0].classList.add('active')
+  </script>
+</body>
+</html>
