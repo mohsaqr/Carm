@@ -1,5 +1,3 @@
-import { roundTo } from './chunk-IRX4LIZX.js';
-
 // src/core/matrix.ts
 var Matrix = class _Matrix {
   rows;
@@ -360,90 +358,6 @@ function solveLinear(A, b) {
   return Array.from({ length: b.length }, (_, i) => x.get(i, 0));
 }
 
-// src/core/apa.ts
-function formatP(p) {
-  if (p < 1e-3) return "p < .001";
-  const rounded = roundTo(p, 3).toFixed(3).replace("0.", ".");
-  return `p = ${rounded}`;
-}
-function formatStat(v, decimals = 2) {
-  return roundTo(v, decimals).toFixed(decimals);
-}
-function formatCI(ci, decimals = 2) {
-  return `[${roundTo(ci[0], decimals).toFixed(decimals)}, ${roundTo(ci[1], decimals).toFixed(decimals)}]`;
-}
-function formatDF(df) {
-  if (typeof df === "number") {
-    return Number.isInteger(df) ? String(df) : df.toFixed(2);
-  }
-  const [df1, df2] = df;
-  const f1 = Number.isInteger(df1) ? String(df1) : df1.toFixed(2);
-  const f2 = Number.isInteger(df2) ? String(df2) : df2.toFixed(2);
-  return `${f1}, ${f2}`;
-}
-function formatTTest(t, df, pValue, effectSize, effectName, ci, ciLevel = 0.95) {
-  const ciPct = Math.round(ciLevel * 100);
-  return `t(${formatDF(df)}) = ${formatStat(t)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}, ${ciPct}% CI ${formatCI(ci)}`;
-}
-function formatANOVA(F, df1, df2, pValue, effectSize, effectName = "\u03B7\xB2") {
-  return `F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
-}
-function formatChiSq(chiSq, df, pValue, effectSize, effectName = "V") {
-  return `\u03C7\xB2(${formatDF(df)}) = ${formatStat(chiSq)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
-}
-function formatCorrelation(r, df, pValue, ci, method = "r", ciLevel = 0.95) {
-  const ciPct = Math.round(ciLevel * 100);
-  return `${method}(${formatDF(df)}) = ${formatStat(r)}, ${formatP(pValue)}, ${ciPct}% CI ${formatCI(ci)}`;
-}
-function formatRegression(r2, adjR2, F, df1, df2, pValue) {
-  return `R\xB2 = ${formatStat(r2)}, adj. R\xB2 = ${formatStat(adjR2)}, F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}`;
-}
-function formatMannWhitney(W, pValue, r) {
-  return `W = ${formatStat(W, 0)}, ${formatP(pValue)}, r = ${formatStat(r)}`;
-}
-function formatKruskalWallis(H, df, pValue, etaSq) {
-  return `H(${formatDF(df)}) = ${formatStat(H)}, ${formatP(pValue)}, \u03B7\xB2_H = ${formatStat(etaSq)}`;
-}
-function formatLMM(icc, aic, bic, logLik) {
-  return `ICC = ${formatStat(icc)}, AIC = ${formatStat(aic, 1)}, BIC = ${formatStat(bic, 1)}, logLik = ${formatStat(logLik, 1)}`;
-}
-function interpretCohensD(d) {
-  const abs = Math.abs(d);
-  if (abs < 0.2) return "negligible";
-  if (abs < 0.5) return "small";
-  if (abs < 0.8) return "medium";
-  return "large";
-}
-function interpretEtaSq(eta) {
-  if (eta < 0.01) return "negligible";
-  if (eta < 0.06) return "small";
-  if (eta < 0.14) return "medium";
-  return "large";
-}
-function interpretR(r) {
-  const abs = Math.abs(r);
-  if (abs < 0.1) return "negligible";
-  if (abs < 0.3) return "small";
-  if (abs < 0.5) return "medium";
-  if (abs < 0.7) return "large";
-  return "very large";
-}
-function interpretCramerV(v, df) {
-  const small = df === 1 ? 0.1 : df === 2 ? 0.07 : 0.06;
-  const medium = df === 1 ? 0.3 : df === 2 ? 0.21 : 0.17;
-  if (v < small) return "negligible";
-  if (v < medium) return "small";
-  if (v < medium * 1.5) return "medium";
-  return "large";
-}
-function interpretEffect(value, thresholds) {
-  const abs = Math.abs(value);
-  if (abs < thresholds[0]) return "negligible";
-  if (abs < thresholds[1]) return "small";
-  if (abs < thresholds[2]) return "medium";
-  return "large";
-}
-
-export { Matrix, formatANOVA, formatCI, formatChiSq, formatCorrelation, formatDF, formatKruskalWallis, formatLMM, formatMannWhitney, formatP, formatRegression, formatStat, formatTTest, interpretCohensD, interpretCramerV, interpretEffect, interpretEtaSq, interpretR, solveLinear };
-//# sourceMappingURL=chunk-CQNGM2TQ.js.map
-//# sourceMappingURL=chunk-CQNGM2TQ.js.map
+export { Matrix, solveLinear };
+//# sourceMappingURL=chunk-S5HCH6CR.js.map
+//# sourceMappingURL=chunk-S5HCH6CR.js.map

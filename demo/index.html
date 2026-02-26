@@ -192,6 +192,7 @@
     <a href="#regression">Regression</a>
     <a href="#lmm">Mixed Models</a>
     <a href="#pca">PCA</a>
+    <a href="#factor-analysis">Factor Analysis</a>
     <a href="#distribution">Distributions</a>
     <a href="#ranking">Ranking</a>
     <a href="#composition">Composition</a>
@@ -265,6 +266,24 @@
       <div class="plot-container"><p class="plot-title">Scree Plot</p><div id="scree-plot"></div></div>
       <div class="plot-container"><p class="plot-title">PCA Biplot</p><div id="biplot"></div></div>
       <div class="table-container" id="pca-tables"></div>
+    </div>
+
+    <!-- ─── FACTOR ANALYSIS ──────────────────────────────────────────────── -->
+    <div id="factor-analysis" class="section">
+      <h2>Factor Analysis</h2>
+      <p class="desc">CFA path diagram (AMOS-style SEM visualization), EFA loadings heatmap, scree with parallel analysis, communality chart, factor correlations, and fit indices dashboard.</p>
+      <div class="plot-container"><p class="plot-title">CFA Path Diagram — 5-Factor Model (20 Items)</p><div id="fa-path-5f"></div></div>
+      <div class="plots-row">
+        <div class="plot-container"><p class="plot-title">EFA Scree + Parallel Analysis</p><div id="fa-scree"></div></div>
+        <div class="plot-container"><p class="plot-title">Loadings Heatmap</p><div id="fa-loadings"></div></div>
+      </div>
+      <div class="plot-container"><p class="plot-title">CFA Path Diagram — 3-Factor Model</p><div id="fa-path-3f"></div></div>
+      <div class="plots-row">
+        <div class="plot-container"><p class="plot-title">Communality Bar Chart</p><div id="fa-communality"></div></div>
+        <div class="plot-container"><p class="plot-title">Factor Correlations (Φ)</p><div id="fa-factor-corr"></div></div>
+      </div>
+      <div class="plot-container"><p class="plot-title">Fit Indices Dashboard</p><div id="fa-fit-indices"></div></div>
+      <div class="table-container" id="fa-tables"></div>
     </div>
 
     <!-- ─── DISTRIBUTIONS ───────────────────────────────────────────────── -->

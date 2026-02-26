@@ -1,43 +1,43 @@
-# Session Handoff — 2026-02-25
+# Session Handoff — 2026-02-26
 
 ## Completed
-- **DBSCAN clustering** (Phase 3): Full implementation in Carm `clustering.ts` — eps-neighborhood BFS, core/border/noise classification, silhouette scores (excluding noise), k-distance plot. 20 tests cross-validated against R `dbscan::dbscan()`.
-- **Hierarchical Agglomerative Clustering** (Phase 4): Lance-Williams recurrence for 4 linkages (single/complete/average/ward). `cutTree()` and `cutTreeHeight()` via union-find. Cophenetic correlation. 29 tests cross-validated against R `hclust()` — heights match to 1e-10.
-- **Preprocessing module** (Phase 1): `preprocessData()` with center/standardize/log/sqrt methods. `inverseTransform()` for back-transformation. Refactored PCA to use it. 15 tests cross-validated against R `scale()`.
-- **Shared utilities** (Phase 2): `euclideanDistMatrix()` (N×N Float64Array), `silhouetteScores()` (excluding noise labels).
-- **Aistatia integration** (Phase 5): Full UI flow for DBSCAN and Hierarchical — wizards, runner dispatch, profile tables, APA banners, copy-for-paper, narrative, plots. Also added preprocess option to existing GMM/KMeans wizards. 12 files modified, `tsc --noEmit` clean.
-- **HAC test fix**: Corrected R reference heights that were wrong for 19 of 29 values. Extracted correct values from `r_hac_reference.json`.
+- **FA cross-validation: 100/100 synthetic datasets PASS** against R's `psych::fa()`
+- **Real dataset verified**: 525×31 survey data (LOC/CCA/ER/FSI/TW scales) matches R for k=3,4,5,6 — loadings to 4 decimal places
+- **Root cause fixed**: `psych::fa(rotate="promax")` dispatches via `psych::kaiser()` wrapper which adds outer Kaiser normalization before Promax. Without this, promax target Q is computed on different-scale loadings, causing MAE=0.055 on dataset 86.
+- **Three major algorithmic improvements in `src/stats/factor-analysis.ts`**:
+  1. Promax rotation: outer Kaiser normalization (normalize rows by communality → varimax+promax → denormalize)
+  2. Varimax rotation: SVD-based algorithm matching R's `stats::varimax()` with polar decomposition via eigendecomposition of B'B
+  3. ML extraction: hybrid Jöreskog gradient descent + Nelder-Mead polish on R's concentrated ML objective
 
 ## Current State
-- **Carm**: 496/496 tests passing across 17 files. Branch `dev-clean`. Build clean.
-- **Aistatia**: `tsc --noEmit` clean, 0 errors. DBSCAN and Hierarchical fully wired.
-- **Not committed**: All changes are local in both repos.
+- `npx tsc --noEmit`: 0 errors
+- `npx tsup`: Build success
+- Cross-validation: 100/100 synthetic + real dataset verified
+- Debug logging removed, clean production build
+- Changes NOT committed
 
 ## Key Decisions
-- **ClusterPlotData adapter**: Unified plot rendering for 4 clustering methods (GMM, KMeans, DBSCAN, Hierarchical) via a single adapter interface instead of duplicating code.
-- **Preprocessing on data, stats on original**: Preprocessing transforms the data matrix for clustering, but per-cluster means/SDs are computed on original data for interpretability.
-- **Ward.D2**: Squared Euclidean internally, heights = sqrt(merge distance). Matches R convention.
-- **DBSCAN noise = -1**: Following the convention of -1 for noise, 0-indexed clusters. R uses 0 for noise, 1-indexed.
-- **Dendrogram**: Added as a plot type placeholder in wizard-defs. Actual D3 rendering not yet implemented.
+- **Outer Kaiser normalization in promax**: Matches `psych::fa`'s `kaiser()` wrapper exactly. This is the correct behavior since `psych::fa` is the standard R reference.
+- **Eigendecomposition-based polar decomposition**: Avoids Carm's buggy `Matrix.svd()` for small k×k matrices. Computes B'B eigenvalues/vectors instead.
+- **Hybrid ML extraction**: Jöreskog gradient is reliable for convergence, Nelder-Mead polishes to match R's exact concentrated ML objective.
 
 ## Open Issues
-- **Dendrogram D3 visualization**: Placeholder exists in wizard-defs and plot-panel but no actual rendering code. Needs a D3 dendrogram renderer.
-- **LCA/LTA UI**: Carm module ready, but aistatia UI needs binary variable detection and time-series input.
-- **Cluster label stability**: GMM/KMeans label ordering depends on initialization.
-- **Not yet committed**: Changes in both repos are local only.
+- CFA cross-validation against lavaan not yet done
+- No vitest unit tests for FA (only R cross-validation scripts)
+- aistatia FA integration plan exists but not yet implemented
 
 ## Next Steps
-1. Implement D3 dendrogram renderer for hierarchical clustering visualization.
-2. Commit both repos (pending user approval).
-3. Test in aistatia: load data → DBSCAN → verify noise + clusters in browser.
-4. Test in aistatia: load data → Hierarchical (Ward) → verify cluster assignment in browser.
-5. Consider silhouette visualization (bar chart of per-point silhouette scores).
-6. LCA/LTA UI integration.
+1. Write vitest tests encoding the R-verified expected values
+2. CFA cross-validation against lavaan
+3. Implement aistatia FA integration (plan in `cosmic-nibbling-boole.md`)
+4. Edge case tests: single factor, Heywood cases, perfect correlation
 
 ## Context
 - Carm dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/JStats`
 - Aistatia dir: `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/aistatia`
 - Branch: `dev-clean`
-- Build: `npm run build` (Carm) → copy dist to aistatia `node_modules/carm/dist/`
-- Tests: `npx vitest run` → 496/496 (Carm)
-- Plan file: `/Users/mohammedsaqr/.claude/plans/cosmic-nibbling-boole.md`
+- Build: `npx tsup`
+- Type check: `npx tsc --noEmit`
+- Cross-validation: `cd aistatia && npx tsx tmp/fa-crossval-report.ts` (100 datasets)
+- Real dataset: `~/Downloads/rraw_dataaw_data.csv` (525×31)
+- R reference data: `aistatia/tmp/fa-crossval-data.json`, `aistatia/tmp/fa-real-crossval-ref.json`

@@ -155,6 +155,69 @@ export interface GroupData {
   readonly label: string
 }
 
+// ─── Factor Analysis types ────────────────────────────────────────────────
+
+/** Fit indices for factor models (EFA and CFA). */
+export interface FactorFit {
+  readonly chiSq: number
+  readonly df: number
+  readonly pValue: number
+  readonly rmsea: number
+  readonly rmseaCI: readonly [number, number]   // 90% CI
+  readonly cfi: number
+  readonly tli: number
+  readonly srmr: number
+  readonly aic: number
+  readonly bic: number
+}
+
+/** A single parameter estimate with SE, z, p, and standardized value. */
+export interface ParameterEstimate {
+  readonly estimate: number
+  readonly se: number
+  readonly z: number
+  readonly pValue: number
+  readonly stdAll: number  // STDYX standardized
+}
+
+/** Diagnostics for factor analysis adequacy: KMO, Bartlett, MAP, parallel analysis. */
+export interface FADiagnostics {
+  readonly kmo: number
+  readonly kmoPerItem: readonly number[]
+  readonly bartlett: { readonly chiSq: number; readonly df: number; readonly pValue: number }
+  readonly mapSuggested: number
+  readonly parallelEigenvalues: readonly number[]       // observed eigenvalues
+  readonly parallelSimulated: readonly number[]         // 95th percentile simulated thresholds
+  readonly parallelSuggested: number
+}
+
+/** Result from exploratory factor analysis (EFA). */
+export interface FAResult {
+  readonly loadings: readonly (readonly number[])[]            // [items × factors] rotated
+  readonly standardizedLoadings: readonly (readonly number[])[]
+  readonly uniqueness: readonly number[]
+  readonly communalities: readonly number[]
+  readonly factorCorrelations: readonly (readonly number[])[]  // Phi matrix
+  readonly fit: FactorFit
+  readonly eigenvalues: readonly number[]
+  readonly nFactors: number
+  readonly rotation: string
+  readonly extraction: string
+  readonly variableNames: readonly string[]
+  readonly factorNames: readonly string[]
+  readonly formatted: string  // APA string
+}
+
+/** Result from confirmatory factor analysis (CFA). */
+export interface CFAResult extends FAResult {
+  readonly parameterEstimates: {
+    readonly loadings: readonly (readonly ParameterEstimate[])[]   // [factor][item]
+    readonly uniquenesses: readonly ParameterEstimate[]
+    readonly factorCovariances: readonly (readonly ParameterEstimate[])[]
+  }
+  readonly model: Readonly<Record<string, readonly number[]>>
+}
+
 // ─── analyze() dispatch layer ─────────────────────────────────────────────
 
 /** Field type descriptor for the analyze() dispatch layer. */

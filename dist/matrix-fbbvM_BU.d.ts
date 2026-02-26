@@ -142,6 +142,66 @@ interface GroupData {
     readonly values: readonly number[];
     readonly label: string;
 }
+/** Fit indices for factor models (EFA and CFA). */
+interface FactorFit {
+    readonly chiSq: number;
+    readonly df: number;
+    readonly pValue: number;
+    readonly rmsea: number;
+    readonly rmseaCI: readonly [number, number];
+    readonly cfi: number;
+    readonly tli: number;
+    readonly srmr: number;
+    readonly aic: number;
+    readonly bic: number;
+}
+/** A single parameter estimate with SE, z, p, and standardized value. */
+interface ParameterEstimate {
+    readonly estimate: number;
+    readonly se: number;
+    readonly z: number;
+    readonly pValue: number;
+    readonly stdAll: number;
+}
+/** Diagnostics for factor analysis adequacy: KMO, Bartlett, MAP, parallel analysis. */
+interface FADiagnostics {
+    readonly kmo: number;
+    readonly kmoPerItem: readonly number[];
+    readonly bartlett: {
+        readonly chiSq: number;
+        readonly df: number;
+        readonly pValue: number;
+    };
+    readonly mapSuggested: number;
+    readonly parallelEigenvalues: readonly number[];
+    readonly parallelSimulated: readonly number[];
+    readonly parallelSuggested: number;
+}
+/** Result from exploratory factor analysis (EFA). */
+interface FAResult {
+    readonly loadings: readonly (readonly number[])[];
+    readonly standardizedLoadings: readonly (readonly number[])[];
+    readonly uniqueness: readonly number[];
+    readonly communalities: readonly number[];
+    readonly factorCorrelations: readonly (readonly number[])[];
+    readonly fit: FactorFit;
+    readonly eigenvalues: readonly number[];
+    readonly nFactors: number;
+    readonly rotation: string;
+    readonly extraction: string;
+    readonly variableNames: readonly string[];
+    readonly factorNames: readonly string[];
+    readonly formatted: string;
+}
+/** Result from confirmatory factor analysis (CFA). */
+interface CFAResult extends FAResult {
+    readonly parameterEstimates: {
+        readonly loadings: readonly (readonly ParameterEstimate[])[];
+        readonly uniquenesses: readonly ParameterEstimate[];
+        readonly factorCovariances: readonly (readonly ParameterEstimate[])[];
+    };
+    readonly model: Readonly<Record<string, readonly number[]>>;
+}
 /** Field type descriptor for the analyze() dispatch layer. */
 type FieldType = 'numeric' | 'binary' | 'categorical' | 'ordinal';
 /**
@@ -223,4 +283,89 @@ interface AnalysisResult {
     }>;
 }
 
-export type { AnalysisResult as A, DataMatrix as D, EffectInterpretation as E, Field as F, GroupData as G, LMMResult as L, NumericField as N, PAdjMethod as P, RegressionCoef as R, StatResult as S, AnalyzeOptions as a, DescriptiveResult as b, EffectSize as c, FieldType as d, FixedEffect as e, FrequencyRow as f, FrequencyTestResult as g, GroupField as h, PCAResult as i, PairwiseResult as j, RegressionResult as k };
+/**
+ * Matrix class for Carm.
+ * Implements multiply, transpose, inverse (via Cholesky or LU), log-determinant, and SVD.
+ * Pure computation — no DOM, no D3, no side effects.
+ */
+declare class Matrix {
+    readonly rows: number;
+    readonly cols: number;
+    private readonly _data;
+    constructor(rows: number, cols: number, data?: readonly number[]);
+    /** Build from 2-D array (row-major). */
+    static fromArray(arr: readonly (readonly number[])[]): Matrix;
+    /** Identity matrix of size n. */
+    static identity(n: number): Matrix;
+    /** Zero matrix. */
+    static zeros(rows: number, cols: number): Matrix;
+    /** Get element at (i, j) — 0-indexed. */
+    get(i: number, j: number): number;
+    /** Return 2-D array representation. */
+    toArray(): number[][];
+    /** Return flat row-major copy. */
+    toFlat(): number[];
+    /** Matrix transpose. */
+    transpose(): Matrix;
+    /** Matrix multiplication: this × other. */
+    multiply(other: Matrix): Matrix;
+    /** Scalar multiplication. */
+    scale(s: number): Matrix;
+    /** Element-wise add. */
+    add(other: Matrix): Matrix;
+    /** Element-wise subtract. */
+    subtract(other: Matrix): Matrix;
+    /**
+     * Cholesky decomposition for symmetric positive-definite matrices.
+     * Returns lower-triangular L such that this = L * L^T.
+     * Throws if matrix is not SPD.
+     */
+    cholesky(): Matrix;
+    /**
+     * Log-determinant via Cholesky: log|A| = 2 * Σ log(L_ii).
+     * Only valid for symmetric positive-definite matrices.
+     */
+    logDet(): number;
+    /**
+     * Inverse via LU decomposition with partial pivoting.
+     * Works for any non-singular square matrix.
+     * Formula: Doolittle LU, then forward/back substitution for each column of I.
+     */
+    inverse(): Matrix;
+    /**
+     * Singular Value Decomposition: A = U · S · V^T
+     * Returns { U, S (diagonal values), V }.
+     * Algorithm: Golub-Reinsch (one-sided Jacobi for small matrices).
+     * Reference: Golub & Van Loan, "Matrix Computations", 4th ed., Algorithm 8.6.2
+     */
+    svd(): {
+        U: Matrix;
+        S: number[];
+        V: Matrix;
+    };
+    /**
+     * Pseudo-inverse via SVD: A+ = V · S^{-1} · U^T
+     */
+    pseudoInverse(tol?: number): Matrix;
+    /** Trace (sum of diagonal elements). */
+    trace(): number;
+    /** Extract diagonal as array. */
+    diagonal(): number[];
+    /** Column vector as Matrix from array. */
+    static colVec(data: readonly number[]): Matrix;
+    /** Row vector as Matrix from array. */
+    static rowVec(data: readonly number[]): Matrix;
+    /**
+     * Eigendecomposition for symmetric matrices via Jacobi iterations.
+     * Returns { values, vectors } where vectors are columns of the eigenvector matrix.
+     * Reference: Golub & Van Loan, Algorithm 8.4.1
+     */
+    eigen(): {
+        values: number[];
+        vectors: Matrix;
+    };
+}
+/** Solve linear system A·x = b using the (already computed) inverse.  */
+declare function solveLinear(A: Matrix, b: readonly number[]): number[];
+
+export { type AnalysisResult as A, type CFAResult as C, type DataMatrix as D, type EffectInterpretation as E, type FADiagnostics as F, type GroupData as G, type LMMResult as L, Matrix as M, type NumericField as N, type PAdjMethod as P, type RegressionCoef as R, type StatResult as S, type AnalyzeOptions as a, type DescriptiveResult as b, type EffectSize as c, type FAResult as d, type FactorFit as e, type Field as f, type FieldType as g, type FixedEffect as h, type FrequencyRow as i, type FrequencyTestResult as j, type GroupField as k, type PCAResult as l, type PairwiseResult as m, type ParameterEstimate as n, type RegressionResult as o, solveLinear as s };

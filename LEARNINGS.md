@@ -1,3 +1,56 @@
+## 2026-02-26 (Factor Analysis — Cross-validation fixes)
+
+### psych::fa promax rotation uses outer Kaiser normalization
+- `psych::fa(rotate="promax")` does NOT call `stats::promax()` or `psych::Promax()` directly. It dispatches via `psych::kaiser(loadings, rotate="Promax")`, which adds outer Kaiser normalization:
+  1. Compute communalities h² = rowSums(L²)
+  2. Normalize: L_norm = L / sqrt(h²) (rows → unit norm)
+  3. Call Promax(L_norm) (which internally calls varimax on the already-normalized loadings)
+  4. Denormalize: result = rotated × sqrt(h²)
+- This changes the promax target Q nonlinearly because Q = V⊙|V|^(m-1) is computed on unit-norm rows instead of original-scale rows.
+- `psych::Promax(L)` ≡ `stats::promax(L)` (MAE=0), but `psych::fa(promax)` ≠ both due to the kaiser wrapper.
+- Source: `psych:::fac()` line 555-557: `promax = { pro <- kaiser(loadings, rotate="Promax", ...) }`
+
+### SVD-based varimax using eigendecomposition of B'B
+- R's `stats::varimax()` uses SVD of the B matrix for polar decomposition. The Carm `Matrix.svd()` is unreliable for small k×k matrices. Fix: compute polar decomposition via eigendecomposition of B'B → get V and σ², then T = B·V·diag(1/σ)·V'.
+
+### ML extraction hybrid approach
+- Pure R-style concentrated gradient descent (FAfn/FAgr) doesn't converge as well as R's L-BFGS-B. Solution: Phase 1 uses Jöreskog gradient descent (reliable convergence), Phase 2 polishes with Nelder-Mead on R's exact concentrated ML objective. This achieves matching uniquenesses (max Δ ~5e-5) across 100 synthetic datasets.
+
+### R's factanal initialization formula
+- R initializes uniquenesses as `(1 - 0.5*k/p) / diag(R^{-1})`, not `1 - 1/diag(R^{-1})` (which computes communality). Both converge to the same optimum in practice.
+
+### aistatia npm install gotcha
+- When aistatia installs carm via `npm install ../JStats`, it copies the dist/ files (not symlinks). After rebuilding carm, must run `npm install` again in aistatia to pick up changes. Stale node_modules/carm was the cause of mysterious "debug output not appearing" during development.
+
+## 2026-02-25 (Factor Analysis — EFA + CFA)
+
+### Matrix immutability in Carm
+- Carm's `Matrix` class has NO `set()` method — it's immutable. The FA.ts reference code uses `L.set(i, j, v)` everywhere, which won't compile. Pattern: use mutable `number[][]` arrays for iterative algorithms (PAF, ML, CFA gradient descent), then `Matrix.fromArray()` at boundaries when you need matrix operations (multiply, inverse, eigen, logDet).
+
+### CFA standard errors via numerical Hessian
+- The Fisher information approach requires the Hessian of the Wishart ML discrepancy w.r.t. all free parameters. Analytic Hessian is complex (involves ∂Σ⁻¹/∂θ terms). Numerical central finite differences (h=1e-4) work well and give SE estimates that are reasonable for moderate n. The Hessian is symmetric so only upper triangle needs computation.
+
+### RMSEA 90% CI
+- Exact RMSEA CI requires non-central chi-square quantile inversion, which is computationally expensive. The Steiger (1990) approximation using ±1.645×√(2df) on the NCP works well for moderate df. More exact methods (e.g., bisection on non-central chi-square CDF) can be added later if needed.
+
+### Parallel analysis eigenvalue comparison
+- Compare observed eigenvalues to the 95th percentile of simulated eigenvalues (not the mean). Using the mean can over-retain factors. Store all simulated eigenvalues, sort per position, and take the 95th percentile index.
+
+### Float64Array and noUncheckedIndexedAccess
+- When using `Float64Array` under strict `noUncheckedIndexedAccess`, the `+=` operator fails because `arr[i]` returns `number | undefined`. Use `arr[i] = arr[i]! + value` instead of `arr[i] += value`.
+
+## 2026-02-25 (Dendrogram visualization)
+
+### Dendrogram coordinate computation
+- d3.hierarchy/d3.cluster is wrong for dendrograms — it assumes integer depth levels and uniform leaf spacing. Real dendrograms need continuous y-axis (merge height) and DFS leaf ordering from the HAC. Manual computation: leafX from dendrogramOrder index, internal nodeY from merge heights, internal nodeX = midpoint of children.
+- U-shaped elbow path: `M ax,ay V my H bx V by` — from child A up to merge height, across to child B, down.
+
+### Subtree coloring propagation
+- Leaves get their cluster label directly. Internal nodes: if both children share the same cluster, inherit it; otherwise mark as -1 (mixed). Mixed subtrees get the neutral `theme.axisLine` color. This naturally colors below-cut subtrees by cluster and above-cut merges in gray.
+
+### Cut line placement
+- For K clusters from n observations: the cut goes between merge index `n-k-1` (last merge kept) and `n-k` (first merge cut). The midpoint of their heights gives a clean visual separation.
+
 ## 2026-02-25 (DBSCAN + HAC + preprocessing)
 
 ### HAC R reference heights

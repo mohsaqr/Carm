@@ -1,5 +1,5 @@
-import { formatP, interpretCohensD, interpretEtaSq, interpretR, interpretCramerV, formatChiSq, formatTTest, formatANOVA, formatMannWhitney, formatKruskalWallis, formatCorrelation, Matrix, formatLMM, formatRegression } from './chunk-CQNGM2TQ.js';
-import { sortAsc, mean, sd, se, tDistQuantile, normalQuantile, variance, roundTo, normalCDF, median, quantile, chiSqPValue, tDistPValue, fDistPValue, rank, adjustPValues, cov, nelderMead } from './chunk-IRX4LIZX.js';
+import { Matrix } from './chunk-S5HCH6CR.js';
+import { sortAsc, mean, sd, se, tDistQuantile, normalQuantile, variance, roundTo, normalCDF, median, quantile, formatP, interpretCohensD, interpretEtaSq, interpretR, chiSqPValue, interpretCramerV, formatChiSq, tDistPValue, formatTTest, fDistPValue, formatANOVA, rank, formatMannWhitney, formatKruskalWallis, adjustPValues, cov, formatCorrelation, nelderMead, formatLMM, formatCFAFit, formatRegression } from './chunk-ZPMEK6DP.js';
 
 // src/stats/descriptive.ts
 function mode(x) {
@@ -2973,6 +2973,1075 @@ function pearsonR(x, y, n) {
   return den > 0 ? num / den : 0;
 }
 
-export { analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, correlationMatrix, cutTree, cutTreeHeight, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, euclideanDistMatrix, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kDistancePlot, kendallTau, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, partialCorrelation, pearsonCorrelation, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runDBSCAN, runHierarchical, runKMeans, runLMM, runPCA, screeData, shapiroWilk, silhouetteScores, skewness, spearmanCorrelation, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
-//# sourceMappingURL=chunk-EBPFUJIO.js.map
-//# sourceMappingURL=chunk-EBPFUJIO.js.map
+// src/stats/factor-analysis.ts
+var PRNG2 = class {
+  state;
+  constructor(seed) {
+    this.state = seed >>> 0;
+  }
+  next() {
+    this.state = this.state + 2654435769 | 0;
+    let t = this.state ^ this.state >>> 16;
+    t = Math.imul(t, 569420461);
+    t = t ^ t >>> 15;
+    t = Math.imul(t, 1935289751);
+    t = t ^ t >>> 15;
+    return (t >>> 0) / 4294967296;
+  }
+};
+function prngNormal(rng) {
+  let u = 0, v = 0;
+  while (u === 0) u = rng.next();
+  while (v === 0) v = rng.next();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function computeCorrelationMatrix(data, n, d) {
+  const means = new Float64Array(d);
+  const sds = new Float64Array(d);
+  for (let i = 0; i < n; i++) {
+    const row = data[i];
+    for (let j = 0; j < d; j++) means[j] = means[j] + row[j] / n;
+  }
+  for (let i = 0; i < n; i++) {
+    const row = data[i];
+    for (let j = 0; j < d; j++) sds[j] = sds[j] + (row[j] - means[j]) ** 2;
+  }
+  for (let j = 0; j < d; j++) sds[j] = Math.sqrt(sds[j] / (n - 1));
+  const R = Array.from({ length: d }, () => new Array(d).fill(0));
+  for (let r = 0; r < d; r++) {
+    R[r][r] = 1;
+    for (let c = r + 1; c < d; c++) {
+      let sum = 0;
+      const sdR = sds[r] || 1;
+      const sdC = sds[c] || 1;
+      for (let i = 0; i < n; i++) {
+        sum += (data[i][r] - means[r]) / sdR * ((data[i][c] - means[c]) / sdC);
+      }
+      const val = sum / (n - 1);
+      R[r][c] = val;
+      R[c][r] = val;
+    }
+  }
+  return Matrix.fromArray(R);
+}
+function computeFit(S, Sigma, n, d, nFreeParams, nFactors) {
+  let logDetSigma, logDetS;
+  try {
+    logDetSigma = Sigma.logDet();
+  } catch {
+    const ev = Sigma.eigen().values;
+    logDetSigma = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  try {
+    logDetS = S.logDet();
+  } catch {
+    const ev = S.eigen().values;
+    logDetS = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  let traceVal;
+  try {
+    traceVal = Sigma.inverse().multiply(S).trace();
+  } catch {
+    traceVal = Sigma.pseudoInverse().multiply(S).trace();
+  }
+  const F_ml = Math.max(0, logDetSigma + traceVal - logDetS - d);
+  const bartlettN = nFactors !== void 0 ? n - 1 - (2 * d + 5) / 6 - 2 * nFactors / 3 : n - 1;
+  const chiSq = Math.max(0, bartlettN * F_ml);
+  const totalElements = d * (d + 1) / 2;
+  const df = Math.max(0, totalElements - nFreeParams);
+  const pValue = df > 0 ? chiSqPValue(chiSq, df) : 1;
+  let logDetDiagS = 0;
+  let traceNull = 0;
+  for (let i = 0; i < d; i++) {
+    const diagVal = Math.max(S.get(i, i), 1e-15);
+    logDetDiagS += Math.log(diagVal);
+    traceNull += S.get(i, i) / diagVal;
+  }
+  const diagArr = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => i === j ? S.get(i, i) : 0)
+  );
+  const diagMat = Matrix.fromArray(diagArr);
+  let traceNullFull;
+  try {
+    traceNullFull = diagMat.inverse().multiply(S).trace();
+  } catch {
+    traceNullFull = d;
+  }
+  const F_null = Math.max(0, logDetDiagS + traceNullFull - logDetS - d);
+  const bartlettNNull = nFactors !== void 0 ? n - 1 - (2 * d + 5) / 6 : n - 1;
+  const chiSqNull = bartlettNNull * F_null;
+  const dfNull = d * (d - 1) / 2;
+  const ncp = Math.max(chiSq - df, 0);
+  const rmsea = df > 0 ? Math.sqrt(ncp / (df * (n - 1))) : 0;
+  let rmseaLo = 0, rmseaHi = rmsea * 2;
+  if (df > 0) {
+    const ncpLo = Math.max(chiSq - df - 1.645 * Math.sqrt(2 * df), 0);
+    const ncpHi = Math.max(chiSq - df + 1.645 * Math.sqrt(2 * df), 0);
+    rmseaLo = Math.sqrt(Math.max(ncpLo / (df * (n - 1)), 0));
+    rmseaHi = Math.sqrt(ncpHi / (df * (n - 1)));
+  }
+  const ncpNull = Math.max(chiSqNull - dfNull, 0);
+  const cfi = ncpNull > 0 ? Math.max(0, Math.min(1, 1 - ncp / ncpNull)) : 1;
+  const tli = df > 0 && dfNull > 0 ? (chiSqNull / dfNull - chiSq / df) / (chiSqNull / dfNull - 1) : 1;
+  let srmrSum = 0;
+  let srmrCount = 0;
+  for (let i = 0; i < d; i++) {
+    for (let j = 0; j <= i; j++) {
+      const sij = S.get(i, j);
+      const sigij = Sigma.get(i, j);
+      const denom = Math.sqrt(S.get(i, i) * S.get(j, j));
+      const r_obs = denom > 0 ? sij / denom : 0;
+      const r_imp = denom > 0 ? sigij / denom : 0;
+      srmrSum += (r_obs - r_imp) ** 2;
+      srmrCount++;
+    }
+  }
+  const srmr = Math.sqrt(srmrSum / srmrCount);
+  const aic = chiSq + 2 * nFreeParams;
+  const bic = chiSq + nFreeParams * Math.log(n);
+  return {
+    chiSq,
+    df,
+    pValue,
+    rmsea,
+    rmseaCI: [rmseaLo, rmseaHi],
+    cfi,
+    tli,
+    srmr,
+    aic,
+    bic
+  };
+}
+function extractPAF(R, k, maxIter, tol) {
+  const d = R.rows;
+  const h2 = new Float64Array(d);
+  try {
+    const invR = R.inverse();
+    for (let i = 0; i < d; i++) h2[i] = Math.max(0.01, 1 - 1 / Math.max(invR.get(i, i), 1e-12));
+  } catch {
+    for (let i = 0; i < d; i++) h2[i] = 0.5;
+  }
+  const loadings = Array.from({ length: d }, () => new Array(k).fill(0));
+  for (let iter = 0; iter < maxIter; iter++) {
+    const adjR = R.toArray();
+    for (let i = 0; i < d; i++) adjR[i][i] = h2[i];
+    const adjM = Matrix.fromArray(adjR);
+    const { values, vectors } = adjM.eigen();
+    const oldH2 = new Float64Array(h2);
+    for (let f = 0; f < k; f++) {
+      const eigenVal = Math.max(values[f], 0);
+      const scale = Math.sqrt(eigenVal);
+      for (let r = 0; r < d; r++) {
+        loadings[r][f] = vectors.get(r, f) * scale;
+      }
+    }
+    let maxDelta = 0;
+    for (let r = 0; r < d; r++) {
+      let sum = 0;
+      for (let f = 0; f < k; f++) sum += loadings[r][f] ** 2;
+      h2[r] = Math.max(1e-3, Math.min(0.9999, sum));
+      maxDelta = Math.max(maxDelta, Math.abs(h2[r] - oldH2[r]));
+    }
+    if (maxDelta < tol) break;
+  }
+  return { loadings, communalities: h2 };
+}
+function extractML(R, k, maxIter, tol) {
+  const d = R.rows;
+  const Rarr = R.toArray();
+  const Theta = new Float64Array(d);
+  try {
+    const invR = R.inverse();
+    const factor = 1 - 0.5 * k / d;
+    for (let i = 0; i < d; i++) Theta[i] = Math.max(5e-3, Math.min(0.995, factor / Math.max(invR.get(i, i), 1e-12)));
+  } catch {
+    for (let i = 0; i < d; i++) Theta[i] = 0.5;
+  }
+  function extractLoadingsFromTheta(theta) {
+    const scaledR = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const si = 1 / Math.sqrt(Math.max(theta[i], 1e-12));
+        const sj = 1 / Math.sqrt(Math.max(theta[j], 1e-12));
+        return Rarr[i][j] * si * sj;
+      })
+    );
+    const { values, vectors } = Matrix.fromArray(scaledR).eigen();
+    const L2 = Array.from({ length: d }, () => new Array(k).fill(0));
+    for (let f = 0; f < k; f++) {
+      const ev = Math.max(values[f] - 1, 0);
+      const scale = Math.sqrt(ev);
+      for (let i = 0; i < d; i++) {
+        L2[i][f] = Math.sqrt(Math.max(theta[i], 1e-12)) * vectors.get(i, f) * scale;
+      }
+    }
+    return L2;
+  }
+  const lr0 = 0.02;
+  const lrMin = 1e-3;
+  let L = extractLoadingsFromTheta(Theta);
+  const vTheta = new Float64Array(d);
+  const momentum = 0.8;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const lr = lrMin + (lr0 - lrMin) * 0.5 * (1 + Math.cos(Math.PI * iter / maxIter));
+    L = extractLoadingsFromTheta(Theta);
+    const sigmaArr = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        let sum = 0;
+        for (let f = 0; f < k; f++) sum += L[i][f] * L[j][f];
+        return sum + (i === j ? Theta[i] : 0);
+      })
+    );
+    const Sigma = Matrix.fromArray(sigmaArr);
+    let invSigma;
+    try {
+      invSigma = Sigma.inverse();
+    } catch {
+      invSigma = Sigma.pseudoInverse();
+    }
+    const Delta = invSigma.multiply(Sigma.subtract(R)).multiply(invSigma);
+    let maxGrad = 0;
+    for (let i = 0; i < d; i++) {
+      const grad = Delta.get(i, i);
+      maxGrad = Math.max(maxGrad, Math.abs(grad));
+      const v = momentum * vTheta[i] - lr * grad;
+      vTheta[i] = v;
+      Theta[i] = Math.max(5e-3, Math.min(0.995, Theta[i] + v));
+    }
+    if (maxGrad < tol) break;
+  }
+  function concentratedML(x) {
+    const scaledR = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const psi_i = Math.max(x[i], 5e-3);
+        const psi_j = Math.max(x[j], 5e-3);
+        return Rarr[i][j] / (Math.sqrt(psi_i) * Math.sqrt(psi_j));
+      })
+    );
+    const { values } = Matrix.fromArray(scaledR).eigen();
+    let sum = 0;
+    for (let j = k; j < d; j++) {
+      const ev = Math.max(values[j], 1e-15);
+      sum += Math.log(ev) - ev;
+    }
+    let penalty = 0;
+    for (let i = 0; i < d; i++) {
+      if (x[i] < 5e-3 || x[i] > 0.995) penalty += 1e3;
+    }
+    return -sum + k - d + penalty;
+  }
+  const psi0 = Array.from(Theta);
+  const nmResult = nelderMead(concentratedML, psi0, {
+    maxIter: 5e3 * d,
+    tol: 1e-10
+  });
+  const finalTheta = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    finalTheta[i] = Math.max(5e-3, Math.min(0.995, nmResult.x[i]));
+  }
+  L = extractLoadingsFromTheta(finalTheta);
+  const h2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let sum = 0;
+    for (let f = 0; f < k; f++) sum += L[i][f] ** 2;
+    h2[i] = Math.max(1e-3, Math.min(0.9999, sum));
+  }
+  return { loadings: L, communalities: h2 };
+}
+function rotateVarimax(L, maxIter, tol) {
+  const p = L.length;
+  const k = L[0].length;
+  if (k < 2) return { rotated: L.map((r) => [...r]), T: [[1]] };
+  const sc = new Float64Array(p);
+  for (let i = 0; i < p; i++) {
+    let ss = 0;
+    for (let j = 0; j < k; j++) ss += L[i][j] ** 2;
+    sc[i] = Math.sqrt(ss || 1e-15);
+  }
+  const x = L.map((row, i) => row.map((v) => v / sc[i]));
+  let T = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  let dPast = 0;
+  for (let iter = 0; iter < Math.min(maxIter, 1e3); iter++) {
+    const z = Array.from(
+      { length: p },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += x[i][m] * T[m][j];
+        return s;
+      })
+    );
+    const csz2 = new Float64Array(k);
+    for (let j = 0; j < k; j++) {
+      let s = 0;
+      for (let i = 0; i < p; i++) s += z[i][j] ** 2;
+      csz2[j] = s / p;
+    }
+    const B = Array.from(
+      { length: k },
+      (_, r) => Array.from({ length: k }, (_2, c) => {
+        let s = 0;
+        for (let i = 0; i < p; i++) {
+          const zij = z[i][c];
+          s += x[i][r] * (zij * zij * zij - zij * csz2[c]);
+        }
+        return s;
+      })
+    );
+    const BtB = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += B[m][i] * B[m][j];
+        return s;
+      })
+    );
+    const { values: sigma2, vectors: Vmat } = Matrix.fromArray(BtB).eigen();
+    const svals = new Float64Array(k);
+    for (let j = 0; j < k; j++) svals[j] = Math.sqrt(Math.max(sigma2[j], 0));
+    const Varr = Vmat.toArray();
+    const BV = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += B[i][m] * Varr[m][j];
+        return s;
+      })
+    );
+    for (let j = 0; j < k; j++) {
+      const invS = svals[j] > 1e-15 ? 1 / svals[j] : 0;
+      for (let i = 0; i < k; i++) BV[i][j] = BV[i][j] * invS;
+    }
+    T = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += BV[i][m] * Varr[j][m];
+        return s;
+      })
+    );
+    let dNew = 0;
+    for (let j = 0; j < k; j++) dNew += svals[j];
+    if (dNew < dPast * (1 + tol)) break;
+    dPast = dNew;
+  }
+  const rot = Array.from(
+    { length: p },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      let s = 0;
+      for (let m = 0; m < k; m++) s += x[i][m] * T[m][j];
+      return s * sc[i];
+    })
+  );
+  return { rotated: rot, T };
+}
+function rotateOblimin(L, gamma, maxIter, tol) {
+  const d = L.length;
+  const k = L[0].length;
+  const Lmat = Matrix.fromArray(L);
+  let T = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  let Tmat = Matrix.fromArray(T);
+  const alpha = 1;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const Lambda = Lmat.multiply(Tmat);
+    const LambdaArr = Lambda.toArray();
+    const G = Array.from({ length: d }, () => new Array(k).fill(0));
+    for (let i = 0; i < d; i++) {
+      let rowSum = 0;
+      for (let m = 0; m < k; m++) rowSum += LambdaArr[i][m] ** 2;
+      for (let j = 0; j < k; j++) {
+        const sumSq = rowSum - LambdaArr[i][j] ** 2;
+        G[i][j] = LambdaArr[i][j] * (sumSq - gamma / d * rowSum);
+      }
+    }
+    const Gmat = Matrix.fromArray(G);
+    const L_T_G = Lmat.transpose().multiply(Gmat);
+    const diagLTG = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? L_T_G.get(i, i) : 0)
+    );
+    const Gp = Gmat.subtract(Tmat.multiply(Matrix.fromArray(diagLTG)));
+    let maxGrad = 0;
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        maxGrad = Math.max(maxGrad, Math.abs(Gp.get(i, j)));
+      }
+    }
+    if (maxGrad < tol) break;
+    let nextT = Tmat.subtract(Gp.scale(alpha));
+    const nextArr = nextT.toArray();
+    for (let j = 0; j < k; j++) {
+      let ss = 0;
+      for (let i = 0; i < k; i++) ss += nextArr[i][j] ** 2;
+      const invNorm = 1 / Math.sqrt(ss || 1e-12);
+      for (let i = 0; i < k; i++) nextArr[i][j] = nextArr[i][j] * invNorm;
+    }
+    Tmat = Matrix.fromArray(nextArr);
+    T = nextArr;
+  }
+  const rotated = Lmat.multiply(Tmat).toArray();
+  let invT;
+  try {
+    invT = Tmat.inverse();
+  } catch {
+    invT = Tmat.pseudoInverse();
+  }
+  const PhiMat = invT.multiply(invT.transpose());
+  const Phi = PhiMat.toArray();
+  return { rotated, T, Phi };
+}
+function rotatePromax(L, power, maxIter, tol) {
+  const d = L.length;
+  const k = L[0].length;
+  const h2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let sum = 0;
+    for (let j = 0; j < k; j++) sum += L[i][j] * L[i][j];
+    h2[i] = sum;
+  }
+  const sqrtH2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) sqrtH2[i] = Math.sqrt(Math.max(h2[i], 1e-15));
+  const L_norm = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => L[i][j] / sqrtH2[i])
+  );
+  const { rotated: vari, T: T_varimax } = rotateVarimax(L_norm, maxIter, tol);
+  const Q = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      const val = vari[i][j];
+      return Math.sign(val) * Math.abs(val) ** power;
+    })
+  );
+  const Vmat = Matrix.fromArray(vari);
+  const Qmat = Matrix.fromArray(Q);
+  let VtV_inv;
+  try {
+    VtV_inv = Vmat.transpose().multiply(Vmat).inverse();
+  } catch {
+    VtV_inv = Vmat.transpose().multiply(Vmat).pseudoInverse();
+  }
+  const U = VtV_inv.multiply(Vmat.transpose()).multiply(Qmat);
+  const Uarr = U.toArray();
+  const UtU = U.transpose().multiply(U);
+  let UtU_inv;
+  try {
+    UtU_inv = UtU.inverse();
+  } catch {
+    UtU_inv = UtU.pseudoInverse();
+  }
+  for (let j = 0; j < k; j++) {
+    const d_j = Math.max(UtU_inv.get(j, j), 1e-15);
+    const scale = Math.sqrt(d_j);
+    for (let i = 0; i < k; i++) Uarr[i][j] = Uarr[i][j] * scale;
+  }
+  const Umat = Matrix.fromArray(Uarr);
+  const rotatedNorm = Vmat.multiply(Umat).toArray();
+  const rotated = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => rotatedNorm[i][j] * sqrtH2[i])
+  );
+  const TvarMat = Matrix.fromArray(T_varimax);
+  const Tcompound = TvarMat.multiply(Umat);
+  const Tarr = Tcompound.toArray();
+  let invT;
+  try {
+    invT = Tcompound.inverse();
+  } catch {
+    invT = Tcompound.pseudoInverse();
+  }
+  const PhiMat = invT.multiply(invT.transpose());
+  const Phi = PhiMat.toArray();
+  return { rotated, T: Tarr, Phi };
+}
+function applyRotation(loadings, method, maxIter, tol) {
+  const k = loadings[0].length;
+  if (method === "none") {
+    const Phi = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+    );
+    return { rotated: loadings.map((r) => [...r]), Phi };
+  }
+  if (method === "varimax") {
+    const { rotated } = rotateVarimax(loadings, maxIter, tol);
+    const Phi = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+    );
+    return { rotated, Phi };
+  }
+  if (method === "oblimin" || method === "quartimin") {
+    const gamma = method === "quartimin" ? 0 : 0;
+    const { rotated, Phi } = rotateOblimin(loadings, gamma, maxIter, tol);
+    return { rotated, Phi };
+  }
+  if (method === "promax") {
+    const { rotated, Phi } = rotatePromax(loadings, 4, maxIter, tol);
+    return { rotated, Phi };
+  }
+  throw new Error(`runEFA: unknown rotation method '${method}'`);
+}
+function velicerMAP(R) {
+  const d = R.rows;
+  const { values, vectors } = R.eigen();
+  let bestK = 0;
+  let minMap = Infinity;
+  for (let k = 0; k < d - 1; k++) {
+    const Larr = Array.from(
+      { length: d },
+      (_, i) => Array.from(
+        { length: k + 1 },
+        (_2, j) => vectors.get(i, j) * Math.sqrt(Math.max(values[j], 0))
+      )
+    );
+    const Lmat = Matrix.fromArray(Larr);
+    const R_star = R.subtract(Lmat.multiply(Lmat.transpose()));
+    const C_star = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const denom = Math.sqrt(Math.abs(R_star.get(i, i)) * Math.abs(R_star.get(j, j)));
+        return denom > 1e-15 ? R_star.get(i, j) / denom : i === j ? 1 : 0;
+      })
+    );
+    let sumSq = 0;
+    for (let r = 0; r < d; r++) {
+      for (let c = 0; c < r; c++) sumSq += C_star[r][c] ** 2;
+    }
+    const mapVal = sumSq / (d * (d - 1) / 2);
+    if (mapVal < minMap) {
+      minMap = mapVal;
+      bestK = k + 1;
+    }
+  }
+  return bestK;
+}
+function parallelAnalysis(observedEigenvalues, n, d, iterations, rng) {
+  const allEigens = Array.from({ length: d }, () => new Array(iterations).fill(0));
+  for (let iter = 0; iter < iterations; iter++) {
+    const randomData = Array.from(
+      { length: n },
+      () => Array.from({ length: d }, () => prngNormal(rng))
+    );
+    const randR = computeCorrelationMatrix(randomData, n, d);
+    const randEig = randR.eigen().values;
+    for (let i = 0; i < d; i++) {
+      allEigens[i][iter] = randEig[i];
+    }
+  }
+  const simulated = allEigens.map((eigArray) => {
+    const sorted = [...eigArray].sort((a, b) => a - b);
+    const idx = Math.floor(0.95 * iterations);
+    return sorted[Math.min(idx, iterations - 1)];
+  });
+  let suggested = 0;
+  for (let i = 0; i < d; i++) {
+    if (observedEigenvalues[i] > simulated[i]) suggested++;
+    else break;
+  }
+  return { simulated, suggested: Math.max(1, suggested) };
+}
+function computeKMOBartlett(R, n, d) {
+  let invR;
+  try {
+    invR = R.inverse();
+  } catch {
+    invR = R.pseudoInverse();
+  }
+  const S2diag = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    S2diag[i] = 1 / Math.max(invR.get(i, i), 1e-12);
+  }
+  const antiImage = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => {
+      if (i === j) return 1;
+      return -invR.get(i, j) / Math.sqrt(Math.max(invR.get(i, i) * invR.get(j, j), 1e-12));
+    })
+  );
+  let rSum = 0, qSum = 0;
+  const msaItems = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let rIdx = 0, qIdx = 0;
+    for (let j = 0; j < d; j++) {
+      if (i === j) continue;
+      rIdx += R.get(i, j) ** 2;
+      qIdx += antiImage[i][j] ** 2;
+    }
+    msaItems[i] = rIdx / Math.max(rIdx + qIdx, 1e-12);
+    rSum += rIdx;
+    qSum += qIdx;
+  }
+  const kmo = rSum / Math.max(rSum + qSum, 1e-12);
+  let logDetR;
+  try {
+    logDetR = R.logDet();
+  } catch {
+    const ev = R.eigen().values;
+    logDetR = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  const chiSq = -(n - 1 - (2 * d + 5) / 6) * logDetR;
+  const df = d * (d - 1) / 2;
+  const pValue = chiSqPValue(Math.max(chiSq, 0), df);
+  return {
+    kmo,
+    kmoPerItem: Array.from(msaItems),
+    bartlett: {
+      chiSq: Math.max(chiSq, 0),
+      df,
+      pValue
+    }
+  };
+}
+function computeImpliedCov(L, Phi, Theta) {
+  const d = L.length;
+  const k = L[0].length;
+  const sigma = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => {
+      let sum = 0;
+      for (let f1 = 0; f1 < k; f1++) {
+        for (let f2 = 0; f2 < k; f2++) {
+          sum += L[i][f1] * Phi[f1][f2] * L[j][f2];
+        }
+      }
+      return sum + (i === j ? Theta[i] : 0);
+    })
+  );
+  return Matrix.fromArray(sigma);
+}
+function cfaOptimize(S, model, d, maxIter, tol) {
+  const factors = Object.keys(model);
+  const k = factors.length;
+  const L = Array.from({ length: d }, () => new Array(k).fill(0));
+  const Theta = new Float64Array(d).fill(0.5);
+  const Phi = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  factors.forEach((f, c) => {
+    const items = model[f];
+    for (const r of items) {
+      if (r < d) L[r][c] = 0.7;
+    }
+  });
+  let converged = false;
+  let iter = 0;
+  const c1 = 1e-4;
+  function objective(Lc, Phic, Thetac) {
+    const Sigma = computeImpliedCov(Lc, Phic, Thetac);
+    let logDetSigma;
+    try {
+      logDetSigma = Sigma.logDet();
+    } catch {
+      return 1e10;
+    }
+    let logDetS;
+    try {
+      logDetS = S.logDet();
+    } catch {
+      return 1e10;
+    }
+    let trVal;
+    try {
+      trVal = Sigma.inverse().multiply(S).trace();
+    } catch {
+      return 1e10;
+    }
+    return Math.max(0, logDetSigma + trVal - logDetS - d);
+  }
+  for (iter = 0; iter < maxIter; iter++) {
+    const Sigma = computeImpliedCov(L, Phi, Theta);
+    let invSigma;
+    try {
+      invSigma = Sigma.inverse();
+    } catch {
+      try {
+        invSigma = Sigma.pseudoInverse();
+      } catch {
+        break;
+      }
+    }
+    const Delta = invSigma.multiply(Sigma.subtract(S)).multiply(invSigma);
+    const LMat = Matrix.fromArray(L);
+    const PhiMat = Matrix.fromArray(Phi);
+    const gL = Delta.multiply(LMat).multiply(PhiMat).scale(2);
+    const gPhi = LMat.transpose().multiply(Delta).multiply(LMat);
+    const currentLoss = objective(L, Phi, Theta);
+    let alpha = 1;
+    let armijoSatisfied = false;
+    while (!armijoSatisfied && alpha > 1e-6) {
+      let maxGrad = 0;
+      let dirDotGrad = 0;
+      const nextL = Array.from({ length: d }, () => new Array(k).fill(0));
+      factors.forEach((f, c) => {
+        for (const r of model[f]) {
+          if (r >= d) continue;
+          const grad = gL.get(r, c);
+          maxGrad = Math.max(maxGrad, Math.abs(grad));
+          nextL[r][c] = L[r][c] - alpha * grad;
+          dirDotGrad += grad * -grad;
+        }
+      });
+      const nextTheta = new Float64Array(d);
+      for (let i = 0; i < d; i++) {
+        const grad = Delta.get(i, i);
+        maxGrad = Math.max(maxGrad, Math.abs(grad));
+        nextTheta[i] = Math.max(1e-3, Theta[i] - alpha * grad);
+        dirDotGrad += grad * -grad;
+      }
+      const nextPhi = Array.from(
+        { length: k },
+        (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+      );
+      for (let r = 0; r < k; r++) {
+        for (let c = 0; c < r; c++) {
+          const grad = gPhi.get(r, c) + gPhi.get(c, r);
+          maxGrad = Math.max(maxGrad, Math.abs(grad));
+          const updated = Math.max(-0.99, Math.min(0.99, Phi[r][c] - alpha * grad));
+          nextPhi[r][c] = updated;
+          nextPhi[c][r] = updated;
+          dirDotGrad += grad * -grad;
+        }
+      }
+      if (maxGrad < tol) {
+        converged = true;
+        break;
+      }
+      const nextLoss = objective(nextL, nextPhi, nextTheta);
+      if (nextLoss <= currentLoss + c1 * alpha * dirDotGrad) {
+        armijoSatisfied = true;
+        for (let i = 0; i < d; i++) {
+          for (let j = 0; j < k; j++) L[i][j] = nextL[i][j];
+          Theta[i] = nextTheta[i];
+        }
+        for (let i = 0; i < k; i++) {
+          for (let j = 0; j < k; j++) Phi[i][j] = nextPhi[i][j];
+        }
+      } else {
+        alpha *= 0.5;
+      }
+    }
+    if (converged) break;
+    if (!armijoSatisfied) break;
+  }
+  return { L, Theta, Phi, converged, iterations: iter };
+}
+function cfaStandardErrors(L, Phi, Theta, S, model, n, d) {
+  const factors = Object.keys(model);
+  const k = factors.length;
+  const params = [];
+  factors.forEach((f, c) => {
+    for (const r of model[f]) {
+      if (r < d) params.push({ type: "loading", i: r, j: c });
+    }
+  });
+  for (let i = 0; i < d; i++) params.push({ type: "theta", i, j: 0 });
+  for (let r = 0; r < k; r++) {
+    for (let c = 0; c < r; c++) params.push({ type: "phi", i: r, j: c });
+  }
+  const nParams = params.length;
+  function getParam(idx) {
+    const p = params[idx];
+    if (p.type === "loading") return L[p.i][p.j];
+    if (p.type === "theta") return Theta[p.i];
+    return Phi[p.i][p.j];
+  }
+  function setParam(idx, val) {
+    const p = params[idx];
+    if (p.type === "loading") L[p.i][p.j] = val;
+    else if (p.type === "theta") Theta[p.i] = val;
+    else {
+      Phi[p.i][p.j] = val;
+      Phi[p.j][p.i] = val;
+    }
+  }
+  function obj() {
+    const Sigma = computeImpliedCov(L, Phi, Theta);
+    try {
+      const logDetSig = Sigma.logDet();
+      const logDetS = S.logDet();
+      const tr = Sigma.inverse().multiply(S).trace();
+      return Math.max(0, logDetSig + tr - logDetS - d);
+    } catch {
+      return 1e10;
+    }
+  }
+  const h = 1e-4;
+  const hessian = Array.from(
+    { length: nParams },
+    () => new Array(nParams).fill(0)
+  );
+  for (let i = 0; i < nParams; i++) {
+    for (let j = i; j < nParams; j++) {
+      const vi = getParam(i);
+      const vj = getParam(j);
+      if (i === j) {
+        setParam(i, vi + h);
+        const fPlus = obj();
+        setParam(i, vi - h);
+        const fMinus = obj();
+        setParam(i, vi);
+        const f0 = obj();
+        hessian[i][i] = (fPlus - 2 * f0 + fMinus) / (h * h);
+      } else {
+        setParam(i, vi + h);
+        setParam(j, vj + h);
+        const fpp = obj();
+        setParam(i, vi + h);
+        setParam(j, vj - h);
+        const fpm = obj();
+        setParam(i, vi - h);
+        setParam(j, vj + h);
+        const fmp = obj();
+        setParam(i, vi - h);
+        setParam(j, vj - h);
+        const fmm = obj();
+        setParam(i, vi);
+        setParam(j, vj);
+        hessian[i][j] = (fpp - fpm - fmp + fmm) / (4 * h * h);
+        hessian[j][i] = hessian[i][j];
+      }
+    }
+  }
+  const infoArr = hessian.map(
+    (row) => row.map((v) => (n - 1) / 2 * v)
+  );
+  let covMat;
+  try {
+    covMat = Matrix.fromArray(infoArr).inverse();
+  } catch {
+    try {
+      covMat = Matrix.fromArray(infoArr).pseudoInverse();
+    } catch {
+      const loadingSE2 = Array.from({ length: d }, () => new Array(k).fill(0.05));
+      const thetaSE2 = new Float64Array(d).fill(0.05);
+      const phiSE2 = Array.from({ length: k }, () => new Array(k).fill(0.05));
+      return { loadingSE: loadingSE2, thetaSE: thetaSE2, phiSE: phiSE2 };
+    }
+  }
+  const loadingSE = Array.from({ length: d }, () => new Array(k).fill(0));
+  const thetaSE = new Float64Array(d);
+  const phiSE = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let idx = 0; idx < nParams; idx++) {
+    const variance2 = Math.max(covMat.get(idx, idx), 0);
+    const se2 = Math.sqrt(variance2);
+    const p = params[idx];
+    if (p.type === "loading") loadingSE[p.i][p.j] = se2;
+    else if (p.type === "theta") thetaSE[p.i] = se2;
+    else phiSE[p.i][p.j] = se2;
+  }
+  return { loadingSE, thetaSE, phiSE };
+}
+function runFADiagnostics(data, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runFADiagnostics: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runFADiagnostics: need at least 2 variables");
+  const seed = options?.seed ?? 42;
+  const iterations = options?.parallelIterations ?? 100;
+  const rng = new PRNG2(seed);
+  const R = computeCorrelationMatrix(data, n, d);
+  const { kmo, kmoPerItem, bartlett } = computeKMOBartlett(R, n, d);
+  const eigenvalues = R.eigen().values;
+  const { simulated, suggested: parallelSuggested } = parallelAnalysis(
+    eigenvalues,
+    n,
+    d,
+    iterations,
+    rng
+  );
+  const mapSuggested = velicerMAP(R);
+  return {
+    kmo,
+    kmoPerItem,
+    bartlett,
+    mapSuggested,
+    parallelEigenvalues: [...eigenvalues],
+    parallelSimulated: [...simulated],
+    parallelSuggested
+  };
+}
+function runEFA(data, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runEFA: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runEFA: need at least 2 variables");
+  const extraction = options?.extraction ?? "ml";
+  const rotation = options?.rotation ?? "promax";
+  const maxIter = options?.maxIter ?? 1e3;
+  const tol = options?.tol ?? 1e-6;
+  const seed = options?.seed ?? 42;
+  const R = computeCorrelationMatrix(data, n, d);
+  const eigenvalues = R.eigen().values;
+  let nFactors = options?.nFactors;
+  if (nFactors === void 0) {
+    const rng = new PRNG2(seed);
+    const { suggested } = parallelAnalysis(eigenvalues, n, d, 100, rng);
+    nFactors = suggested;
+  }
+  if (nFactors < 1) throw new Error("runEFA: nFactors must be at least 1");
+  if (nFactors >= d) throw new Error("runEFA: nFactors must be less than number of variables");
+  const extracted = extraction === "ml" ? extractML(R, nFactors, maxIter, tol) : extractPAF(R, nFactors, maxIter, tol);
+  const { rotated, Phi } = applyRotation(extracted.loadings, rotation, maxIter, tol);
+  const communalities = new Float64Array(d);
+  const uniqueness = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let comm = 0;
+    for (let f1 = 0; f1 < nFactors; f1++) {
+      for (let f2 = 0; f2 < nFactors; f2++) {
+        comm += rotated[i][f1] * Phi[f1][f2] * rotated[i][f2];
+      }
+    }
+    communalities[i] = Math.max(1e-3, Math.min(0.9999, comm));
+    uniqueness[i] = 1 - communalities[i];
+  }
+  const thetaArr = new Float64Array(d);
+  for (let i = 0; i < d; i++) thetaArr[i] = Math.max(1e-3, uniqueness[i]);
+  const impliedSigma = computeImpliedCov(rotated, Phi, thetaArr);
+  const nLoadingParams = d * nFactors;
+  const nUniqueParams = d;
+  const nRotationConstraints = nFactors * (nFactors - 1) / 2;
+  const nFreeParams = nLoadingParams + nUniqueParams - nRotationConstraints;
+  const fit = computeFit(R, impliedSigma, n, d, nFreeParams, nFactors);
+  const stdLoadings = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: nFactors }, (_2, j) => {
+      const sigmaII = impliedSigma.get(i, i);
+      return rotated[i][j] * Math.sqrt(Phi[j][j]) / Math.sqrt(Math.max(sigmaII, 1e-12));
+    })
+  );
+  const variableNames = options?.variableNames ?? Array.from({ length: d }, (_, i) => `V${i + 1}`);
+  const factorNames = Array.from({ length: nFactors }, (_, i) => `F${i + 1}`);
+  const formatted = `EFA (${extraction}/${rotation}): ${formatCFAFit(fit)}`;
+  return {
+    loadings: rotated,
+    standardizedLoadings: stdLoadings,
+    uniqueness: Array.from(uniqueness),
+    communalities: Array.from(communalities),
+    factorCorrelations: Phi,
+    fit,
+    eigenvalues: [...eigenvalues],
+    nFactors,
+    rotation,
+    extraction,
+    variableNames,
+    factorNames,
+    formatted
+  };
+}
+function runCFA(data, model, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runCFA: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runCFA: need at least 2 variables");
+  const factors = Object.keys(model);
+  const k = factors.length;
+  if (k < 1) throw new Error("runCFA: model must specify at least 1 factor");
+  const maxIter = options?.maxIter ?? 1e3;
+  const tolVal = options?.tol ?? 1e-6;
+  const S = computeCorrelationMatrix(data, n, d);
+  const { L, Theta, Phi } = cfaOptimize(S, model, d, maxIter, tolVal);
+  const impliedSigma = computeImpliedCov(L, Phi, Theta);
+  let nLoadingParams = 0;
+  factors.forEach((f) => {
+    nLoadingParams += model[f].length;
+  });
+  const nUniqueParams = d;
+  const nCovParams = k * (k - 1) / 2;
+  const nFreeParams = nLoadingParams + nUniqueParams + nCovParams;
+  const fit = computeFit(S, impliedSigma, n, d, nFreeParams);
+  const Lcopy = L.map((r) => [...r]);
+  const Phicopy = Phi.map((r) => [...r]);
+  const Thetacopy = new Float64Array(Theta);
+  const { loadingSE, thetaSE, phiSE } = cfaStandardErrors(
+    Lcopy,
+    Phicopy,
+    Thetacopy,
+    S,
+    model,
+    n,
+    d
+  );
+  const paramLoadings = factors.map(
+    (f, c) => model[f].map((r) => {
+      if (r >= d) {
+        return { estimate: 0, se: 0, z: 0, pValue: 1, stdAll: 0 };
+      }
+      const est = L[r][c];
+      const se2 = Math.max(loadingSE[r][c], 1e-6);
+      const z = est / se2;
+      const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+      const sigmaII = Math.max(impliedSigma.get(r, r), 1e-12);
+      const stdAll = est * Math.sqrt(Phi[c][c]) / Math.sqrt(sigmaII);
+      return { estimate: roundTo(est, 4), se: roundTo(se2, 4), z: roundTo(z, 3), pValue: roundTo(pValue, 4), stdAll: roundTo(stdAll, 4) };
+    })
+  );
+  const paramUniqueness = Array.from(Theta).map((est, i) => {
+    const se2 = Math.max(thetaSE[i], 1e-6);
+    const z = est / se2;
+    const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+    const sigmaII = Math.max(impliedSigma.get(i, i), 1e-12);
+    const stdAll = est / sigmaII;
+    return { estimate: roundTo(est, 4), se: roundTo(se2, 4), z: roundTo(z, 3), pValue: roundTo(pValue, 4), stdAll: roundTo(stdAll, 4) };
+  });
+  const paramCov = Array.from(
+    { length: k },
+    (_, r) => Array.from({ length: k }, (_2, c) => {
+      if (r === c) {
+        return { estimate: 1, se: 0, z: Infinity, pValue: 0, stdAll: 1 };
+      }
+      const est = Phi[r][c];
+      const se2 = Math.max(phiSE[r][c] || phiSE[c][r], 1e-6);
+      const z = est / se2;
+      const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+      return { estimate: roundTo(est, 4), se: roundTo(se2, 4), z: roundTo(z, 3), pValue: roundTo(pValue, 4), stdAll: roundTo(est, 4) };
+    })
+  );
+  const communalities = Array.from(Theta).map((t) => roundTo(1 - t, 4));
+  const uniquenessArr = Array.from(Theta).map((t) => roundTo(t, 4));
+  const stdLoadings = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      const sigmaII = Math.max(impliedSigma.get(i, i), 1e-12);
+      return roundTo(L[i][j] * Math.sqrt(Phi[j][j]) / Math.sqrt(sigmaII), 4);
+    })
+  );
+  const eigenvalues = S.eigen().values.map((v) => roundTo(v, 4));
+  const variableNames = options?.variableNames ?? Array.from({ length: d }, (_, i) => `V${i + 1}`);
+  const factorNames = options?.factorNames ?? factors;
+  const formatted = `CFA: ${formatCFAFit(fit)}`;
+  return {
+    loadings: L,
+    standardizedLoadings: stdLoadings,
+    uniqueness: uniquenessArr,
+    communalities,
+    factorCorrelations: Phi,
+    fit,
+    eigenvalues,
+    nFactors: k,
+    rotation: "none",
+    extraction: "ml",
+    variableNames,
+    factorNames,
+    formatted,
+    parameterEstimates: {
+      loadings: paramLoadings,
+      uniquenesses: paramUniqueness,
+      factorCovariances: paramCov
+    },
+    model
+  };
+}
+
+export { analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, correlationMatrix, cutTree, cutTreeHeight, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, euclideanDistMatrix, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kDistancePlot, kendallTau, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, partialCorrelation, pearsonCorrelation, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runCFA, runDBSCAN, runEFA, runFADiagnostics, runHierarchical, runKMeans, runLMM, runPCA, screeData, shapiroWilk, silhouetteScores, skewness, spearmanCorrelation, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+//# sourceMappingURL=chunk-N5KILE7O.js.map
+//# sourceMappingURL=chunk-N5KILE7O.js.map

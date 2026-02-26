@@ -50,4 +50,8 @@ export * from './plots/chord-diagram.js'
 export * from './plots/arc-diagram.js'
 export * from './plots/alluvial-plot.js'
 export * from './plots/edge-bundling.js'
+// Clustering
+export * from './plots/dendrogram.js'
+// Factor Analysis
+export * from './plots/fa-plot.js'
 export * from './export.js'

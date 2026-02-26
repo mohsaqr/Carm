@@ -61,6 +61,11 @@ import {
   renderAlluvialPlot,
   renderArcDiagram,
   renderEdgeBundling,
+  // Factor Analysis
+  runEFA,
+  runCFA,
+  runFADiagnostics,
+  renderFAPlot,
 } from 'carm'
 
 // ─── Seeded RNG (LCG + Box-Muller) ────────────────────────────────────────
@@ -921,6 +926,227 @@ tbl(pcaTables, {
     ]
   }),
   note: 'Communality = sum of squared loadings across retained components (h²). Higher values indicate more variance captured by the solution.',
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FACTOR ANALYSIS SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Synthetic 5-factor data (20 items, n=500) for the enterprise CFA demo ──
+const faRng5 = randn(123)
+const faVarNames5 = [
+  'Deep Thinking', 'Critical Analysis', 'Problem Solving', 'Metacognition', 'Self-Regulation',
+  'Class Attendance', 'Assignment Completion', 'Note Taking', 'Study Hours',
+  'Enjoyment', 'Belonging', 'Enthusiasm', 'Value Perception',
+  'Peer Discussion', 'Group Projects', 'Help Seeking', 'Collaboration',
+  'Goal Setting', 'Initiative Taking', 'Self-Advocacy',
+]
+const faTrueL5 = [
+  [0.82,0.10,0.05,0.08,0.05],[0.78,0.12,0.00,0.05,0.10],[0.85,0.05,0.08,0.10,0.12],
+  [0.72,0.08,0.10,0.00,0.15],[0.68,0.15,0.05,0.05,0.20],
+  [0.10,0.80,0.05,0.00,0.08],[0.12,0.85,0.08,0.05,0.05],[0.08,0.72,0.10,0.10,0.00],
+  [0.15,0.75,0.00,0.08,0.12],
+  [0.05,0.08,0.82,0.12,0.05],[0.08,0.05,0.78,0.15,0.00],[0.10,0.10,0.85,0.08,0.08],
+  [0.12,0.00,0.70,0.10,0.12],
+  [0.05,0.10,0.12,0.80,0.08],[0.08,0.12,0.08,0.75,0.10],[0.10,0.08,0.05,0.82,0.05],
+  [0.05,0.05,0.10,0.72,0.15],
+  [0.12,0.10,0.08,0.05,0.80],[0.08,0.05,0.05,0.10,0.85],[0.15,0.08,0.10,0.08,0.75],
+]
+const faTruePhi5 = [
+  [1.00,0.35,0.42,0.28,0.50],[0.35,1.00,0.30,0.22,0.38],
+  [0.42,0.30,1.00,0.45,0.32],[0.28,0.22,0.45,1.00,0.25],[0.50,0.38,0.32,0.25,1.00],
+]
+
+// Generate data from known factor structure via Cholesky
+function faGenerate(rng: () => number, n: number, trueL: number[][], truePhi: number[][]): number[][] {
+  const d = trueL.length, k = trueL[0]!.length
+  const chol = truePhi.map(r => [...r])
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < i; j++) {
+      let sum = 0; for (let m = 0; m < j; m++) sum += chol[i]![m]! * chol[j]![m]!
+      chol[i]![j] = (chol[i]![j]! - sum) / chol[j]![j]!
+    }
+    let sum = 0; for (let m = 0; m < i; m++) sum += chol[i]![m]! * chol[i]![m]!
+    chol[i]![i] = Math.sqrt(chol[i]![i]! - sum)
+    for (let j = i + 1; j < k; j++) chol[i]![j] = 0
+  }
+  const data: number[][] = []
+  for (let i = 0; i < n; i++) {
+    const z = Array.from({ length: k }, () => rng())
+    const f = Array.from({ length: k }, (_, fi) => {
+      let val = 0; for (let m = 0; m <= fi; m++) val += chol[fi]![m]! * z[m]!; return val
+    })
+    const row: number[] = []
+    for (let j = 0; j < d; j++) {
+      let val = 0; for (let m = 0; m < k; m++) val += trueL[j]![m]! * f[m]!
+      val += rng() * 0.35; row.push(val)
+    }
+    data.push(row)
+  }
+  return data
+}
+
+const faData5 = faGenerate(faRng5, 500, faTrueL5, faTruePhi5)
+const faFactorLabels5 = ['Cognitive', 'Behavioral', 'Emotional', 'Social', 'Agentic']
+
+// Run 5-factor CFA
+const cfaResult5 = runCFA(faData5, {
+  'Cognitive':  [0, 1, 2, 3, 4],
+  'Behavioral': [5, 6, 7, 8],
+  'Emotional':  [9, 10, 11, 12],
+  'Social':     [13, 14, 15, 16],
+  'Agentic':    [17, 18, 19],
+}, {
+  variableNames: faVarNames5,
+  factorNames: faFactorLabels5,
+})
+
+// Render 5-factor CFA path diagram (the enterprise showcase)
+renderFAPlot(
+  document.getElementById('fa-path-5f')!,
+  cfaResult5,
+  {
+    type: 'path',
+    variableLabels: faVarNames5,
+    factorLabels: faFactorLabels5,
+    showErrorTerms: true,
+    showFitBox: true,
+    caption: '5-factor CFA model (n = 500, 20 items). Arrow width ∝ |standardized loading|.',
+    pathStyle: {
+      factorRx: 56, factorRy: 28, factorStroke: 2.5, factorFontSize: 13,
+      itemWidth: 110, itemHeight: 28, itemFontSize: 10.5, itemAccentWidth: 4,
+      errorRx: 13, errorRy: 11,
+      arrowMarkerSize: 5, arrowSpan: 130, errorSpan: 32,
+      itemGap: 5, factorGroupGap: 30,
+      covArcReserve: 80, covNestSpacing: 18, covMarkerSize: 5,
+      loadingFontSize: 9, loadingPosition: 0.55,
+      rightPadding: 50,
+    },
+  }
+)
+
+// ── 3-factor data (9 items, n=200) ──
+const faRng3 = randn(42)
+const faVarNames3 = ['Read', 'Write', 'Speak', 'Algebra', 'Geometry', 'Calculus', 'History', 'Geography', 'Civics']
+const faTrueL3 = [
+  [0.8,0.1,0.0],[0.7,0.2,0.0],[0.9,0.0,0.1],
+  [0.1,0.8,0.0],[0.0,0.7,0.1],[0.1,0.9,0.0],
+  [0.0,0.0,0.8],[0.1,0.0,0.7],[0.0,0.1,0.9],
+]
+const faTruePhi3 = [[1.0,0.3,0.2],[0.3,1.0,0.25],[0.2,0.25,1.0]]
+const faData3 = faGenerate(faRng3, 200, faTrueL3, faTruePhi3)
+const faFactorLabels3 = ['Verbal', 'Math', 'Social Studies']
+
+// Run diagnostics + EFA + CFA
+const faDiag = runFADiagnostics(faData3, { seed: 42, parallelIterations: 50 })
+const efaResult = runEFA(faData3, { nFactors: 3, extraction: 'ml', rotation: 'promax', variableNames: faVarNames3, seed: 42 })
+const cfaResult3 = runCFA(faData3, {
+  'Verbal': [0, 1, 2], 'Math': [3, 4, 5], 'Social Studies': [6, 7, 8],
+}, { variableNames: faVarNames3, factorNames: faFactorLabels3 })
+
+// Scree + parallel analysis
+renderFAPlot(
+  document.getElementById('fa-scree')!,
+  efaResult,
+  { type: 'scree', diagnostics: faDiag, variableLabels: faVarNames3,
+    caption: 'n = 200, 9 items. ML extraction. Dashed line: 95th percentile from 50 Monte Carlo replications.' }
+)
+
+// Loadings heatmap
+renderFAPlot(
+  document.getElementById('fa-loadings')!,
+  efaResult,
+  { type: 'loadings', loadingThreshold: 0.3, variableLabels: faVarNames3,
+    caption: 'Loadings < 0.3 dimmed. h² = communality column.' }
+)
+
+// 3-factor CFA path
+renderFAPlot(
+  document.getElementById('fa-path-3f')!,
+  cfaResult3,
+  { type: 'path', variableLabels: faVarNames3, factorLabels: faFactorLabels3,
+    showErrorTerms: true, showFitBox: true,
+    caption: '3-factor CFA (n = 200, 9 items). Verbal, Math, Social Studies.' }
+)
+
+// Communality bars
+renderFAPlot(
+  document.getElementById('fa-communality')!,
+  efaResult,
+  { type: 'communality', variableLabels: faVarNames3 }
+)
+
+// Factor correlations
+renderFAPlot(
+  document.getElementById('fa-factor-corr')!,
+  efaResult,
+  { type: 'factor-correlation', factorLabels: faFactorLabels3 }
+)
+
+// Fit indices dashboard
+renderFAPlot(
+  document.getElementById('fa-fit-indices')!,
+  cfaResult3,
+  { type: 'fit-indices' }
+)
+
+// FA Tables
+const faTables = document.getElementById('fa-tables')!
+
+tbl(faTables, {
+  title: 'Table 14.  CFA Standardized Factor Loadings (5-Factor Model)',
+  subtitle: `ML estimation (n = 500, 20 items, 5 factors). ${cfaResult5.formatted}`,
+  cols: [
+    { h: 'Item', a: 'l' },
+    ...faFactorLabels5.map(f => ({ h: `<strong>${f}</strong>`, a: 'r' as Align })),
+    { h: 'h²', a: 'r' },
+  ],
+  rows: faVarNames5.map((name, i) => {
+    const loadings = cfaResult5.standardizedLoadings[i]!
+    return [
+      `<strong>${name}</strong>`,
+      ...loadings.map((l: number) => {
+        const fmt = l.toFixed(3).replace(/^-0\./, '&minus;.').replace(/^0\./, '.')
+        return Math.abs(l) >= 0.30 ? `<strong>${fmt}</strong>` : `<span class="stat-dim">${fmt}</span>`
+      }),
+      (cfaResult5.communalities[i] ?? 0).toFixed(3),
+    ]
+  }),
+  note: 'Values ≥ .30 in bold. h² = communality (proportion of variance explained by the factor model).',
+})
+
+tbl(faTables, {
+  title: 'Table 15.  Factor Correlations (Φ) — 5-Factor CFA',
+  subtitle: 'Oblique factors — inter-factor correlations estimated freely.',
+  cols: [
+    { h: '', a: 'l' },
+    ...faFactorLabels5.map(f => ({ h: `<strong>${f}</strong>`, a: 'r' as Align })),
+  ],
+  rows: faFactorLabels5.map((label, ri) => [
+    `<strong>${label}</strong>`,
+    ...cfaResult5.factorCorrelations[ri]!.map((v: number, ci: number) =>
+      ri === ci ? '<span class="stat-dim">1.000</span>' : v.toFixed(3)
+    ),
+  ]),
+  note: 'Off-diagonal values show the estimated correlation between latent factors.',
+})
+
+tbl(faTables, {
+  title: 'Table 16.  Model Fit Indices — 5-Factor CFA',
+  subtitle: cfaResult5.formatted,
+  cols: [
+    { h: 'Index', a: 'l' }, { h: 'Value', a: 'r' }, { h: 'Threshold', a: 'r' }, { h: 'Verdict', a: 'c' },
+  ],
+  rows: [
+    ['χ²', `${cfaResult5.fit.chiSq.toFixed(2)} (df = ${cfaResult5.fit.df})`, '—', cfaResult5.fit.pValue > 0.05 ? '<span style="color:#198754">&#10003;</span>' : '<span style="color:#dc3545">&#10005;</span>'],
+    ['RMSEA', cfaResult5.fit.rmsea.toFixed(3), '≤ .05 good, ≤ .08 ok', cfaResult5.fit.rmsea <= 0.05 ? '<span style="color:#198754;font-weight:600">Good</span>' : cfaResult5.fit.rmsea <= 0.08 ? '<span style="color:#e65100;font-weight:600">Acceptable</span>' : '<span style="color:#dc3545;font-weight:600">Poor</span>'],
+    ['CFI', cfaResult5.fit.cfi.toFixed(3), '≥ .95 good, ≥ .90 ok', cfaResult5.fit.cfi >= 0.95 ? '<span style="color:#198754;font-weight:600">Good</span>' : cfaResult5.fit.cfi >= 0.90 ? '<span style="color:#e65100;font-weight:600">Acceptable</span>' : '<span style="color:#dc3545;font-weight:600">Poor</span>'],
+    ['TLI', cfaResult5.fit.tli.toFixed(3), '≥ .95 good, ≥ .90 ok', cfaResult5.fit.tli >= 0.95 ? '<span style="color:#198754;font-weight:600">Good</span>' : cfaResult5.fit.tli >= 0.90 ? '<span style="color:#e65100;font-weight:600">Acceptable</span>' : '<span style="color:#dc3545;font-weight:600">Poor</span>'],
+    ['SRMR', cfaResult5.fit.srmr.toFixed(3), '≤ .05 good, ≤ .08 ok', cfaResult5.fit.srmr <= 0.05 ? '<span style="color:#198754;font-weight:600">Good</span>' : cfaResult5.fit.srmr <= 0.08 ? '<span style="color:#e65100;font-weight:600">Acceptable</span>' : '<span style="color:#dc3545;font-weight:600">Poor</span>'],
+    ['AIC', cfaResult5.fit.aic.toFixed(1), '—', '—'],
+    ['BIC', cfaResult5.fit.bic.toFixed(1), '—', '—'],
+  ],
+  note: 'RMSEA 90% CI: [' + cfaResult5.fit.rmseaCI[0].toFixed(3) + ', ' + cfaResult5.fit.rmseaCI[1].toFixed(3) + ']. Lower AIC/BIC preferred for model comparison.',
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1,3 +1,37 @@
+### 2026-02-26 — FA cross-validation: 100/100 pass + real dataset verified
+
+- `src/stats/factor-analysis.ts`:
+  - **Promax rotation**: Added outer Kaiser normalization to match `psych::fa(rotate="promax")`. The `psych::kaiser()` wrapper normalizes loadings by communality (rows → unit norm) before calling Promax, then denormalizes. This changes the promax target matrix nonlinearly — without it, dataset 86 (n=100, p=6, k=2) failed at loadMAE=0.055.
+  - **Varimax rotation**: Replaced Jacobi pairwise algorithm with R's exact SVD-based algorithm (`stats::varimax`). Uses polar decomposition via eigendecomposition of B'B (avoids buggy Matrix.svd for small matrices).
+  - **ML extraction**: Hybrid approach — Phase 1: Jöreskog gradient descent with cosine-annealed LR, Phase 2: Nelder-Mead polish on R's concentrated ML objective. Initialization fixed to R's factanal formula: `(1 - 0.5k/p) / diag(R^{-1})`.
+  - Removed debug logging.
+- **Cross-validation**: 100/100 synthetic datasets pass (loadMAE < 0.05, most < 0.001). Real dataset (525×31 survey, LOC/CCA/ER/FSI/TW scales) verified with k=3,4,5,6 — all loadings match R's psych::fa to 4 decimal places.
+
+### 2026-02-25 — Factor Analysis (EFA + CFA) & 6 visualizations
+
+**Carm — new files:**
+- `src/stats/factor-analysis.ts`: Complete FA module (~1400 lines). Three public functions: `runEFA()` (PAF/ML extraction, varimax/oblimin/promax/quartimin rotation), `runCFA()` (ML estimation with Armijo line search, numerical Hessian SEs, STDYX standardization), `runFADiagnostics()` (KMO/Bartlett, Velicer's MAP, Monte Carlo parallel analysis). Splitmix32 PRNG (seed=42 default). Fit indices: χ², RMSEA with 90% CI, CFI, TLI, SRMR, AIC, BIC.
+- `src/viz/plots/fa-plot.ts`: Six D3 plot types (~600 lines): scree with parallel analysis overlay, loadings heatmap (sorted by primary factor, communality column, RdBu scale), CFA/SEM path diagram (ellipse factors, rectangle items, error circles, covariance arcs, arrow width ∝ |loading|, significance stars, fit box), communality bar chart (red→amber→green gradient), factor correlation matrix (RdBu heatmap), fit indices dashboard (4 gauge bars with traffic-light zones + RMSEA CI range).
+
+**Carm — modified files:**
+- `src/core/types.ts`: Added `FactorFit`, `ParameterEstimate`, `FADiagnostics`, `FAResult`, `CFAResult` interfaces.
+- `src/core/apa.ts`: Added `formatCFAFit()` for APA-style fit index strings.
+- `src/stats/index.ts`: Added `export * from './factor-analysis.js'`.
+- `src/viz/index.ts`: Added `export * from './plots/fa-plot.js'`.
+
+**Test:** `npx tsc --noEmit` — 0 errors. `npx tsup` — build success. Test HTML at `tmp/test-fa-plots.html`.
+
+### 2026-02-25 — Dendrogram D3 visualization
+
+**Carm — new file:**
+- `src/viz/plots/dendrogram.ts`: Full D3 dendrogram renderer (~230 lines). Manual tree coordinate computation (not d3.hierarchy) for correct continuous y-axis (merge height) + DFS leaf ordering. U-shaped elbow links, cluster-colored subtrees, dashed cut line at K boundary, rotated leaf labels (thinned for n>80), hover tooltips showing merge height and subtree sizes.
+- `src/viz/index.ts`: Added `export * from './plots/dendrogram.js'`.
+
+**Aistatia — modified:**
+- `src/results/plot-panel.ts`: Replaced dendrogram placeholder with `renderDendrogram()` call using data directly from `runResult` (merges, heights, dendrogramOrder, labels, k, linkage, copheneticCorrelation).
+
+**Build:** `npm run build` clean (Carm), `npx tsc --noEmit` 0 errors (aistatia).
+
 ### 2026-02-25 — DBSCAN, Hierarchical Clustering & Preprocessing
 
 **Carm — new files:**

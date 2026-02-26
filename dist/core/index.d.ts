@@ -1,6 +1,6 @@
-import { E as EffectInterpretation } from '../types-DC8rlZlK.js';
-export { A as AnalysisResult, a as AnalyzeOptions, D as DataMatrix, b as DescriptiveResult, c as EffectSize, F as Field, d as FieldType, e as FixedEffect, f as FrequencyRow, g as FrequencyTestResult, G as GroupData, h as GroupField, L as LMMResult, N as NumericField, P as PAdjMethod, i as PCAResult, j as PairwiseResult, R as RegressionCoef, k as RegressionResult, S as StatResult } from '../types-DC8rlZlK.js';
-export { M as Matrix, N as NelderMeadOptions, a as NelderMeadResult, b as adjustPValues, c as betaFn, d as chiSqCDF, e as chiSqPValue, f as chiSqQuantile, g as clamp, h as cov, i as fDistCDF, j as fDistPValue, k as gamma, l as incompleteBeta, m as incompleteGamma, n as logBeta, o as logGamma, p as mean, q as median, r as nelderMead, s as normalCDF, t as normalQuantile, u as quantile, v as rank, w as roundTo, x as sd, y as se, z as solveLinear, A as sortAsc, B as ss, C as tDistCDF, D as tDistPValue, E as tDistQuantile, F as variance } from '../math-QZHmuikF.js';
+import { e as FactorFit, E as EffectInterpretation } from '../matrix-fbbvM_BU.js';
+export { A as AnalysisResult, a as AnalyzeOptions, C as CFAResult, D as DataMatrix, b as DescriptiveResult, c as EffectSize, F as FADiagnostics, d as FAResult, f as Field, g as FieldType, h as FixedEffect, i as FrequencyRow, j as FrequencyTestResult, G as GroupData, k as GroupField, L as LMMResult, M as Matrix, N as NumericField, P as PAdjMethod, l as PCAResult, m as PairwiseResult, n as ParameterEstimate, R as RegressionCoef, o as RegressionResult, S as StatResult, s as solveLinear } from '../matrix-fbbvM_BU.js';
+export { N as NelderMeadOptions, a as NelderMeadResult, b as adjustPValues, c as betaFn, d as chiSqCDF, e as chiSqPValue, f as chiSqQuantile, g as clamp, h as cov, i as fDistCDF, j as fDistPValue, k as gamma, l as incompleteBeta, m as incompleteGamma, n as logBeta, o as logGamma, p as mean, q as median, r as nelderMead, s as normalCDF, t as normalQuantile, u as quantile, v as rank, w as roundTo, x as sd, y as se, z as sortAsc, A as ss, B as tDistCDF, C as tDistPValue, D as tDistQuantile, E as variance } from '../math-BE2LWmnL.js';
 
 /**
  * APA 7th edition string formatting for statistical results.
@@ -83,7 +83,12 @@ declare function interpretR(r: number): string;
  */
 declare function interpretCramerV(v: number, df: number): string;
 
+/**
+ * APA string for CFA/EFA fit indices.
+ * e.g. "χ²(24) = 28.42, p = .241, RMSEA = 0.042 [0.000, 0.085], CFI = 0.987, TLI = 0.982, SRMR = 0.038"
+ */
+declare function formatCFAFit(fit: FactorFit): string;
 /** Generic effect size interpretation helper. */
 declare function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation;
 
-export { EffectInterpretation, formatANOVA, formatCI, formatChiSq, formatCorrelation, formatDF, formatKruskalWallis, formatLMM, formatMannWhitney, formatP, formatRegression, formatStat, formatTTest, interpretCohensD, interpretCramerV, interpretEffect, interpretEtaSq, interpretR };
+export { EffectInterpretation, FactorFit, formatANOVA, formatCFAFit, formatCI, formatChiSq, formatCorrelation, formatDF, formatKruskalWallis, formatLMM, formatMannWhitney, formatP, formatRegression, formatStat, formatTTest, interpretCohensD, interpretCramerV, interpretEffect, interpretEtaSq, interpretR };

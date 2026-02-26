@@ -46,6 +46,7 @@
     "test": "NODE_OPTIONS='--max-old-space-size=4096' vitest run",
     "test:watch": "vitest",
     "demo": "vite demo",
+    "demo:build": "vite build demo",
     "typecheck": "tsc --noEmit"
   }
 }

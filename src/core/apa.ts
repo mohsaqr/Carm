@@ -201,7 +201,15 @@ export function interpretCramerV(v: number, df: number): string {
   return 'large'
 }
 
-import type { EffectInterpretation } from './types.js'
+import type { EffectInterpretation, FactorFit } from './types.js'
+
+/**
+ * APA string for CFA/EFA fit indices.
+ * e.g. "χ²(24) = 28.42, p = .241, RMSEA = 0.042 [0.000, 0.085], CFI = 0.987, TLI = 0.982, SRMR = 0.038"
+ */
+export function formatCFAFit(fit: FactorFit): string {
+  return `χ²(${formatDF(fit.df)}) = ${formatStat(fit.chiSq)}, ${formatP(fit.pValue)}, RMSEA = ${formatStat(fit.rmsea, 3)} ${formatCI(fit.rmseaCI, 3)}, CFI = ${formatStat(fit.cfi, 3)}, TLI = ${formatStat(fit.tli, 3)}, SRMR = ${formatStat(fit.srmr, 3)}`
+}
 
 /** Generic effect size interpretation helper. */
 export function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation {

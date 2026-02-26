@@ -1,7 +1,6 @@
-import { b as DescriptiveResult, c as EffectSize, g as FrequencyTestResult, S as StatResult, f as FrequencyRow, G as GroupData, P as PAdjMethod, j as PairwiseResult, k as RegressionResult, i as PCAResult, L as LMMResult, F as Field, a as AnalyzeOptions, A as AnalysisResult, d as FieldType } from '../types-DC8rlZlK.js';
-export { C as CorrelationMatrix, c as correlationMatrix, k as kendallTau, p as partialCorrelation, a as pearsonCorrelation, s as spearmanCorrelation } from '../correlation-CicTScAu.js';
-import { M as Matrix } from '../math-QZHmuikF.js';
-export { p as mean, q as median, u as quantile, x as sd, y as se, F as variance } from '../math-QZHmuikF.js';
+import { b as DescriptiveResult, c as EffectSize, j as FrequencyTestResult, S as StatResult, i as FrequencyRow, G as GroupData, P as PAdjMethod, m as PairwiseResult, o as RegressionResult, l as PCAResult, L as LMMResult, f as Field, a as AnalyzeOptions, A as AnalysisResult, g as FieldType, C as CFAResult, d as FAResult, F as FADiagnostics } from '../matrix-fbbvM_BU.js';
+export { C as ClusterDiagnostics, a as CorrelationMatrix, b as CovarianceModel, D as DBSCANOptions, c as DBSCANResult, G as GMMOptions, d as GMMRangeEntry, e as GMMResult, H as HACMerge, f as HACOptions, g as HACResult, K as KMeansOptions, h as KMeansRangeEntry, i as KMeansResult, L as LCAOptions, j as LCAResult, k as LTAOptions, l as LTAResult, m as LinkageMethod, P as PointType, n as correlationMatrix, o as cutTree, p as cutTreeHeight, q as euclideanDistMatrix, r as findBestGMM, s as fitGMM, t as fitGMMRange, u as fitKMeansRange, v as fitLCA, w as fitLTA, x as kDistancePlot, y as kendallTau, z as partialCorrelation, A as pearsonCorrelation, B as predictGMM, E as predictKMeans, F as runDBSCAN, I as runHierarchical, J as runKMeans, M as silhouetteScores, N as spearmanCorrelation } from '../clustering-28_Mu8Yg.js';
+export { p as mean, q as median, u as quantile, x as sd, y as se, E as variance } from '../math-BE2LWmnL.js';
 
 /**
  * Descriptive statistics module.
@@ -457,355 +456,6 @@ declare function detectFieldType(values: readonly (string | number)[]): FieldTyp
 declare function analyze(outcome: Field, predictor?: Field, opts?: AnalyzeOptions): AnalysisResult;
 
 /**
- * Clustering & Mixture Models: GMM, LCA, LTA, K-Means.
- *
- * - GMM: Gaussian Mixture with EM, K-Means++ init, mclust-style covariance constraints
- * - LCA: Latent Class Analysis for binary data (MLE, matches poLCA)
- * - LTA: Latent Transition Analysis (Hidden Markov LCA) with Baum-Welch in log-space
- * - K-Means: Lloyd's algorithm with K-Means++ init and empty-cluster re-seeding
- *
- * All functions are deterministic via a seeded PRNG (default seed: 42).
- * Cross-validate against: mclust (GMM), poLCA (LCA), seqHMM (LTA), stats::kmeans (K-Means).
- */
-
-type CovarianceModel = 'VVV' | 'EEE' | 'VVI' | 'EEI' | 'VII' | 'EII';
-interface ClusterDiagnostics {
-    readonly converged: boolean;
-    readonly iterations: number;
-    readonly logLikelihood: number;
-    readonly df: number;
-    readonly aic: number;
-    readonly bic: number;
-    readonly icl: number;
-    readonly entropy: number;
-    readonly avepp: readonly number[];
-    readonly formatted: string;
-}
-interface GMMOptions {
-    readonly k: number;
-    readonly model?: CovarianceModel;
-    readonly seed?: number;
-    readonly tol?: number;
-    readonly maxIter?: number;
-    readonly regCovar?: number;
-}
-interface GMMResult {
-    readonly weights: readonly number[];
-    readonly means: readonly number[][];
-    readonly covariances: readonly Matrix[];
-    readonly posteriors: readonly (readonly number[])[];
-    readonly labels: readonly number[];
-    readonly diagnostics: ClusterDiagnostics;
-}
-interface LCAOptions {
-    readonly k: number;
-    readonly seed?: number;
-    readonly tol?: number;
-    readonly maxIter?: number;
-}
-interface LCAResult {
-    readonly rho: readonly (readonly number[])[];
-    readonly priorWeights: readonly number[];
-    readonly posteriors: readonly (readonly number[])[];
-    readonly labels: readonly number[];
-    readonly diagnostics: ClusterDiagnostics;
-}
-interface LTAOptions {
-    readonly k: number;
-    readonly seed?: number;
-    readonly tol?: number;
-    readonly maxIter?: number;
-}
-interface LTAResult {
-    readonly pi: readonly number[];
-    readonly tau: readonly (readonly number[])[];
-    readonly rho: readonly (readonly number[])[];
-    readonly trajectories: readonly (readonly number[])[];
-    readonly posteriors: readonly (readonly (readonly number[])[])[];
-    readonly diagnostics: ClusterDiagnostics;
-}
-interface KMeansOptions {
-    readonly k: number;
-    readonly seed?: number;
-    readonly maxIter?: number;
-    readonly tol?: number;
-}
-interface KMeansResult {
-    readonly centroids: readonly (readonly number[])[];
-    readonly labels: readonly number[];
-    readonly inertia: number;
-    readonly converged: boolean;
-    readonly iterations: number;
-}
-/**
- * Fit a Gaussian Mixture Model via Expectation-Maximization.
- *
- * Supports mclust-style covariance constraints:
- * - VVV: Variable volume, variable shape, variable orientation (full covariance per component)
- * - EEE: Equal volume, equal shape, equal orientation (single pooled covariance)
- * - VVI: Variable volume, variable shape, identity orientation (diagonal, per component)
- * - EEI: Equal volume, equal shape, identity orientation (single shared diagonal)
- * - VII: Variable volume, identity shape, identity orientation (spherical, per component)
- * - EII: Equal volume, identity shape, identity orientation (single shared scalar × I)
- *
- * @param data - N × D numeric data matrix (array of observation arrays)
- * @param options - GMM configuration
- * @returns GMMResult with weights, means, covariances, posteriors, labels, diagnostics
- *
- * Cross-validate with R:
- * > library(mclust)
- * > fit <- Mclust(data, G=3, modelNames="VVV")
- * > fit$parameters$mean
- * > fit$parameters$variance$sigma
- * > fit$BIC
- */
-declare function fitGMM(data: readonly (readonly number[])[], options: GMMOptions): GMMResult;
-/**
- * Predict cluster assignments for new data given a fitted GMM.
- */
-declare function predictGMM(data: readonly (readonly number[])[], result: GMMResult): {
-    readonly labels: readonly number[];
-    readonly posteriors: readonly (readonly number[])[];
-};
-/**
- * Automatic model selection: fit GMM across a grid of K and covariance models,
- * return the model with the lowest BIC.
- *
- * @param data - N × D data matrix
- * @param kRange - Array of K values to try (default [1,2,3,4,5])
- * @param models - Array of covariance models to try (default all 6)
- * @returns The GMMResult with the lowest BIC
- */
-declare function findBestGMM(data: readonly (readonly number[])[], kRange?: readonly number[], models?: readonly CovarianceModel[]): GMMResult;
-/**
- * Fit a Latent Class Analysis model for binary data.
- *
- * Uses EM with Bernoulli emission model and Beta(1,1) (uniform) prior smoothing.
- *
- * @param data - N × M binary matrix (0/1 values)
- * @param options - LCA configuration
- * @returns LCAResult with rho (item-response probabilities), priorWeights, posteriors, labels
- *
- * Cross-validate with R:
- * > library(poLCA)
- * > f <- cbind(V1, V2, V3, ...) ~ 1
- * > fit <- poLCA(f, data, nclass=3, nrep=1, probs.start=...)
- * > fit$probs
- */
-declare function fitLCA(data: readonly (readonly number[])[], options: LCAOptions): LCAResult;
-/**
- * Fit a Latent Transition Analysis model (categorical Hidden Markov Model).
- *
- * Uses Baum-Welch (EM) in log-space for numerical stability.
- * Measurement model is time-invariant (measurement invariance assumption).
- * Viterbi decoding provides most-likely state trajectories.
- *
- * @param data - N × T × M binary tensor (subjects × timepoints × items)
- * @param options - LTA configuration
- * @returns LTAResult with pi, tau, rho, trajectories, posteriors, diagnostics
- *
- * Cross-validate with R:
- * > library(seqHMM)
- * > # or manual forward-backward on small synthetic example
- */
-declare function fitLTA(data: readonly (readonly (readonly number[])[])[], options: LTAOptions): LTAResult;
-/**
- * K-Means clustering with K-Means++ initialization and empty-cluster re-seeding.
- *
- * @param data - N × D numeric data matrix
- * @param options - K-Means configuration
- * @returns KMeansResult with centroids, labels, inertia
- *
- * Cross-validate with R:
- * > km <- kmeans(data, centers=3, nstart=1, algorithm="Lloyd")
- * > km$centers; km$cluster; km$tot.withinss
- */
-declare function runKMeans(data: readonly (readonly number[])[], options: KMeansOptions): KMeansResult;
-/**
- * Predict cluster assignments for new data given fitted K-Means centroids.
- */
-/** A single entry from fitting GMM at one K value. */
-interface GMMRangeEntry {
-    readonly k: number;
-    readonly model: CovarianceModel;
-    readonly result: GMMResult;
-}
-/** A single entry from fitting KMeans at one K value. */
-interface KMeansRangeEntry {
-    readonly k: number;
-    readonly result: KMeansResult;
-}
-/**
- * Fit GMM for each K in kRange and return results sorted by K.
- * Skips failed fits (singular covariance etc). Throws only if ALL fail.
- *
- * @param data - N × D numeric data matrix
- * @param kRange - Array of K values to try, e.g. [2,3,4,5,6,7,8,9,10]
- * @param model - Covariance model (default 'VVV')
- * @returns GMMRangeEntry[] sorted by K
- */
-declare function fitGMMRange(data: readonly (readonly number[])[], kRange: readonly number[], model?: CovarianceModel): readonly GMMRangeEntry[];
-/**
- * Fit KMeans for each K in kRange and return results sorted by K.
- * Skips failed fits. Throws only if ALL fail.
- *
- * @param data - N × D numeric data matrix
- * @param kRange - Array of K values to try
- * @returns KMeansRangeEntry[] sorted by K
- */
-declare function fitKMeansRange(data: readonly (readonly number[])[], kRange: readonly number[]): readonly KMeansRangeEntry[];
-declare function predictKMeans(data: readonly (readonly number[])[], centroids: readonly (readonly number[])[]): readonly number[];
-/**
- * Compute Euclidean distance matrix (N × N, row-major Float64Array).
- *
- * @param data - N × D numeric data matrix
- * @returns flat Float64Array of size N*N with dist[i*N+j] = euclidean(i,j)
- *
- * Cross-validate with R:
- * > as.matrix(dist(data))
- */
-declare function euclideanDistMatrix(data: readonly (readonly number[])[]): Float64Array;
-/**
- * Compute silhouette scores for each point (excluding noise labels = -1).
- *
- * For each non-noise point i:
- *   a(i) = mean dist to points in same cluster
- *   b(i) = min over other clusters of mean dist to that cluster
- *   s(i) = (b(i) - a(i)) / max(a(i), b(i))
- *
- * @param data - N × D data matrix
- * @param labels - cluster assignments (0-indexed, -1 = noise)
- * @returns scores per point (NaN for noise) and mean silhouette (excluding noise)
- *
- * Cross-validate with R:
- * > library(cluster)
- * > silhouette(labels, dist(data))
- */
-declare function silhouetteScores(data: readonly (readonly number[])[], labels: readonly number[]): {
-    readonly scores: readonly number[];
-    readonly mean: number;
-};
-type PointType = 'core' | 'border' | 'noise';
-interface DBSCANOptions {
-    readonly eps: number;
-    readonly minPts: number;
-    readonly seed?: number;
-    readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt';
-}
-interface DBSCANResult {
-    readonly labels: readonly number[];
-    readonly pointTypes: readonly PointType[];
-    readonly nClusters: number;
-    readonly nNoise: number;
-    readonly clusterSizes: readonly number[];
-    readonly silhouette: {
-        readonly scores: readonly number[];
-        readonly mean: number;
-    };
-    readonly formatted: string;
-}
-/**
- * DBSCAN clustering (Ester et al. 1996).
- *
- * Algorithm:
- * 1. For each point, compute eps-neighborhood via distance scan.
- * 2. Core points: |neighbors| >= minPts. BFS expansion from cores.
- * 3. Border points: not core, but within eps of a core point.
- * 4. Noise: neither core nor border.
- *
- * Labels: -1 = noise, 0, 1, 2, ... = cluster IDs (0-indexed).
- *
- * @param data - N × D numeric data matrix
- * @param options - DBSCAN configuration (eps, minPts)
- * @returns DBSCANResult with labels, point types, silhouette
- *
- * Cross-validate with R:
- * > library(dbscan)
- * > db <- dbscan(data, eps = 1.5, minPts = 5)
- * > db$cluster  # R: 0=noise, 1-indexed → Carm: -1=noise, 0-indexed
- */
-declare function runDBSCAN(data: readonly (readonly number[])[], options: DBSCANOptions): DBSCANResult;
-/**
- * Compute k-distance plot data for epsilon estimation.
- *
- * For each point, compute the distance to its k-th nearest neighbor,
- * then return these distances sorted in ascending order.
- * The "elbow" in the sorted plot suggests a good epsilon.
- *
- * @param data - N × D numeric data matrix
- * @param k - neighbor index (typically minPts)
- * @returns sorted k-NN distances (ascending)
- *
- * Cross-validate with R:
- * > library(dbscan)
- * > kNNdist(data, k = 5)  # sorted externally
- */
-declare function kDistancePlot(data: readonly (readonly number[])[], k: number): readonly number[];
-type LinkageMethod = 'single' | 'complete' | 'average' | 'ward';
-interface HACOptions {
-    readonly linkage?: LinkageMethod;
-    readonly preprocess?: 'none' | 'center' | 'standardize' | 'log' | 'sqrt';
-}
-interface HACMerge {
-    readonly a: number;
-    readonly b: number;
-    readonly height: number;
-}
-interface HACResult {
-    readonly merges: readonly HACMerge[];
-    readonly heights: readonly number[];
-    readonly order: readonly number[];
-    readonly copheneticCorrelation: number;
-    readonly formatted: string;
-}
-/**
- * Hierarchical agglomerative clustering using Lance-Williams recurrence.
- *
- * Linkage methods and their Lance-Williams coefficients:
- * | Method   | α_i           | α_j           | β        | γ    |
- * |----------|---------------|---------------|----------|------|
- * | single   | 0.5           | 0.5           | 0        | -0.5 |
- * | complete | 0.5           | 0.5           | 0        | 0.5  |
- * | average  | n_i/(n_i+n_j) | n_j/(n_i+n_j) | 0        | 0    |
- * | ward     | (n_i+n_k)/N_t | (n_j+n_k)/N_t | -n_k/N_t | 0    |
- *
- * Ward's method uses squared Euclidean distances internally.
- * Final merge heights are sqrt(distance) to match R's hclust(method="ward.D2").
- *
- * @param data - N × D numeric data matrix
- * @param options - linkage method (default: ward)
- * @returns HACResult with merges, heights, leaf order, cophenetic correlation
- *
- * Cross-validate with R:
- * > hc <- hclust(dist(data), method = "ward.D2")
- * > hc$merge; hc$height; hc$order
- * > cor(cophenetic(hc), dist(data))
- */
-declare function runHierarchical(data: readonly (readonly number[])[], options?: HACOptions): HACResult;
-/**
- * Cut a dendrogram at K clusters.
- *
- * @param result - HACResult from runHierarchical
- * @param k - number of clusters desired
- * @returns 0-indexed cluster labels
- *
- * Cross-validate with R:
- * > cutree(hc, k = 3)  # R is 1-indexed → Carm 0-indexed
- */
-declare function cutTree(result: HACResult, k: number): readonly number[];
-/**
- * Cut a dendrogram at a specific height.
- *
- * @param result - HACResult from runHierarchical
- * @param h - height threshold
- * @returns 0-indexed cluster labels
- *
- * Cross-validate with R:
- * > cutree(hc, h = 5.0)
- */
-declare function cutTreeHeight(result: HACResult, h: number): readonly number[];
-
-/**
  * Data preprocessing for clustering and PCA.
  *
  * Provides center, standardize, log, and sqrt transforms with inverse.
@@ -854,4 +504,75 @@ declare function preprocessData(data: readonly (readonly number[])[], options?: 
  */
 declare function inverseTransform(data: readonly (readonly number[])[], params: PreprocessResult): readonly (readonly number[])[];
 
-export { type ANOVAResult, type ClusterDiagnostics, type CovarianceModel, type DBSCANOptions, type DBSCANResult, type GMMOptions, type GMMRangeEntry, type GMMResult, type HACMerge, type HACOptions, type HACResult, type KMeansOptions, type KMeansRangeEntry, type KMeansResult, type LCAOptions, type LCAResult, type LMMInput, type LTAOptions, type LTAResult, type LinkageMethod, type PointType, type PreprocessMethod, type PreprocessOptions, type PreprocessResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, cutTree, cutTreeHeight, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, euclideanDistMatrix, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kDistancePlot, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runDBSCAN, runHierarchical, runKMeans, runLMM, runPCA, screeData, shapiroWilk, silhouetteScores, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
+/**
+ * Factor Analysis module for Carm.
+ * Exploratory Factor Analysis (EFA), Confirmatory Factor Analysis (CFA),
+ * and psychometric diagnostics (KMO, Bartlett, MAP, Parallel Analysis).
+ *
+ * All functions are pure — no DOM, no D3, no side effects.
+ * Uses splitmix32 PRNG for deterministic reproducibility.
+ *
+ * Algorithms adapted from:
+ * - Iterated PAF: Gorsuch (1983), Factor Analysis (2nd ed.)
+ * - ML extraction: Jöreskog (1967), Psychometrika 32(4)
+ * - Varimax: Kaiser (1958), Psychometrika 23:187-200
+ * - Oblimin/Promax: Jennrich (2002), Psychometrika 67(1)
+ * - CFA: Bollen (1989), Structural Equations with Latent Variables
+ * - Fit indices: Browne & Cudeck (1993), Hu & Bentler (1999)
+ */
+
+interface EFAOptions {
+    readonly nFactors?: number;
+    readonly extraction?: 'paf' | 'ml';
+    readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'none';
+    readonly seed?: number;
+    readonly maxIter?: number;
+    readonly tol?: number;
+    readonly variableNames?: readonly string[];
+}
+interface CFAOptions {
+    readonly maxIter?: number;
+    readonly tol?: number;
+    readonly variableNames?: readonly string[];
+    readonly factorNames?: readonly string[];
+}
+interface FADiagnosticsOptions {
+    readonly seed?: number;
+    readonly parallelIterations?: number;
+}
+/**
+ * Compute factor analysis diagnostics: KMO, Bartlett's test,
+ * Velicer's MAP, and parallel analysis.
+ *
+ * Cross-validated with R:
+ * > library(psych)
+ * > KMO(data)
+ * > cortest.bartlett(cor(data), n = nrow(data))
+ * > fa.parallel(data, fm = "ml", fa = "fa")
+ */
+declare function runFADiagnostics(data: readonly (readonly number[])[], options?: FADiagnosticsOptions): FADiagnostics;
+/**
+ * Exploratory Factor Analysis with extraction (PAF or ML) and rotation.
+ *
+ * Cross-validated with R:
+ * > library(psych)
+ * > fa(data, nfactors = 3, fm = "ml", rotate = "promax")
+ * > fa(data, nfactors = 3, fm = "minres", rotate = "varimax")
+ */
+declare function runEFA(data: readonly (readonly number[])[], options?: EFAOptions): FAResult;
+/**
+ * Confirmatory Factor Analysis via ML estimation.
+ *
+ * Model is specified as a record: { F1: [0, 1, 2], F2: [3, 4, 5] }
+ * where keys are factor names and values are 0-indexed item indices.
+ *
+ * Cross-validated with R:
+ * > library(lavaan)
+ * > model <- 'F1 =~ x1 + x2 + x3\n F2 =~ x4 + x5 + x6'
+ * > fit <- cfa(model, data)
+ * > standardizedSolution(fit)
+ * > fitMeasures(fit, c("chisq", "df", "pvalue", "rmsea", "cfi", "tli", "srmr"))
+ */
+declare function runCFA(data: readonly (readonly number[])[], model: Readonly<Record<string, readonly number[]>>, options?: CFAOptions): CFAResult;
+
+export { type ANOVAResult, type CFAOptions, type EFAOptions, type FADiagnosticsOptions, type LMMInput, type PreprocessMethod, type PreprocessOptions, type PreprocessResult, type RegressionDiagnostics, type ScreeData, analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, fisherExactTest, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, phiCoefficient, polynomialRegression, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runCFA, runEFA, runFADiagnostics, runLMM, runPCA, screeData, shapiroWilk, skewness, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };

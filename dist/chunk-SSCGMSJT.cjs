@@ -1,7 +1,7 @@
 'use strict';
 
-var chunkBL33AEKS_cjs = require('./chunk-BL33AEKS.cjs');
-var chunkAVJH2SAO_cjs = require('./chunk-AVJH2SAO.cjs');
+var chunkFSSEZIKV_cjs = require('./chunk-FSSEZIKV.cjs');
+var chunkMX4OLB7V_cjs = require('./chunk-MX4OLB7V.cjs');
 
 // src/stats/descriptive.ts
 function mode(x) {
@@ -15,18 +15,18 @@ function mode(x) {
   return modes.sort((a, b) => a - b);
 }
 function trimmedMean(x, alpha = 0.05) {
-  const sorted = chunkAVJH2SAO_cjs.sortAsc(x);
+  const sorted = chunkMX4OLB7V_cjs.sortAsc(x);
   const n = sorted.length;
   const trim = Math.floor(n * alpha);
   const trimmed = sorted.slice(trim, n - trim);
   if (trimmed.length === 0) throw new Error("trimmedMean: too much trimming, no data remains");
-  return chunkAVJH2SAO_cjs.mean(trimmed);
+  return chunkMX4OLB7V_cjs.mean(trimmed);
 }
 function skewness(x) {
   const n = x.length;
   if (n < 3) throw new Error("skewness: need at least 3 observations");
-  const m = chunkAVJH2SAO_cjs.mean(x);
-  const s = chunkAVJH2SAO_cjs.sd(x);
+  const m = chunkMX4OLB7V_cjs.mean(x);
+  const s = chunkMX4OLB7V_cjs.sd(x);
   if (s === 0) return 0;
   const sum = x.reduce((acc, v) => acc + ((v - m) / s) ** 3, 0);
   return n / ((n - 1) * (n - 2)) * sum;
@@ -34,8 +34,8 @@ function skewness(x) {
 function kurtosis(x) {
   const n = x.length;
   if (n < 4) throw new Error("kurtosis: need at least 4 observations");
-  const m = chunkAVJH2SAO_cjs.mean(x);
-  const s = chunkAVJH2SAO_cjs.sd(x);
+  const m = chunkMX4OLB7V_cjs.mean(x);
+  const s = chunkMX4OLB7V_cjs.sd(x);
   if (s === 0) return 0;
   const sum = x.reduce((acc, v) => acc + ((v - m) / s) ** 4, 0);
   const k1 = n * (n + 1) / ((n - 1) * (n - 2) * (n - 3)) * sum;
@@ -45,9 +45,9 @@ function kurtosis(x) {
 function ciMean(x, ciLevel = 0.95) {
   const n = x.length;
   if (n < 2) throw new Error("ciMean: need at least 2 observations");
-  const m = chunkAVJH2SAO_cjs.mean(x);
-  const s = chunkAVJH2SAO_cjs.se(x);
-  const t = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, n - 1);
+  const m = chunkMX4OLB7V_cjs.mean(x);
+  const s = chunkMX4OLB7V_cjs.se(x);
+  const t = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, n - 1);
   return [m - t * s, m + t * s];
 }
 var SW_C1 = [0, 0.221157, -0.147981, -2.07119, 4.434685, -2.706056];
@@ -61,7 +61,7 @@ function shapiroWilk(x) {
   const n = x.length;
   if (n < 3) throw new Error("shapiroWilk: need at least 3 observations");
   if (n > 5e3) throw new Error("shapiroWilk: n > 5000 not supported");
-  const sorted = chunkAVJH2SAO_cjs.sortAsc(x);
+  const sorted = chunkMX4OLB7V_cjs.sortAsc(x);
   const nn2 = Math.floor(n / 2);
   const a = new Array(nn2).fill(0);
   if (n === 3) {
@@ -74,7 +74,7 @@ function shapiroWilk(x) {
     a[1] = 0.2413;
   } else {
     for (let i = 0; i < nn2; i++) {
-      a[i] = chunkAVJH2SAO_cjs.normalQuantile((i + 1 - 0.375) / (n + 0.25));
+      a[i] = chunkMX4OLB7V_cjs.normalQuantile((i + 1 - 0.375) / (n + 0.25));
     }
     let summ2 = 0;
     for (let i = 0; i < nn2; i++) summ2 += a[i] * a[i];
@@ -104,10 +104,10 @@ function shapiroWilk(x) {
   for (let i = 0; i < nn2; i++) {
     w1 += (a[i] ?? 0) * ((sorted[n - 1 - i] ?? 0) - (sorted[i] ?? 0));
   }
-  const sst = chunkAVJH2SAO_cjs.variance(sorted) * (n - 1);
+  const sst = chunkMX4OLB7V_cjs.variance(sorted) * (n - 1);
   const W = sst > 0 ? Math.min(1, w1 * w1 / sst) : 1;
   const pValue = shapiroWilkPValue(W, n);
-  return { statistic: chunkAVJH2SAO_cjs.roundTo(W, 4), pValue: chunkAVJH2SAO_cjs.roundTo(pValue, 4) };
+  return { statistic: chunkMX4OLB7V_cjs.roundTo(W, 4), pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4) };
 }
 function polynomialEval(coeffs, x) {
   return coeffs.reduce((acc, c) => acc * x + c, 0);
@@ -127,23 +127,23 @@ function shapiroWilkPValue(W, n) {
     const sigma = Math.exp(polynomialEval([30302e-7, -0.082676, -0.4803], Math.log(n)));
     z = (y - mu) / sigma;
   }
-  return Math.max(0, Math.min(1, 1 - chunkAVJH2SAO_cjs.normalCDF(z)));
+  return Math.max(0, Math.min(1, 1 - chunkMX4OLB7V_cjs.normalCDF(z)));
 }
 function describe(x, ciLevel = 0.95) {
   if (x.length === 0) throw new Error("describe: empty array");
   const n = x.length;
-  const m = chunkAVJH2SAO_cjs.mean(x);
-  const med = chunkAVJH2SAO_cjs.median(x);
+  const m = chunkMX4OLB7V_cjs.mean(x);
+  const med = chunkMX4OLB7V_cjs.median(x);
   const modes = mode(x);
   const tm = trimmedMean(x, 0.05);
-  const s = chunkAVJH2SAO_cjs.sd(x);
-  const sem = chunkAVJH2SAO_cjs.se(x);
-  const v = chunkAVJH2SAO_cjs.variance(x);
-  const sorted = chunkAVJH2SAO_cjs.sortAsc(x);
+  const s = chunkMX4OLB7V_cjs.sd(x);
+  const sem = chunkMX4OLB7V_cjs.se(x);
+  const v = chunkMX4OLB7V_cjs.variance(x);
+  const sorted = chunkMX4OLB7V_cjs.sortAsc(x);
   const mn = sorted[0];
   const mx = sorted[n - 1];
-  const q1 = chunkAVJH2SAO_cjs.quantile(x, 0.25);
-  const q3 = chunkAVJH2SAO_cjs.quantile(x, 0.75);
+  const q1 = chunkMX4OLB7V_cjs.quantile(x, 0.25);
+  const q3 = chunkMX4OLB7V_cjs.quantile(x, 0.75);
   const iqr = q3 - q1;
   const skew = n >= 3 ? skewness(x) : 0;
   const kurt = n >= 4 ? kurtosis(x) : 0;
@@ -152,29 +152,29 @@ function describe(x, ciLevel = 0.95) {
   const ciPct = Math.round(ciLevel * 100);
   const formatted = [
     `n = ${n}`,
-    `M = ${chunkAVJH2SAO_cjs.roundTo(m, 2)}, SD = ${chunkAVJH2SAO_cjs.roundTo(s, 2)}, SE = ${chunkAVJH2SAO_cjs.roundTo(sem, 2)}`,
-    `Mdn = ${chunkAVJH2SAO_cjs.roundTo(med, 2)}, IQR = ${chunkAVJH2SAO_cjs.roundTo(iqr, 2)}`,
-    `Skew = ${chunkAVJH2SAO_cjs.roundTo(skew, 2)}, Kurt = ${chunkAVJH2SAO_cjs.roundTo(kurt, 2)}`,
-    `${ciPct}% CI [${chunkAVJH2SAO_cjs.roundTo(ci[0], 2)}, ${chunkAVJH2SAO_cjs.roundTo(ci[1], 2)}]`,
-    n >= 3 ? `Shapiro-Wilk W = ${chunkAVJH2SAO_cjs.roundTo(sw.statistic, 3)}, ${chunkBL33AEKS_cjs.formatP(sw.pValue)}` : ""
+    `M = ${chunkMX4OLB7V_cjs.roundTo(m, 2)}, SD = ${chunkMX4OLB7V_cjs.roundTo(s, 2)}, SE = ${chunkMX4OLB7V_cjs.roundTo(sem, 2)}`,
+    `Mdn = ${chunkMX4OLB7V_cjs.roundTo(med, 2)}, IQR = ${chunkMX4OLB7V_cjs.roundTo(iqr, 2)}`,
+    `Skew = ${chunkMX4OLB7V_cjs.roundTo(skew, 2)}, Kurt = ${chunkMX4OLB7V_cjs.roundTo(kurt, 2)}`,
+    `${ciPct}% CI [${chunkMX4OLB7V_cjs.roundTo(ci[0], 2)}, ${chunkMX4OLB7V_cjs.roundTo(ci[1], 2)}]`,
+    n >= 3 ? `Shapiro-Wilk W = ${chunkMX4OLB7V_cjs.roundTo(sw.statistic, 3)}, ${chunkMX4OLB7V_cjs.formatP(sw.pValue)}` : ""
   ].filter(Boolean).join("; ");
   return {
     n,
-    mean: chunkAVJH2SAO_cjs.roundTo(m, 6),
-    median: chunkAVJH2SAO_cjs.roundTo(med, 6),
+    mean: chunkMX4OLB7V_cjs.roundTo(m, 6),
+    median: chunkMX4OLB7V_cjs.roundTo(med, 6),
     mode: modes,
-    trimmedMean: chunkAVJH2SAO_cjs.roundTo(tm, 6),
-    sd: chunkAVJH2SAO_cjs.roundTo(s, 6),
-    se: chunkAVJH2SAO_cjs.roundTo(sem, 6),
-    variance: chunkAVJH2SAO_cjs.roundTo(v, 6),
+    trimmedMean: chunkMX4OLB7V_cjs.roundTo(tm, 6),
+    sd: chunkMX4OLB7V_cjs.roundTo(s, 6),
+    se: chunkMX4OLB7V_cjs.roundTo(sem, 6),
+    variance: chunkMX4OLB7V_cjs.roundTo(v, 6),
     min: mn,
     max: mx,
     range: mx - mn,
-    iqr: chunkAVJH2SAO_cjs.roundTo(iqr, 6),
-    q1: chunkAVJH2SAO_cjs.roundTo(q1, 6),
-    q3: chunkAVJH2SAO_cjs.roundTo(q3, 6),
-    skewness: chunkAVJH2SAO_cjs.roundTo(skew, 6),
-    kurtosis: chunkAVJH2SAO_cjs.roundTo(kurt, 6),
+    iqr: chunkMX4OLB7V_cjs.roundTo(iqr, 6),
+    q1: chunkMX4OLB7V_cjs.roundTo(q1, 6),
+    q3: chunkMX4OLB7V_cjs.roundTo(q3, 6),
+    skewness: chunkMX4OLB7V_cjs.roundTo(skew, 6),
+    kurtosis: chunkMX4OLB7V_cjs.roundTo(kurt, 6),
     ci,
     ciLevel,
     shapiroWilk: sw,
@@ -186,26 +186,26 @@ function describe(x, ciLevel = 0.95) {
 function cohensD(x1, x2) {
   if (x1.length < 2 || x2.length < 2) throw new Error("cohensD: need at least 2 observations per group");
   const n1 = x1.length, n2 = x2.length;
-  const m1 = chunkAVJH2SAO_cjs.mean(x1), m2 = chunkAVJH2SAO_cjs.mean(x2);
-  const v1 = chunkAVJH2SAO_cjs.variance(x1), v2 = chunkAVJH2SAO_cjs.variance(x2);
+  const m1 = chunkMX4OLB7V_cjs.mean(x1), m2 = chunkMX4OLB7V_cjs.mean(x2);
+  const v1 = chunkMX4OLB7V_cjs.variance(x1), v2 = chunkMX4OLB7V_cjs.variance(x2);
   const sdPooled = Math.sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2));
   if (sdPooled === 0) return { value: 0, name: "Cohen's d", interpretation: "negligible" };
   const d = (m1 - m2) / sdPooled;
   return {
     value: d,
     name: "Cohen's d",
-    interpretation: chunkBL33AEKS_cjs.interpretCohensD(d)
+    interpretation: chunkMX4OLB7V_cjs.interpretCohensD(d)
   };
 }
 function cohensDPaired(diffs) {
   if (diffs.length < 2) throw new Error("cohensDPaired: need at least 2 differences");
-  const m = chunkAVJH2SAO_cjs.mean(diffs);
-  const s = chunkAVJH2SAO_cjs.sd(diffs);
+  const m = chunkMX4OLB7V_cjs.mean(diffs);
+  const s = chunkMX4OLB7V_cjs.sd(diffs);
   const d = s === 0 ? 0 : m / s;
   return {
     value: d,
     name: "Cohen's d",
-    interpretation: chunkBL33AEKS_cjs.interpretCohensD(d)
+    interpretation: chunkMX4OLB7V_cjs.interpretCohensD(d)
   };
 }
 function hedgesG(x1, x2) {
@@ -216,7 +216,7 @@ function hedgesG(x1, x2) {
   return {
     value: g,
     name: "Hedges' g",
-    interpretation: chunkBL33AEKS_cjs.interpretCohensD(g)
+    interpretation: chunkMX4OLB7V_cjs.interpretCohensD(g)
   };
 }
 function etaSquared(ssBetween, ssTotal) {
@@ -225,7 +225,7 @@ function etaSquared(ssBetween, ssTotal) {
   return {
     value: eta2,
     name: "\u03B7\xB2",
-    interpretation: chunkBL33AEKS_cjs.interpretEtaSq(eta2)
+    interpretation: chunkMX4OLB7V_cjs.interpretEtaSq(eta2)
   };
 }
 function omegaSquared(ssBetween, ssTotal, dfBetween, msWithin) {
@@ -235,7 +235,7 @@ function omegaSquared(ssBetween, ssTotal, dfBetween, msWithin) {
   return {
     value: omega2,
     name: "\u03C9\xB2",
-    interpretation: chunkBL33AEKS_cjs.interpretEtaSq(omega2)
+    interpretation: chunkMX4OLB7V_cjs.interpretEtaSq(omega2)
   };
 }
 function rankBiserial(U, n1, n2) {
@@ -243,7 +243,7 @@ function rankBiserial(U, n1, n2) {
   return {
     value: r,
     name: "r (rank-biserial)",
-    interpretation: chunkBL33AEKS_cjs.interpretR(r)
+    interpretation: chunkMX4OLB7V_cjs.interpretR(r)
   };
 }
 function rankBiserialWilcoxon(T, n) {
@@ -252,7 +252,7 @@ function rankBiserialWilcoxon(T, n) {
   return {
     value: r,
     name: "r (rank-biserial)",
-    interpretation: chunkBL33AEKS_cjs.interpretR(r)
+    interpretation: chunkMX4OLB7V_cjs.interpretR(r)
   };
 }
 function etaSquaredKW(H, k, n) {
@@ -260,7 +260,7 @@ function etaSquaredKW(H, k, n) {
   return {
     value: eta2,
     name: "\u03B7\xB2_H",
-    interpretation: chunkBL33AEKS_cjs.interpretEtaSq(eta2)
+    interpretation: chunkMX4OLB7V_cjs.interpretEtaSq(eta2)
   };
 }
 function cohensDCI(d, n1, n2, ciLevel = 0.95) {
@@ -341,16 +341,16 @@ function chiSquareTest(observed, yatesCorrection = false) {
     }
   }
   const df = (R - 1) * (C - 1);
-  const pValue = chunkAVJH2SAO_cjs.chiSqPValue(chiSq, df);
+  const pValue = chunkMX4OLB7V_cjs.chiSqPValue(chiSq, df);
   const minDim = Math.min(R, C) - 1;
   const cramersV = Math.sqrt(chiSq / (n * Math.max(1, minDim)));
   const effectSize = {
     value: cramersV,
     name: "Cram\xE9r's V",
-    interpretation: chunkBL33AEKS_cjs.interpretCramerV(cramersV, df)
+    interpretation: chunkMX4OLB7V_cjs.interpretCramerV(cramersV, df)
   };
   const ci = [NaN, NaN];
-  const formatted = chunkBL33AEKS_cjs.formatChiSq(chiSq, df, pValue, cramersV, "V");
+  const formatted = chunkMX4OLB7V_cjs.formatChiSq(chiSq, df, pValue, cramersV, "V");
   return {
     testName: "Pearson's \u03C7\xB2",
     statistic: chiSq,
@@ -384,7 +384,7 @@ function fisherExactTest(a, b, c, d) {
   pValue = Math.min(1, pValue);
   const oddsRatio = b === 0 || c === 0 ? (a + 0.5) * (d + 0.5) / ((b + 0.5) * (c + 0.5)) : a * d / (b * c);
   const se2 = Math.sqrt(1 / (a + 0.5) + 1 / (b + 0.5) + 1 / (c + 0.5) + 1 / (d + 0.5));
-  const z = chunkAVJH2SAO_cjs.normalQuantile(0.975);
+  const z = chunkMX4OLB7V_cjs.normalQuantile(0.975);
   const logOR = Math.log(oddsRatio);
   const ci = [Math.exp(logOR - z * se2), Math.exp(logOR + z * se2)];
   const effectSize = {
@@ -401,7 +401,7 @@ function fisherExactTest(a, b, c, d) {
     ci,
     ciLevel: 0.95,
     n,
-    formatted: `OR = ${oddsRatio.toFixed(2)}, ${chunkBL33AEKS_cjs.formatP(pValue)}, 95% CI [${ci[0].toFixed(2)}, ${ci[1].toFixed(2)}]`
+    formatted: `OR = ${oddsRatio.toFixed(2)}, ${chunkMX4OLB7V_cjs.formatP(pValue)}, 95% CI [${ci[0].toFixed(2)}, ${ci[1].toFixed(2)}]`
   };
 }
 function hypergeomPMF(k, n, K, N) {
@@ -437,7 +437,7 @@ function goodnessOfFit(observed, expected) {
     chiSq += (o - e) ** 2 / e;
   }
   const df = k - 1;
-  const pValue = chunkAVJH2SAO_cjs.chiSqPValue(chiSq, df);
+  const pValue = chunkMX4OLB7V_cjs.chiSqPValue(chiSq, df);
   const w = Math.sqrt(chiSq / n);
   return {
     testName: "Chi-square goodness-of-fit",
@@ -452,7 +452,7 @@ function goodnessOfFit(observed, expected) {
     ci: [NaN, NaN],
     ciLevel: 0.95,
     n,
-    formatted: chunkBL33AEKS_cjs.formatChiSq(chiSq, df, pValue, w, "w")
+    formatted: chunkMX4OLB7V_cjs.formatChiSq(chiSq, df, pValue, w, "w")
   };
 }
 
@@ -460,8 +460,8 @@ function goodnessOfFit(observed, expected) {
 function tTestIndependent(x1, x2, equalVariances = false, ciLevel = 0.95, alternative = "two.sided") {
   if (x1.length < 2 || x2.length < 2) throw new Error("tTestIndependent: need at least 2 per group");
   const n1 = x1.length, n2 = x2.length;
-  const m1 = chunkAVJH2SAO_cjs.mean(x1), m2 = chunkAVJH2SAO_cjs.mean(x2);
-  const v1 = chunkAVJH2SAO_cjs.variance(x1), v2 = chunkAVJH2SAO_cjs.variance(x2);
+  const m1 = chunkMX4OLB7V_cjs.mean(x1), m2 = chunkMX4OLB7V_cjs.mean(x2);
+  const v1 = chunkMX4OLB7V_cjs.variance(x1), v2 = chunkMX4OLB7V_cjs.variance(x2);
   let df;
   let se2;
   if (equalVariances) {
@@ -475,13 +475,13 @@ function tTestIndependent(x1, x2, equalVariances = false, ciLevel = 0.95, altern
     df = den > 0 ? num / den : n1 + n2 - 2;
   }
   const t = se2 === 0 ? 0 : (m1 - m2) / se2;
-  const pFull = chunkAVJH2SAO_cjs.tDistPValue(t, df);
+  const pFull = chunkMX4OLB7V_cjs.tDistPValue(t, df);
   const pValue = alternative === "two.sided" ? pFull : alternative === "less" ? t < 0 ? pFull / 2 : 1 - pFull / 2 : t > 0 ? pFull / 2 : 1 - pFull / 2;
-  const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
   const diff = m1 - m2;
   const ci = [diff - tCrit * se2, diff + tCrit * se2];
   const effectSize = cohensD(x1, x2);
-  const formatted = chunkBL33AEKS_cjs.formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  const formatted = chunkMX4OLB7V_cjs.formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
   return {
     testName: equalVariances ? "Student's t-test" : "Welch's t-test",
     statistic: t,
@@ -499,15 +499,15 @@ function tTestPaired(x1, x2, ciLevel = 0.95) {
   if (x1.length < 2) throw new Error("tTestPaired: need at least 2 pairs");
   const diffs = x1.map((v, i) => v - (x2[i] ?? 0));
   const n = diffs.length;
-  const mDiff = chunkAVJH2SAO_cjs.mean(diffs);
-  const seDiff = chunkAVJH2SAO_cjs.se(diffs);
+  const mDiff = chunkMX4OLB7V_cjs.mean(diffs);
+  const seDiff = chunkMX4OLB7V_cjs.se(diffs);
   const df = n - 1;
   const t = seDiff === 0 ? 0 : mDiff / seDiff;
-  const pValue = chunkAVJH2SAO_cjs.tDistPValue(t, df);
-  const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const pValue = chunkMX4OLB7V_cjs.tDistPValue(t, df);
+  const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
   const ci = [mDiff - tCrit * seDiff, mDiff + tCrit * seDiff];
   const effectSize = cohensDPaired(diffs);
-  const formatted = chunkBL33AEKS_cjs.formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  const formatted = chunkMX4OLB7V_cjs.formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
   return {
     testName: "Paired t-test",
     statistic: t,
@@ -525,14 +525,14 @@ function oneWayANOVA(groups) {
   const k = groups.length;
   const allValues = groups.flatMap((g) => [...g.values]);
   const n = allValues.length;
-  const grandMean = chunkAVJH2SAO_cjs.mean(allValues);
+  const grandMean = chunkMX4OLB7V_cjs.mean(allValues);
   let ssBetween = 0, ssWithin = 0;
   const groupStats = groups.map((g) => {
-    const gm = chunkAVJH2SAO_cjs.mean(g.values);
+    const gm = chunkMX4OLB7V_cjs.mean(g.values);
     const gn = g.values.length;
     ssBetween += gn * (gm - grandMean) ** 2;
     ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
-    return { label: g.label, n: gn, mean: gm, sd: chunkAVJH2SAO_cjs.sd(g.values) };
+    return { label: g.label, n: gn, mean: gm, sd: chunkMX4OLB7V_cjs.sd(g.values) };
   });
   const ssTotal = ssBetween + ssWithin;
   const dfBetween = k - 1;
@@ -540,9 +540,9 @@ function oneWayANOVA(groups) {
   const msBetween = ssBetween / dfBetween;
   const msWithin = ssWithin / dfWithin;
   const F = msWithin === 0 ? Infinity : msBetween / msWithin;
-  const pValue = chunkAVJH2SAO_cjs.fDistPValue(F, dfBetween, dfWithin);
+  const pValue = chunkMX4OLB7V_cjs.fDistPValue(F, dfBetween, dfWithin);
   const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin);
-  const formatted = chunkBL33AEKS_cjs.formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
+  const formatted = chunkMX4OLB7V_cjs.formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
   return {
     testName: "One-way ANOVA",
     statistic: F,
@@ -570,7 +570,7 @@ function mannWhitneyU(x1, x2, alternative = "two.sided") {
     ...x1.map((v, i) => ({ v, group: 1, i })),
     ...x2.map((v, i) => ({ v, group: 2, i }))
   ].sort((a, b) => a.v - b.v);
-  const allCombined = chunkAVJH2SAO_cjs.rank(combined.map((d) => d.v));
+  const allCombined = chunkMX4OLB7V_cjs.rank(combined.map((d) => d.v));
   let R1 = 0;
   for (let i = 0; i < combined.length; i++) {
     if (combined[i].group === 1) R1 += allCombined[i];
@@ -589,7 +589,7 @@ function mannWhitneyU(x1, x2, alternative = "two.sided") {
   const pNormal = 2 * (1 - normalCDFInline(zAbs));
   const pValue = alternative === "two.sided" ? pNormal : alternative === "less" ? z < 0 ? pNormal / 2 : 1 - pNormal / 2 : z > 0 ? pNormal / 2 : 1 - pNormal / 2;
   const effect = rankBiserial(U1, n1, n2);
-  const formatted = chunkBL33AEKS_cjs.formatMannWhitney(U1, pValue, effect.value);
+  const formatted = chunkMX4OLB7V_cjs.formatMannWhitney(U1, pValue, effect.value);
   return {
     testName: "Mann-Whitney U",
     statistic: U1,
@@ -633,7 +633,7 @@ function wilcoxonSignedRank(x1, x2) {
   const n = diffs.length;
   if (n === 0) throw new Error("wilcoxonSignedRank: no non-zero differences");
   const absDiffs = diffs.map(Math.abs);
-  const ranks_ = chunkAVJH2SAO_cjs.rank(absDiffs);
+  const ranks_ = chunkMX4OLB7V_cjs.rank(absDiffs);
   let Wplus = 0, Wminus = 0;
   for (let i = 0; i < n; i++) {
     if ((diffs[i] ?? 0) > 0) Wplus += ranks_[i];
@@ -659,7 +659,7 @@ function wilcoxonSignedRank(x1, x2) {
     ci: [NaN, NaN],
     ciLevel: 0.95,
     n,
-    formatted: `V = ${W}, ${chunkBL33AEKS_cjs.formatP(pValue)}, r = ${effect.value.toFixed(2)}`
+    formatted: `V = ${W}, ${chunkMX4OLB7V_cjs.formatP(pValue)}, r = ${effect.value.toFixed(2)}`
   };
 }
 function kruskalWallis(groups) {
@@ -667,7 +667,7 @@ function kruskalWallis(groups) {
   const k = groups.length;
   const allValues = groups.flatMap((g) => [...g.values]);
   const n = allValues.length;
-  const allRanks_ = chunkAVJH2SAO_cjs.rank(allValues);
+  const allRanks_ = chunkMX4OLB7V_cjs.rank(allValues);
   let offset = 0;
   let H = 0;
   for (const g of groups) {
@@ -685,9 +685,9 @@ function kruskalWallis(groups) {
   const correction = 1 - C / (n * n * n - n);
   if (correction > 0) H /= correction;
   const df = k - 1;
-  const pValue = chunkAVJH2SAO_cjs.chiSqPValue(H, df);
+  const pValue = chunkMX4OLB7V_cjs.chiSqPValue(H, df);
   const effect = etaSquaredKW(H, k, n);
-  const formatted = chunkBL33AEKS_cjs.formatKruskalWallis(H, df, pValue, effect.value);
+  const formatted = chunkMX4OLB7V_cjs.formatKruskalWallis(H, df, pValue, effect.value);
   return {
     testName: "Kruskal-Wallis",
     statistic: H,
@@ -707,20 +707,20 @@ function friedmanTest(data) {
   if (k < 2) throw new Error("friedmanTest: need at least 2 conditions");
   let sumRankSq = 0;
   for (const row of data) {
-    const rowRanks = chunkAVJH2SAO_cjs.rank(row);
+    const rowRanks = chunkMX4OLB7V_cjs.rank(row);
     for (const r of rowRanks) sumRankSq += r * r;
   }
   const colRankSums = Array.from(
     { length: k },
     (_, j) => data.reduce((s, row) => {
-      const rowRanks = chunkAVJH2SAO_cjs.rank(row);
+      const rowRanks = chunkMX4OLB7V_cjs.rank(row);
       return s + (rowRanks[j] ?? 0);
     }, 0)
   );
   const Rj2sum = colRankSums.reduce((s, r) => s + r * r, 0);
   const chi2 = 12 / (n * k * (k + 1)) * Rj2sum - 3 * n * (k + 1);
   const df = k - 1;
-  const pValue = chunkAVJH2SAO_cjs.chiSqPValue(chi2, df);
+  const pValue = chunkMX4OLB7V_cjs.chiSqPValue(chi2, df);
   const w = chi2 / (n * (k - 1));
   return {
     testName: "Friedman Test",
@@ -735,7 +735,7 @@ function friedmanTest(data) {
     ci: [NaN, NaN],
     ciLevel: 0.95,
     n,
-    formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${chunkBL33AEKS_cjs.formatP(pValue)}, W = ${w.toFixed(2)}`
+    formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${chunkMX4OLB7V_cjs.formatP(pValue)}, W = ${w.toFixed(2)}`
   };
 }
 
@@ -750,12 +750,12 @@ function tukeyHSD(groups, msWithin, dfWithin, ciLevel = 0.95) {
       const g2 = groups[j];
       const n1 = g1.values.length;
       const n2 = g2.values.length;
-      const m1 = chunkAVJH2SAO_cjs.mean(g1.values);
-      const m2 = chunkAVJH2SAO_cjs.mean(g2.values);
+      const m1 = chunkMX4OLB7V_cjs.mean(g1.values);
+      const m2 = chunkMX4OLB7V_cjs.mean(g2.values);
       const diff = m1 - m2;
       const se2 = Math.sqrt(msWithin / 2 * (1 / n1 + 1 / n2));
       const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
-      const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin);
+      const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin);
       const pValue = pValueStudentizedRange(q, k);
       const ciHalf = tCrit * se2;
       const ci = [diff - ciHalf, diff + ciHalf];
@@ -797,10 +797,10 @@ function gamesHowell(groups, ciLevel = 0.95) {
       const g2 = groups[j];
       const n1 = g1.values.length;
       const n2 = g2.values.length;
-      const m1 = chunkAVJH2SAO_cjs.mean(g1.values);
-      const m2 = chunkAVJH2SAO_cjs.mean(g2.values);
-      const v1 = chunkAVJH2SAO_cjs.variance(g1.values);
-      const v2 = chunkAVJH2SAO_cjs.variance(g2.values);
+      const m1 = chunkMX4OLB7V_cjs.mean(g1.values);
+      const m2 = chunkMX4OLB7V_cjs.mean(g2.values);
+      const v1 = chunkMX4OLB7V_cjs.variance(g1.values);
+      const v2 = chunkMX4OLB7V_cjs.variance(g2.values);
       const diff = m1 - m2;
       const se2 = Math.sqrt(v1 / n1 + v2 / n2);
       const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
@@ -808,7 +808,7 @@ function gamesHowell(groups, ciLevel = 0.95) {
       const dfDen = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
       const df = dfDen > 0 ? dfNum / dfDen : n1 + n2 - 2;
       const pValue = pValueStudentizedRange(q, k);
-      const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - alpha / (k * (k - 1)), df);
+      const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - alpha / (k * (k - 1)), df);
       const ciHalf = tCrit * se2;
       results.push({
         group1: g1.label,
@@ -829,7 +829,7 @@ function dunnTest(groups, method = "bonferroni") {
   const k = groups.length;
   const allValues = groups.flatMap((g) => [...g.values]);
   const n = allValues.length;
-  const allRanks = chunkAVJH2SAO_cjs.rank(allValues);
+  const allRanks = chunkMX4OLB7V_cjs.rank(allValues);
   let offset = 0;
   const groupRankMeans = [];
   const groupNs = [];
@@ -860,7 +860,7 @@ function dunnTest(groups, method = "bonferroni") {
       pairs.push({ i, j });
     }
   }
-  const adjPValues = chunkAVJH2SAO_cjs.adjustPValues(rawPValues, method);
+  const adjPValues = chunkMX4OLB7V_cjs.adjustPValues(rawPValues, method);
   return pairs.map(({ i, j }, idx) => ({
     group1: groups[i].label,
     group2: groups[j].label,
@@ -879,34 +879,34 @@ function pearsonCorrelation(x, y, ciLevel = 0.95) {
   if (x.length !== y.length) throw new Error("pearsonCorrelation: arrays must have equal length");
   const n = x.length;
   if (n < 3) throw new Error("pearsonCorrelation: need at least 3 observations");
-  const sdX = chunkAVJH2SAO_cjs.sd(x), sdY = chunkAVJH2SAO_cjs.sd(y);
+  const sdX = chunkMX4OLB7V_cjs.sd(x), sdY = chunkMX4OLB7V_cjs.sd(y);
   if (sdX === 0 || sdY === 0) throw new Error("pearsonCorrelation: zero variance in input");
-  const r = chunkAVJH2SAO_cjs.cov(x, y) / (sdX * sdY);
+  const r = chunkMX4OLB7V_cjs.cov(x, y) / (sdX * sdY);
   const rClamped = Math.max(-1, Math.min(1, r));
   const df = n - 2;
   const t = Math.abs(rClamped) === 1 ? Infinity : rClamped * Math.sqrt(df / (1 - rClamped * rClamped));
-  const pValue = chunkAVJH2SAO_cjs.tDistPValue(t, df);
+  const pValue = chunkMX4OLB7V_cjs.tDistPValue(t, df);
   const ci = fisherZCI(rClamped, n, ciLevel);
   return {
     testName: "Pearson r",
-    statistic: chunkAVJH2SAO_cjs.roundTo(rClamped, 4),
+    statistic: chunkMX4OLB7V_cjs.roundTo(rClamped, 4),
     df,
-    pValue: chunkAVJH2SAO_cjs.roundTo(pValue, 4),
+    pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4),
     effectSize: {
       value: rClamped,
       name: "Pearson r",
-      interpretation: chunkBL33AEKS_cjs.interpretR(rClamped)
+      interpretation: chunkMX4OLB7V_cjs.interpretR(rClamped)
     },
     ci,
     ciLevel,
     n,
-    formatted: chunkBL33AEKS_cjs.formatCorrelation(rClamped, df, pValue, ci, "r", ciLevel)
+    formatted: chunkMX4OLB7V_cjs.formatCorrelation(rClamped, df, pValue, ci, "r", ciLevel)
   };
 }
 function fisherZCI(r, n, ciLevel) {
   const z = Math.log((1 + r) / (1 - r)) / 2;
   const se2 = 1 / Math.sqrt(n - 3);
-  const zCrit = chunkAVJH2SAO_cjs.normalQuantile(1 - (1 - ciLevel) / 2);
+  const zCrit = chunkMX4OLB7V_cjs.normalQuantile(1 - (1 - ciLevel) / 2);
   const lo = z - zCrit * se2;
   const hi = z + zCrit * se2;
   return [
@@ -918,7 +918,7 @@ function spearmanCorrelation(x, y, ciLevel = 0.95) {
   if (x.length !== y.length) throw new Error("spearmanCorrelation: arrays must have equal length");
   const n = x.length;
   if (n < 3) throw new Error("spearmanCorrelation: need at least 3 observations");
-  const rx = chunkAVJH2SAO_cjs.rank(x), ry = chunkAVJH2SAO_cjs.rank(y);
+  const rx = chunkMX4OLB7V_cjs.rank(x), ry = chunkMX4OLB7V_cjs.rank(y);
   const rhoResult = pearsonCorrelation(rx, ry, ciLevel);
   return {
     ...rhoResult,
@@ -927,7 +927,7 @@ function spearmanCorrelation(x, y, ciLevel = 0.95) {
       ...rhoResult.effectSize,
       name: "Spearman's \u03C1"
     },
-    formatted: chunkBL33AEKS_cjs.formatCorrelation(rhoResult.statistic, typeof rhoResult.df === "number" ? rhoResult.df : 0, rhoResult.pValue, rhoResult.ci, "\u03C1", ciLevel)
+    formatted: chunkMX4OLB7V_cjs.formatCorrelation(rhoResult.statistic, typeof rhoResult.df === "number" ? rhoResult.df : 0, rhoResult.pValue, rhoResult.ci, "\u03C1", ciLevel)
   };
 }
 function kendallTau(x, y, ciLevel = 0.95) {
@@ -951,23 +951,23 @@ function kendallTau(x, y, ciLevel = 0.95) {
   const tau = (concordant - discordant) / Math.sqrt((n2 - tiesX) * (n2 - tiesY));
   const varTau = 2 * (2 * n + 5) / (9 * n * (n - 1));
   const z = tau / Math.sqrt(varTau);
-  const pValue = 2 * (1 - chunkAVJH2SAO_cjs.normalCDF(Math.abs(z)));
+  const pValue = 2 * (1 - chunkMX4OLB7V_cjs.normalCDF(Math.abs(z)));
   const ci = fisherZCI(tau, n, ciLevel);
   const df = n - 2;
   return {
     testName: "Kendall's \u03C4",
-    statistic: chunkAVJH2SAO_cjs.roundTo(tau, 4),
+    statistic: chunkMX4OLB7V_cjs.roundTo(tau, 4),
     df,
-    pValue: chunkAVJH2SAO_cjs.roundTo(pValue, 4),
+    pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4),
     effectSize: {
       value: tau,
       name: "Kendall's \u03C4",
-      interpretation: chunkBL33AEKS_cjs.interpretR(tau)
+      interpretation: chunkMX4OLB7V_cjs.interpretR(tau)
     },
     ci,
     ciLevel,
     n,
-    formatted: chunkBL33AEKS_cjs.formatCorrelation(tau, df, pValue, ci, "\u03C4", ciLevel)
+    formatted: chunkMX4OLB7V_cjs.formatCorrelation(tau, df, pValue, ci, "\u03C4", ciLevel)
   };
 }
 function partialCorrelation(x, y, controls) {
@@ -979,12 +979,12 @@ function partialCorrelation(x, y, controls) {
 function residualize(y, predictors) {
   if (predictors.length === 0) return [...y];
   const n = y.length;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [1, ...predictors.map((p) => p[i] ?? 0)])
   );
   const Xt = X.transpose();
   const XtX = Xt.multiply(X);
-  const XtY = Xt.multiply(chunkBL33AEKS_cjs.Matrix.colVec(y));
+  const XtY = Xt.multiply(chunkFSSEZIKV_cjs.Matrix.colVec(y));
   const beta = XtX.inverse().multiply(XtY);
   const fitted = X.multiply(beta);
   return Array.from({ length: n }, (_, i) => (y[i] ?? 0) - fitted.get(i, 0));
@@ -1038,7 +1038,7 @@ function fitOLS(X, y, coefNames, ciLevel = 0.95) {
   const p = X.cols;
   const Xt = X.transpose();
   const XtX = Xt.multiply(X);
-  const XtY = Xt.multiply(chunkBL33AEKS_cjs.Matrix.colVec(y));
+  const XtY = Xt.multiply(chunkFSSEZIKV_cjs.Matrix.colVec(y));
   const XtXInv = XtX.inverse();
   const betaM = XtXInv.multiply(XtY);
   const beta = Array.from({ length: p }, (_, i) => betaM.get(i, 0));
@@ -1048,7 +1048,7 @@ function fitOLS(X, y, coefNames, ciLevel = 0.95) {
     return val;
   });
   const residuals = y.map((v, i) => v - (fitted[i] ?? 0));
-  const yMean = chunkAVJH2SAO_cjs.mean(y);
+  const yMean = chunkMX4OLB7V_cjs.mean(y);
   const ss_res = residuals.reduce((s, r) => s + r * r, 0);
   const ss_tot = y.reduce((s, v) => s + (v - yMean) ** 2, 0);
   const r2 = ss_tot > 0 ? Math.max(0, 1 - ss_res / ss_tot) : 0;
@@ -1057,39 +1057,39 @@ function fitOLS(X, y, coefNames, ciLevel = 0.95) {
   if (dfRes <= 0) throw new Error("fitOLS: not enough degrees of freedom");
   const sigma2 = ss_res / dfRes;
   const covBeta = XtXInv.scale(sigma2);
-  const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, dfRes);
+  const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, dfRes);
   const coefficients = beta.map((b, i) => {
     const se2 = Math.sqrt(Math.max(0, covBeta.get(i, i)));
     const t = se2 === 0 ? 0 : b / se2;
-    const pVal = chunkAVJH2SAO_cjs.tDistPValue(t, dfRes);
+    const pVal = chunkMX4OLB7V_cjs.tDistPValue(t, dfRes);
     const ci = [b - tCrit * se2, b + tCrit * se2];
     return {
       name: coefNames[i] ?? `\u03B2${i}`,
-      estimate: chunkAVJH2SAO_cjs.roundTo(b, 6),
-      se: chunkAVJH2SAO_cjs.roundTo(se2, 6),
-      tValue: chunkAVJH2SAO_cjs.roundTo(t, 4),
-      pValue: chunkAVJH2SAO_cjs.roundTo(pVal, 4),
+      estimate: chunkMX4OLB7V_cjs.roundTo(b, 6),
+      se: chunkMX4OLB7V_cjs.roundTo(se2, 6),
+      tValue: chunkMX4OLB7V_cjs.roundTo(t, 4),
+      pValue: chunkMX4OLB7V_cjs.roundTo(pVal, 4),
       ci
     };
   });
   const dfModel = p - 1;
   const ss_reg = ss_tot - ss_res;
   const F = sigma2 === 0 || dfModel === 0 ? 0 : ss_reg / dfModel / sigma2;
-  const fPValue = chunkAVJH2SAO_cjs.fDistPValue(F, dfModel, dfRes);
+  const fPValue = chunkMX4OLB7V_cjs.fDistPValue(F, dfModel, dfRes);
   const rssSafe = Math.max(ss_res, 1e-15);
   const logLik = -n / 2 * (Math.log(2 * Math.PI) + Math.log(rssSafe / n) + 1);
   const aic = -2 * logLik + 2 * (p + 1);
   const bic = -2 * logLik + Math.log(n) * (p + 1);
-  const formatted = chunkBL33AEKS_cjs.formatRegression(r2, adjR2, F, dfModel, dfRes, fPValue);
+  const formatted = chunkMX4OLB7V_cjs.formatRegression(r2, adjR2, F, dfModel, dfRes, fPValue);
   return {
     coefficients,
-    r2: chunkAVJH2SAO_cjs.roundTo(r2, 6),
-    adjR2: chunkAVJH2SAO_cjs.roundTo(adjR2, 6),
-    fStatistic: chunkAVJH2SAO_cjs.roundTo(F, 4),
+    r2: chunkMX4OLB7V_cjs.roundTo(r2, 6),
+    adjR2: chunkMX4OLB7V_cjs.roundTo(adjR2, 6),
+    fStatistic: chunkMX4OLB7V_cjs.roundTo(F, 4),
     fDf: [dfModel, dfRes],
-    fPValue: chunkAVJH2SAO_cjs.roundTo(fPValue, 4),
-    aic: chunkAVJH2SAO_cjs.roundTo(aic, 2),
-    bic: chunkAVJH2SAO_cjs.roundTo(bic, 2),
+    fPValue: chunkMX4OLB7V_cjs.roundTo(fPValue, 4),
+    aic: chunkMX4OLB7V_cjs.roundTo(aic, 2),
+    bic: chunkMX4OLB7V_cjs.roundTo(bic, 2),
     residuals,
     fitted,
     n,
@@ -1100,7 +1100,7 @@ function linearRegression(x, y, ciLevel = 0.95) {
   if (x.length !== y.length) throw new Error("linearRegression: arrays must have equal length");
   if (x.length < 3) throw new Error("linearRegression: need at least 3 observations");
   const n = x.length;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(Array.from({ length: n }, (_, i) => [1, x[i] ?? 0]));
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(Array.from({ length: n }, (_, i) => [1, x[i] ?? 0]));
   return fitOLS(X, y, ["(Intercept)", "x"], ciLevel);
 }
 function multipleRegression(y, predictors, ciLevel = 0.95) {
@@ -1109,7 +1109,7 @@ function multipleRegression(y, predictors, ciLevel = 0.95) {
   for (const p of predictors) {
     if (p.values.length !== n) throw new Error(`multipleRegression: predictor '${p.name}' length mismatch`);
   }
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [1, ...predictors.map((p) => p.values[i] ?? 0)])
   );
   const names = ["(Intercept)", ...predictors.map((p) => p.name)];
@@ -1119,7 +1119,7 @@ function polynomialRegression(x, y, degree, ciLevel = 0.95) {
   if (degree < 1) throw new Error("polynomialRegression: degree must be \u2265 1");
   if (x.length !== y.length) throw new Error("polynomialRegression: arrays must match length");
   const n = x.length;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from(
       { length: n },
       (_, i) => [1, ...Array.from({ length: degree }, (_2, d) => (x[i] ?? 0) ** (d + 1))]
@@ -1134,7 +1134,7 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
   }
   const n = y.length;
   const p = predictors.length + 1;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [1, ...predictors.map((pr) => pr.values[i] ?? 0)])
   );
   const names = ["(Intercept)", ...predictors.map((pr) => pr.name)];
@@ -1147,14 +1147,14 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
     });
     const mu2 = eta2.map((e) => 1 / (1 + Math.exp(-e)));
     const w2 = mu2.map((m) => Math.max(1e-10, m * (1 - m)));
-    const Xw2 = chunkBL33AEKS_cjs.Matrix.fromArray(
+    const Xw2 = chunkFSSEZIKV_cjs.Matrix.fromArray(
       Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_2, j) => X.get(i, j) * Math.sqrt(w2[i])))
     );
     const yAdj = Array.from({ length: n }, (_, i) => Math.sqrt(w2[i]) * ((y[i] ?? 0) - (mu2[i] ?? 0)));
     try {
       const Xwt = Xw2.transpose();
       const XwtXw = Xwt.multiply(Xw2);
-      const XwtY = Xwt.multiply(chunkBL33AEKS_cjs.Matrix.colVec(yAdj));
+      const XwtY = Xwt.multiply(chunkFSSEZIKV_cjs.Matrix.colVec(yAdj));
       const delta = XwtXw.inverse().multiply(XwtY);
       let maxChange = 0;
       for (let j = 0; j < p; j++) {
@@ -1174,16 +1174,16 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
   });
   const mu = eta.map((e) => 1 / (1 + Math.exp(-e)));
   const w = mu.map((m) => Math.max(1e-10, m * (1 - m)));
-  const Xw = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const Xw = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_2, j) => X.get(i, j) * Math.sqrt(w[i])))
   );
   let cov2;
   try {
     cov2 = Xw.transpose().multiply(Xw).inverse();
   } catch {
-    cov2 = chunkBL33AEKS_cjs.Matrix.identity(p);
+    cov2 = chunkFSSEZIKV_cjs.Matrix.identity(p);
   }
-  const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, n - p);
+  const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, n - p);
   const coefficients = beta.map((b, i) => {
     const se2 = Math.sqrt(Math.max(0, cov2.get(i, i)));
     const z = se2 === 0 ? 0 : b / se2;
@@ -1191,10 +1191,10 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
     const ci = [b - tCrit * se2, b + tCrit * se2];
     return {
       name: names[i] ?? `\u03B2${i}`,
-      estimate: chunkAVJH2SAO_cjs.roundTo(b, 6),
-      se: chunkAVJH2SAO_cjs.roundTo(se2, 6),
-      tValue: chunkAVJH2SAO_cjs.roundTo(z, 4),
-      pValue: chunkAVJH2SAO_cjs.roundTo(pVal, 4),
+      estimate: chunkMX4OLB7V_cjs.roundTo(b, 6),
+      se: chunkMX4OLB7V_cjs.roundTo(se2, 6),
+      tValue: chunkMX4OLB7V_cjs.roundTo(z, 4),
+      pValue: chunkMX4OLB7V_cjs.roundTo(pVal, 4),
       ci
     };
   });
@@ -1202,7 +1202,7 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
     const yi = y[i] ?? 0;
     return s + yi * Math.log(Math.max(1e-15, m)) + (1 - yi) * Math.log(Math.max(1e-15, 1 - m));
   }, 0);
-  const pMeanRaw = chunkAVJH2SAO_cjs.mean([...y]);
+  const pMeanRaw = chunkMX4OLB7V_cjs.mean([...y]);
   const pMean = Math.min(1 - 1e-12, Math.max(1e-12, pMeanRaw));
   const nullLogLik = n * (pMean * Math.log(Math.max(1e-15, pMean)) + (1 - pMean) * Math.log(Math.max(1e-15, 1 - pMean)));
   const r2 = Math.abs(nullLogLik) < 1e-12 ? NaN : 1 - logLik / nullLogLik;
@@ -1211,18 +1211,18 @@ function logisticRegression(y, predictors, ciLevel = 0.95, maxIter = 100, tol = 
   const residuals = y.map((v, i) => (v ?? 0) - (mu[i] ?? 0));
   return {
     coefficients,
-    r2: chunkAVJH2SAO_cjs.roundTo(r2, 6),
-    adjR2: chunkAVJH2SAO_cjs.roundTo(r2, 6),
+    r2: chunkMX4OLB7V_cjs.roundTo(r2, 6),
+    adjR2: chunkMX4OLB7V_cjs.roundTo(r2, 6),
     // McFadden's for logistic
     fStatistic: NaN,
     fDf: [p - 1, n - p],
     fPValue: NaN,
-    aic: chunkAVJH2SAO_cjs.roundTo(aic, 2),
-    bic: chunkAVJH2SAO_cjs.roundTo(bic, 2),
+    aic: chunkMX4OLB7V_cjs.roundTo(aic, 2),
+    bic: chunkMX4OLB7V_cjs.roundTo(bic, 2),
     residuals,
     fitted: mu,
     n,
-    formatted: `McFadden R\xB2 = ${chunkAVJH2SAO_cjs.roundTo(r2, 3)}, AIC = ${chunkAVJH2SAO_cjs.roundTo(aic, 1)}`
+    formatted: `McFadden R\xB2 = ${chunkMX4OLB7V_cjs.roundTo(r2, 3)}, AIC = ${chunkMX4OLB7V_cjs.roundTo(aic, 1)}`
   };
 }
 function normCDFLocal(z) {
@@ -1235,7 +1235,7 @@ function normCDFLocal(z) {
 function regressionDiagnostics(result, predictors) {
   const n = result.n;
   const p = result.coefficients.length;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [1, ...predictors.map((pr) => pr.values[i] ?? 0)])
   );
   const Xt = X.transpose();
@@ -1243,7 +1243,7 @@ function regressionDiagnostics(result, predictors) {
   try {
     XtXInv = Xt.multiply(X).inverse();
   } catch {
-    XtXInv = chunkBL33AEKS_cjs.Matrix.identity(p);
+    XtXInv = chunkFSSEZIKV_cjs.Matrix.identity(p);
   }
   const hat = X.multiply(XtXInv).multiply(Xt);
   const leverage = Array.from({ length: n }, (_, i) => hat.get(i, i));
@@ -1364,7 +1364,7 @@ function runPCA(data, nComponents, scale = true) {
   const k = data[0].length;
   if (k < 2) throw new Error("runPCA: need at least 2 variables");
   const pp = preprocessData(data, { method: scale ? "standardize" : "center" });
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(pp.data);
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(pp.data);
   const Xs = X.scale(1 / Math.sqrt(n - 1));
   const { U: _U, S, V } = Xs.svd();
   const nc = nComponents ?? Math.min(n - 1, k);
@@ -1374,7 +1374,7 @@ function runPCA(data, nComponents, scale = true) {
     { length: k },
     (_, varIdx) => Array.from({ length: nc }, (_2, compIdx) => V.get(varIdx, compIdx))
   );
-  const Vk = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const Vk = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: k }, (_, i) => Array.from({ length: nc }, (_2, j) => V.get(i, j)))
   );
   const scoresM = X.multiply(Vk);
@@ -1390,9 +1390,9 @@ function runPCA(data, nComponents, scale = true) {
   return {
     loadings,
     scores,
-    eigenvalues: eigenvalues.map((e) => chunkAVJH2SAO_cjs.roundTo(e, 6)),
-    varianceExplained: varianceExplained.map((v) => chunkAVJH2SAO_cjs.roundTo(v, 6)),
-    cumulativeVariance: cumulativeVariance.map((v) => chunkAVJH2SAO_cjs.roundTo(v, 6)),
+    eigenvalues: eigenvalues.map((e) => chunkMX4OLB7V_cjs.roundTo(e, 6)),
+    varianceExplained: varianceExplained.map((v) => chunkMX4OLB7V_cjs.roundTo(v, 6)),
+    cumulativeVariance: cumulativeVariance.map((v) => chunkMX4OLB7V_cjs.roundTo(v, 6)),
     nComponents: nc
   };
 }
@@ -1455,7 +1455,7 @@ function remlProfileLogLik(logPsi, y, X, Z) {
   const q = Z.cols;
   const p = X.cols;
   const ZtZ = Z.transpose().multiply(Z);
-  const Dmat = ZtZ.add(chunkBL33AEKS_cjs.Matrix.identity(q).scale(1 / psi));
+  const Dmat = ZtZ.add(chunkFSSEZIKV_cjs.Matrix.identity(q).scale(1 / psi));
   let DInv;
   let logDetD;
   try {
@@ -1465,7 +1465,7 @@ function remlProfileLogLik(logPsi, y, X, Z) {
     return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 };
   }
   const ZDinvZt = Z.multiply(DInv).multiply(Z.transpose());
-  const VpsiInv = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const VpsiInv = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from(
       { length: n },
       (_, i) => Array.from(
@@ -1485,11 +1485,11 @@ function remlProfileLogLik(logPsi, y, X, Z) {
   } catch {
     return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 };
   }
-  const XtVinvY = XtVinv.multiply(chunkBL33AEKS_cjs.Matrix.colVec(y));
+  const XtVinvY = XtVinv.multiply(chunkFSSEZIKV_cjs.Matrix.colVec(y));
   const beta = XtVinvXInv.multiply(XtVinvY);
   const Xbeta = X.multiply(beta);
   const e = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - Xbeta.get(i, 0));
-  const eM = chunkBL33AEKS_cjs.Matrix.colVec(e);
+  const eM = chunkFSSEZIKV_cjs.Matrix.colVec(e);
   const quadForm = eM.transpose().multiply(VpsiInv).multiply(eM).get(0, 0);
   const sigmae2 = Math.max(1e-8, quadForm / (n - p));
   const sigmab2 = psi * sigmae2;
@@ -1506,13 +1506,13 @@ function runLMM(input) {
   if (nGroups < 2) throw new Error("runLMM: need at least 2 groups");
   const predNames = Object.keys(fixedPredictors);
   const p = predNames.length + 1;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [
       1,
       ...predNames.map((name) => (fixedPredictors[name] ?? [])[i] ?? 0)
     ])
   );
-  const Z = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const Z = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from(
       { length: n },
       (_, i) => groupLevels.map((g) => groupId[i] === g ? 1 : 0)
@@ -1520,9 +1520,9 @@ function runLMM(input) {
   );
   const objFn = (theta) => remlProfileLogLik(theta[0] ?? 0, y, X, Z).negLogLik;
   const starts = [-4, -2, 0, 2, 4];
-  let optResult = chunkAVJH2SAO_cjs.nelderMead(objFn, [starts[0]], { maxIter: 1e3, tol: 1e-8 });
+  let optResult = chunkMX4OLB7V_cjs.nelderMead(objFn, [starts[0]], { maxIter: 1e3, tol: 1e-8 });
   for (let si = 1; si < starts.length; si++) {
-    const cand = chunkAVJH2SAO_cjs.nelderMead(objFn, [starts[si]], { maxIter: 1e3, tol: 1e-8 });
+    const cand = chunkMX4OLB7V_cjs.nelderMead(objFn, [starts[si]], { maxIter: 1e3, tol: 1e-8 });
     if (cand.fval < optResult.fval) optResult = cand;
   }
   const finalModel = remlProfileLogLik(optResult.x[0] ?? 0, y, X, Z);
@@ -1532,14 +1532,14 @@ function runLMM(input) {
   const ZtZ = Z.transpose().multiply(Z);
   let VinvScaled;
   if (scale < 1e-10) {
-    VinvScaled = chunkBL33AEKS_cjs.Matrix.identity(n);
+    VinvScaled = chunkFSSEZIKV_cjs.Matrix.identity(n);
   } else {
-    const Dmat = ZtZ.add(chunkBL33AEKS_cjs.Matrix.identity(nGroups).scale(1 / scale));
+    const Dmat = ZtZ.add(chunkFSSEZIKV_cjs.Matrix.identity(nGroups).scale(1 / scale));
     let DInv;
     try {
       DInv = Dmat.inverse();
       const ZDinvZt = Z.multiply(DInv).multiply(Z.transpose());
-      VinvScaled = chunkBL33AEKS_cjs.Matrix.fromArray(
+      VinvScaled = chunkFSSEZIKV_cjs.Matrix.fromArray(
         Array.from(
           { length: n },
           (_, i) => Array.from(
@@ -1549,7 +1549,7 @@ function runLMM(input) {
         )
       );
     } catch {
-      VinvScaled = chunkBL33AEKS_cjs.Matrix.identity(n);
+      VinvScaled = chunkFSSEZIKV_cjs.Matrix.identity(n);
     }
   }
   const Vinv = VinvScaled.scale(1 / sigmae2);
@@ -1560,26 +1560,26 @@ function runLMM(input) {
   try {
     XtVinvXInv = XtVinvX.inverse();
   } catch {
-    XtVinvXInv = chunkBL33AEKS_cjs.Matrix.identity(p);
+    XtVinvXInv = chunkFSSEZIKV_cjs.Matrix.identity(p);
   }
-  const XtVinvY = XtVinv.multiply(chunkBL33AEKS_cjs.Matrix.colVec([...y]));
+  const XtVinvY = XtVinv.multiply(chunkFSSEZIKV_cjs.Matrix.colVec([...y]));
   const betaM = XtVinvXInv.multiply(XtVinvY);
   const beta = Array.from({ length: p }, (_, i) => betaM.get(i, 0));
   const df = Math.max(1, n - p - nGroups + 1);
-  const tCrit = chunkAVJH2SAO_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const tCrit = chunkMX4OLB7V_cjs.tDistQuantile(1 - (1 - ciLevel) / 2, df);
   const covBeta = XtVinvXInv.scale(sigmae2);
   const fixedEffectNames = ["(Intercept)", ...predNames];
   const fixedEffects = beta.map((b, i) => {
     const seVal = Math.sqrt(Math.max(0, covBeta.get(i, i)));
     const t = seVal === 0 ? 0 : b / seVal;
-    const pVal = chunkAVJH2SAO_cjs.tDistPValue(t, df);
+    const pVal = chunkMX4OLB7V_cjs.tDistPValue(t, df);
     return {
       name: fixedEffectNames[i] ?? `\u03B2${i}`,
-      estimate: chunkAVJH2SAO_cjs.roundTo(b, 6),
-      se: chunkAVJH2SAO_cjs.roundTo(seVal, 6),
-      tValue: chunkAVJH2SAO_cjs.roundTo(t, 4),
-      pValue: chunkAVJH2SAO_cjs.roundTo(pVal, 4),
-      ci: [chunkAVJH2SAO_cjs.roundTo(b - tCrit * seVal, 6), chunkAVJH2SAO_cjs.roundTo(b + tCrit * seVal, 6)]
+      estimate: chunkMX4OLB7V_cjs.roundTo(b, 6),
+      se: chunkMX4OLB7V_cjs.roundTo(seVal, 6),
+      tValue: chunkMX4OLB7V_cjs.roundTo(t, 4),
+      pValue: chunkMX4OLB7V_cjs.roundTo(pVal, 4),
+      ci: [chunkMX4OLB7V_cjs.roundTo(b - tCrit * seVal, 6), chunkMX4OLB7V_cjs.roundTo(b + tCrit * seVal, 6)]
     };
   });
   const icc = sigmab2 / (sigmab2 + sigmae2);
@@ -1587,17 +1587,17 @@ function runLMM(input) {
   const logLik = -finalModel.negLogLik - remlConst;
   const aic = -2 * logLik + 2 * (p + 2);
   const bic = -2 * logLik + Math.log(n) * (p + 2);
-  const formatted = chunkBL33AEKS_cjs.formatLMM(icc, aic, bic, logLik);
+  const formatted = chunkMX4OLB7V_cjs.formatLMM(icc, aic, bic, logLik);
   return {
     fixedEffects,
     varianceComponents: {
-      intercept: chunkAVJH2SAO_cjs.roundTo(sigmab2, 6),
-      residual: chunkAVJH2SAO_cjs.roundTo(sigmae2, 6)
+      intercept: chunkMX4OLB7V_cjs.roundTo(sigmab2, 6),
+      residual: chunkMX4OLB7V_cjs.roundTo(sigmae2, 6)
     },
-    icc: chunkAVJH2SAO_cjs.roundTo(icc, 6),
-    logLik: chunkAVJH2SAO_cjs.roundTo(logLik, 4),
-    aic: chunkAVJH2SAO_cjs.roundTo(aic, 2),
-    bic: chunkAVJH2SAO_cjs.roundTo(bic, 2),
+    icc: chunkMX4OLB7V_cjs.roundTo(icc, 6),
+    logLik: chunkMX4OLB7V_cjs.roundTo(logLik, 4),
+    aic: chunkMX4OLB7V_cjs.roundTo(aic, 2),
+    bic: chunkMX4OLB7V_cjs.roundTo(bic, 2),
     nObs: n,
     nGroups,
     formatted
@@ -1610,11 +1610,11 @@ function computeBLUPs(input, result) {
   const predNames = Object.keys(fixedPredictors);
   const sigmab2 = result.varianceComponents.intercept;
   const sigmae2 = result.varianceComponents.residual;
-  const X = chunkBL33AEKS_cjs.Matrix.fromArray(
+  const X = chunkFSSEZIKV_cjs.Matrix.fromArray(
     Array.from({ length: n }, (_, i) => [1, ...predNames.map((name) => (fixedPredictors[name] ?? [])[i] ?? 0)])
   );
   const beta = result.fixedEffects.map((fe) => fe.estimate);
-  const Xbeta = X.multiply(chunkBL33AEKS_cjs.Matrix.colVec(beta));
+  const Xbeta = X.multiply(chunkFSSEZIKV_cjs.Matrix.colVec(beta));
   const residuals = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - Xbeta.get(i, 0));
   const psi = sigmab2 / sigmae2;
   return groupLevels.map((g) => {
@@ -1622,7 +1622,7 @@ function computeBLUPs(input, result) {
     const sumResid = indices.reduce((s, i) => s + (residuals[i] ?? 0), 0);
     const nj = indices.length;
     const blup = psi / (1 + psi * nj) * sumResid;
-    return { group: g, blup: chunkAVJH2SAO_cjs.roundTo(blup, 6) };
+    return { group: g, blup: chunkMX4OLB7V_cjs.roundTo(blup, 6) };
   });
 }
 
@@ -1951,7 +1951,7 @@ function fitGMM(data, options) {
   const means = kMeansPlusPlus(data, k, rng);
   const weights = new Float64Array(k).fill(1 / k);
   const resp = Array.from({ length: n }, () => new Float64Array(k));
-  const I = chunkBL33AEKS_cjs.Matrix.identity(d);
+  const I = chunkFSSEZIKV_cjs.Matrix.identity(d);
   const iFlat = I.toFlat();
   const uFlats = Array.from({ length: k }, () => [...iFlat]);
   const eigenvals = Array.from({ length: k }, () => new Array(d).fill(1));
@@ -2031,7 +2031,7 @@ function fitGMM(data, options) {
         }
       }
       if (modelType === "VVV") {
-        const { values, vectors } = chunkBL33AEKS_cjs.Matrix.fromArray(cov2).eigen();
+        const { values, vectors } = chunkFSSEZIKV_cjs.Matrix.fromArray(cov2).eigen();
         eigenvals[j] = values.map((v) => Math.max(v, regCovar));
         uFlats[j] = vectors.toFlat();
       } else if (modelType === "VVI") {
@@ -2046,7 +2046,7 @@ function fitGMM(data, options) {
     }
     if (pool) {
       if (modelType === "EEE") {
-        const { values, vectors } = chunkBL33AEKS_cjs.Matrix.fromArray(pool).eigen();
+        const { values, vectors } = chunkFSSEZIKV_cjs.Matrix.fromArray(pool).eigen();
         const sharedEig = values.map((v) => Math.max(v, regCovar));
         const sharedU = vectors.toFlat();
         for (let j = 0; j < k; j++) {
@@ -2083,8 +2083,8 @@ function fitGMM(data, options) {
     labels[i] = best;
   }
   const covariances = eigenvals.map((eig, j) => {
-    const U = new chunkBL33AEKS_cjs.Matrix(d, d, uFlats[j]);
-    const D = chunkBL33AEKS_cjs.Matrix.fromArray(Array.from(
+    const U = new chunkFSSEZIKV_cjs.Matrix(d, d, uFlats[j]);
+    const D = chunkFSSEZIKV_cjs.Matrix.fromArray(Array.from(
       { length: d },
       (_, r) => Array.from({ length: d }, (_2, c) => r === c ? eig[r] : 0)
     ));
@@ -2121,7 +2121,7 @@ function fitGMM(data, options) {
       icl,
       entropy,
       avepp: computeAvePP(resp, k),
-      formatted: `GMM (K = ${k}, ${modelType}): BIC = ${chunkAVJH2SAO_cjs.roundTo(bic, 1)}, AIC = ${chunkAVJH2SAO_cjs.roundTo(aic, 1)}, LL = ${chunkAVJH2SAO_cjs.roundTo(logL, 1)}, AvePP = [${computeAvePP(resp, k).map((v) => chunkAVJH2SAO_cjs.roundTo(v, 2)).join(", ")}]`
+      formatted: `GMM (K = ${k}, ${modelType}): BIC = ${chunkMX4OLB7V_cjs.roundTo(bic, 1)}, AIC = ${chunkMX4OLB7V_cjs.roundTo(aic, 1)}, LL = ${chunkMX4OLB7V_cjs.roundTo(logL, 1)}, AvePP = [${computeAvePP(resp, k).map((v) => chunkMX4OLB7V_cjs.roundTo(v, 2)).join(", ")}]`
     }
   };
 }
@@ -2261,7 +2261,7 @@ function fitLCA(data, options) {
       icl,
       entropy,
       avepp: computeAvePP(resp, k),
-      formatted: `LCA (K = ${k}): BIC = ${chunkAVJH2SAO_cjs.roundTo(bic, 1)}, AIC = ${chunkAVJH2SAO_cjs.roundTo(aic, 1)}, LL = ${chunkAVJH2SAO_cjs.roundTo(logL, 1)}`
+      formatted: `LCA (K = ${k}): BIC = ${chunkMX4OLB7V_cjs.roundTo(bic, 1)}, AIC = ${chunkMX4OLB7V_cjs.roundTo(aic, 1)}, LL = ${chunkMX4OLB7V_cjs.roundTo(logL, 1)}`
     }
   };
 }
@@ -2457,7 +2457,7 @@ function fitLTA(data, options) {
       icl,
       entropy,
       avepp: computeAvePP(flatGamma, k),
-      formatted: `LTA (K = ${k}, T = ${T}): BIC = ${chunkAVJH2SAO_cjs.roundTo(bic, 1)}, AIC = ${chunkAVJH2SAO_cjs.roundTo(aic, 1)}, LL = ${chunkAVJH2SAO_cjs.roundTo(logL, 1)}`
+      formatted: `LTA (K = ${k}, T = ${T}): BIC = ${chunkMX4OLB7V_cjs.roundTo(bic, 1)}, AIC = ${chunkMX4OLB7V_cjs.roundTo(aic, 1)}, LL = ${chunkMX4OLB7V_cjs.roundTo(logL, 1)}`
     }
   };
 }
@@ -2707,7 +2707,7 @@ function runDBSCAN(data, options) {
     else nNoise++;
   }
   const sil = nClusters >= 2 ? silhouetteScores(data, Array.from(labels)) : { scores: new Array(n).fill(NaN), mean: NaN };
-  const formatted = `DBSCAN (eps = ${chunkAVJH2SAO_cjs.roundTo(eps, 3)}, minPts = ${minPts}): ${nClusters} clusters, ${nNoise} noise points, silhouette = ${isNaN(sil.mean) ? "N/A" : chunkAVJH2SAO_cjs.roundTo(sil.mean, 3)}`;
+  const formatted = `DBSCAN (eps = ${chunkMX4OLB7V_cjs.roundTo(eps, 3)}, minPts = ${minPts}): ${nClusters} clusters, ${nNoise} noise points, silhouette = ${isNaN(sil.mean) ? "N/A" : chunkMX4OLB7V_cjs.roundTo(sil.mean, 3)}`;
   return {
     labels: Array.from(labels),
     pointTypes,
@@ -2819,7 +2819,7 @@ function runHierarchical(data, options) {
   }
   const order = buildLeafOrder(merges, n);
   const cophCorr = computeCopheneticCorrelation(merges, n, origDist);
-  const formatted = `HAC (${linkage}): ${n} observations, cophenetic r = ${chunkAVJH2SAO_cjs.roundTo(cophCorr, 3)}`;
+  const formatted = `HAC (${linkage}): ${n} observations, cophenetic r = ${chunkMX4OLB7V_cjs.roundTo(cophCorr, 3)}`;
   return {
     merges,
     heights: mergeHeights,
@@ -2975,6 +2975,1075 @@ function pearsonR(x, y, n) {
   return den > 0 ? num / den : 0;
 }
 
+// src/stats/factor-analysis.ts
+var PRNG2 = class {
+  state;
+  constructor(seed) {
+    this.state = seed >>> 0;
+  }
+  next() {
+    this.state = this.state + 2654435769 | 0;
+    let t = this.state ^ this.state >>> 16;
+    t = Math.imul(t, 569420461);
+    t = t ^ t >>> 15;
+    t = Math.imul(t, 1935289751);
+    t = t ^ t >>> 15;
+    return (t >>> 0) / 4294967296;
+  }
+};
+function prngNormal(rng) {
+  let u = 0, v = 0;
+  while (u === 0) u = rng.next();
+  while (v === 0) v = rng.next();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function computeCorrelationMatrix(data, n, d) {
+  const means = new Float64Array(d);
+  const sds = new Float64Array(d);
+  for (let i = 0; i < n; i++) {
+    const row = data[i];
+    for (let j = 0; j < d; j++) means[j] = means[j] + row[j] / n;
+  }
+  for (let i = 0; i < n; i++) {
+    const row = data[i];
+    for (let j = 0; j < d; j++) sds[j] = sds[j] + (row[j] - means[j]) ** 2;
+  }
+  for (let j = 0; j < d; j++) sds[j] = Math.sqrt(sds[j] / (n - 1));
+  const R = Array.from({ length: d }, () => new Array(d).fill(0));
+  for (let r = 0; r < d; r++) {
+    R[r][r] = 1;
+    for (let c = r + 1; c < d; c++) {
+      let sum = 0;
+      const sdR = sds[r] || 1;
+      const sdC = sds[c] || 1;
+      for (let i = 0; i < n; i++) {
+        sum += (data[i][r] - means[r]) / sdR * ((data[i][c] - means[c]) / sdC);
+      }
+      const val = sum / (n - 1);
+      R[r][c] = val;
+      R[c][r] = val;
+    }
+  }
+  return chunkFSSEZIKV_cjs.Matrix.fromArray(R);
+}
+function computeFit(S, Sigma, n, d, nFreeParams, nFactors) {
+  let logDetSigma, logDetS;
+  try {
+    logDetSigma = Sigma.logDet();
+  } catch {
+    const ev = Sigma.eigen().values;
+    logDetSigma = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  try {
+    logDetS = S.logDet();
+  } catch {
+    const ev = S.eigen().values;
+    logDetS = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  let traceVal;
+  try {
+    traceVal = Sigma.inverse().multiply(S).trace();
+  } catch {
+    traceVal = Sigma.pseudoInverse().multiply(S).trace();
+  }
+  const F_ml = Math.max(0, logDetSigma + traceVal - logDetS - d);
+  const bartlettN = nFactors !== void 0 ? n - 1 - (2 * d + 5) / 6 - 2 * nFactors / 3 : n - 1;
+  const chiSq = Math.max(0, bartlettN * F_ml);
+  const totalElements = d * (d + 1) / 2;
+  const df = Math.max(0, totalElements - nFreeParams);
+  const pValue = df > 0 ? chunkMX4OLB7V_cjs.chiSqPValue(chiSq, df) : 1;
+  let logDetDiagS = 0;
+  let traceNull = 0;
+  for (let i = 0; i < d; i++) {
+    const diagVal = Math.max(S.get(i, i), 1e-15);
+    logDetDiagS += Math.log(diagVal);
+    traceNull += S.get(i, i) / diagVal;
+  }
+  const diagArr = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => i === j ? S.get(i, i) : 0)
+  );
+  const diagMat = chunkFSSEZIKV_cjs.Matrix.fromArray(diagArr);
+  let traceNullFull;
+  try {
+    traceNullFull = diagMat.inverse().multiply(S).trace();
+  } catch {
+    traceNullFull = d;
+  }
+  const F_null = Math.max(0, logDetDiagS + traceNullFull - logDetS - d);
+  const bartlettNNull = nFactors !== void 0 ? n - 1 - (2 * d + 5) / 6 : n - 1;
+  const chiSqNull = bartlettNNull * F_null;
+  const dfNull = d * (d - 1) / 2;
+  const ncp = Math.max(chiSq - df, 0);
+  const rmsea = df > 0 ? Math.sqrt(ncp / (df * (n - 1))) : 0;
+  let rmseaLo = 0, rmseaHi = rmsea * 2;
+  if (df > 0) {
+    const ncpLo = Math.max(chiSq - df - 1.645 * Math.sqrt(2 * df), 0);
+    const ncpHi = Math.max(chiSq - df + 1.645 * Math.sqrt(2 * df), 0);
+    rmseaLo = Math.sqrt(Math.max(ncpLo / (df * (n - 1)), 0));
+    rmseaHi = Math.sqrt(ncpHi / (df * (n - 1)));
+  }
+  const ncpNull = Math.max(chiSqNull - dfNull, 0);
+  const cfi = ncpNull > 0 ? Math.max(0, Math.min(1, 1 - ncp / ncpNull)) : 1;
+  const tli = df > 0 && dfNull > 0 ? (chiSqNull / dfNull - chiSq / df) / (chiSqNull / dfNull - 1) : 1;
+  let srmrSum = 0;
+  let srmrCount = 0;
+  for (let i = 0; i < d; i++) {
+    for (let j = 0; j <= i; j++) {
+      const sij = S.get(i, j);
+      const sigij = Sigma.get(i, j);
+      const denom = Math.sqrt(S.get(i, i) * S.get(j, j));
+      const r_obs = denom > 0 ? sij / denom : 0;
+      const r_imp = denom > 0 ? sigij / denom : 0;
+      srmrSum += (r_obs - r_imp) ** 2;
+      srmrCount++;
+    }
+  }
+  const srmr = Math.sqrt(srmrSum / srmrCount);
+  const aic = chiSq + 2 * nFreeParams;
+  const bic = chiSq + nFreeParams * Math.log(n);
+  return {
+    chiSq,
+    df,
+    pValue,
+    rmsea,
+    rmseaCI: [rmseaLo, rmseaHi],
+    cfi,
+    tli,
+    srmr,
+    aic,
+    bic
+  };
+}
+function extractPAF(R, k, maxIter, tol) {
+  const d = R.rows;
+  const h2 = new Float64Array(d);
+  try {
+    const invR = R.inverse();
+    for (let i = 0; i < d; i++) h2[i] = Math.max(0.01, 1 - 1 / Math.max(invR.get(i, i), 1e-12));
+  } catch {
+    for (let i = 0; i < d; i++) h2[i] = 0.5;
+  }
+  const loadings = Array.from({ length: d }, () => new Array(k).fill(0));
+  for (let iter = 0; iter < maxIter; iter++) {
+    const adjR = R.toArray();
+    for (let i = 0; i < d; i++) adjR[i][i] = h2[i];
+    const adjM = chunkFSSEZIKV_cjs.Matrix.fromArray(adjR);
+    const { values, vectors } = adjM.eigen();
+    const oldH2 = new Float64Array(h2);
+    for (let f = 0; f < k; f++) {
+      const eigenVal = Math.max(values[f], 0);
+      const scale = Math.sqrt(eigenVal);
+      for (let r = 0; r < d; r++) {
+        loadings[r][f] = vectors.get(r, f) * scale;
+      }
+    }
+    let maxDelta = 0;
+    for (let r = 0; r < d; r++) {
+      let sum = 0;
+      for (let f = 0; f < k; f++) sum += loadings[r][f] ** 2;
+      h2[r] = Math.max(1e-3, Math.min(0.9999, sum));
+      maxDelta = Math.max(maxDelta, Math.abs(h2[r] - oldH2[r]));
+    }
+    if (maxDelta < tol) break;
+  }
+  return { loadings, communalities: h2 };
+}
+function extractML(R, k, maxIter, tol) {
+  const d = R.rows;
+  const Rarr = R.toArray();
+  const Theta = new Float64Array(d);
+  try {
+    const invR = R.inverse();
+    const factor = 1 - 0.5 * k / d;
+    for (let i = 0; i < d; i++) Theta[i] = Math.max(5e-3, Math.min(0.995, factor / Math.max(invR.get(i, i), 1e-12)));
+  } catch {
+    for (let i = 0; i < d; i++) Theta[i] = 0.5;
+  }
+  function extractLoadingsFromTheta(theta) {
+    const scaledR = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const si = 1 / Math.sqrt(Math.max(theta[i], 1e-12));
+        const sj = 1 / Math.sqrt(Math.max(theta[j], 1e-12));
+        return Rarr[i][j] * si * sj;
+      })
+    );
+    const { values, vectors } = chunkFSSEZIKV_cjs.Matrix.fromArray(scaledR).eigen();
+    const L2 = Array.from({ length: d }, () => new Array(k).fill(0));
+    for (let f = 0; f < k; f++) {
+      const ev = Math.max(values[f] - 1, 0);
+      const scale = Math.sqrt(ev);
+      for (let i = 0; i < d; i++) {
+        L2[i][f] = Math.sqrt(Math.max(theta[i], 1e-12)) * vectors.get(i, f) * scale;
+      }
+    }
+    return L2;
+  }
+  const lr0 = 0.02;
+  const lrMin = 1e-3;
+  let L = extractLoadingsFromTheta(Theta);
+  const vTheta = new Float64Array(d);
+  const momentum = 0.8;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const lr = lrMin + (lr0 - lrMin) * 0.5 * (1 + Math.cos(Math.PI * iter / maxIter));
+    L = extractLoadingsFromTheta(Theta);
+    const sigmaArr = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        let sum = 0;
+        for (let f = 0; f < k; f++) sum += L[i][f] * L[j][f];
+        return sum + (i === j ? Theta[i] : 0);
+      })
+    );
+    const Sigma = chunkFSSEZIKV_cjs.Matrix.fromArray(sigmaArr);
+    let invSigma;
+    try {
+      invSigma = Sigma.inverse();
+    } catch {
+      invSigma = Sigma.pseudoInverse();
+    }
+    const Delta = invSigma.multiply(Sigma.subtract(R)).multiply(invSigma);
+    let maxGrad = 0;
+    for (let i = 0; i < d; i++) {
+      const grad = Delta.get(i, i);
+      maxGrad = Math.max(maxGrad, Math.abs(grad));
+      const v = momentum * vTheta[i] - lr * grad;
+      vTheta[i] = v;
+      Theta[i] = Math.max(5e-3, Math.min(0.995, Theta[i] + v));
+    }
+    if (maxGrad < tol) break;
+  }
+  function concentratedML(x) {
+    const scaledR = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const psi_i = Math.max(x[i], 5e-3);
+        const psi_j = Math.max(x[j], 5e-3);
+        return Rarr[i][j] / (Math.sqrt(psi_i) * Math.sqrt(psi_j));
+      })
+    );
+    const { values } = chunkFSSEZIKV_cjs.Matrix.fromArray(scaledR).eigen();
+    let sum = 0;
+    for (let j = k; j < d; j++) {
+      const ev = Math.max(values[j], 1e-15);
+      sum += Math.log(ev) - ev;
+    }
+    let penalty = 0;
+    for (let i = 0; i < d; i++) {
+      if (x[i] < 5e-3 || x[i] > 0.995) penalty += 1e3;
+    }
+    return -sum + k - d + penalty;
+  }
+  const psi0 = Array.from(Theta);
+  const nmResult = chunkMX4OLB7V_cjs.nelderMead(concentratedML, psi0, {
+    maxIter: 5e3 * d,
+    tol: 1e-10
+  });
+  const finalTheta = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    finalTheta[i] = Math.max(5e-3, Math.min(0.995, nmResult.x[i]));
+  }
+  L = extractLoadingsFromTheta(finalTheta);
+  const h2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let sum = 0;
+    for (let f = 0; f < k; f++) sum += L[i][f] ** 2;
+    h2[i] = Math.max(1e-3, Math.min(0.9999, sum));
+  }
+  return { loadings: L, communalities: h2 };
+}
+function rotateVarimax(L, maxIter, tol) {
+  const p = L.length;
+  const k = L[0].length;
+  if (k < 2) return { rotated: L.map((r) => [...r]), T: [[1]] };
+  const sc = new Float64Array(p);
+  for (let i = 0; i < p; i++) {
+    let ss = 0;
+    for (let j = 0; j < k; j++) ss += L[i][j] ** 2;
+    sc[i] = Math.sqrt(ss || 1e-15);
+  }
+  const x = L.map((row, i) => row.map((v) => v / sc[i]));
+  let T = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  let dPast = 0;
+  for (let iter = 0; iter < Math.min(maxIter, 1e3); iter++) {
+    const z = Array.from(
+      { length: p },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += x[i][m] * T[m][j];
+        return s;
+      })
+    );
+    const csz2 = new Float64Array(k);
+    for (let j = 0; j < k; j++) {
+      let s = 0;
+      for (let i = 0; i < p; i++) s += z[i][j] ** 2;
+      csz2[j] = s / p;
+    }
+    const B = Array.from(
+      { length: k },
+      (_, r) => Array.from({ length: k }, (_2, c) => {
+        let s = 0;
+        for (let i = 0; i < p; i++) {
+          const zij = z[i][c];
+          s += x[i][r] * (zij * zij * zij - zij * csz2[c]);
+        }
+        return s;
+      })
+    );
+    const BtB = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += B[m][i] * B[m][j];
+        return s;
+      })
+    );
+    const { values: sigma2, vectors: Vmat } = chunkFSSEZIKV_cjs.Matrix.fromArray(BtB).eigen();
+    const svals = new Float64Array(k);
+    for (let j = 0; j < k; j++) svals[j] = Math.sqrt(Math.max(sigma2[j], 0));
+    const Varr = Vmat.toArray();
+    const BV = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += B[i][m] * Varr[m][j];
+        return s;
+      })
+    );
+    for (let j = 0; j < k; j++) {
+      const invS = svals[j] > 1e-15 ? 1 / svals[j] : 0;
+      for (let i = 0; i < k; i++) BV[i][j] = BV[i][j] * invS;
+    }
+    T = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s = 0;
+        for (let m = 0; m < k; m++) s += BV[i][m] * Varr[j][m];
+        return s;
+      })
+    );
+    let dNew = 0;
+    for (let j = 0; j < k; j++) dNew += svals[j];
+    if (dNew < dPast * (1 + tol)) break;
+    dPast = dNew;
+  }
+  const rot = Array.from(
+    { length: p },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      let s = 0;
+      for (let m = 0; m < k; m++) s += x[i][m] * T[m][j];
+      return s * sc[i];
+    })
+  );
+  return { rotated: rot, T };
+}
+function rotateOblimin(L, gamma, maxIter, tol) {
+  const d = L.length;
+  const k = L[0].length;
+  const Lmat = chunkFSSEZIKV_cjs.Matrix.fromArray(L);
+  let T = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  let Tmat = chunkFSSEZIKV_cjs.Matrix.fromArray(T);
+  const alpha = 1;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const Lambda = Lmat.multiply(Tmat);
+    const LambdaArr = Lambda.toArray();
+    const G = Array.from({ length: d }, () => new Array(k).fill(0));
+    for (let i = 0; i < d; i++) {
+      let rowSum = 0;
+      for (let m = 0; m < k; m++) rowSum += LambdaArr[i][m] ** 2;
+      for (let j = 0; j < k; j++) {
+        const sumSq = rowSum - LambdaArr[i][j] ** 2;
+        G[i][j] = LambdaArr[i][j] * (sumSq - gamma / d * rowSum);
+      }
+    }
+    const Gmat = chunkFSSEZIKV_cjs.Matrix.fromArray(G);
+    const L_T_G = Lmat.transpose().multiply(Gmat);
+    const diagLTG = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? L_T_G.get(i, i) : 0)
+    );
+    const Gp = Gmat.subtract(Tmat.multiply(chunkFSSEZIKV_cjs.Matrix.fromArray(diagLTG)));
+    let maxGrad = 0;
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        maxGrad = Math.max(maxGrad, Math.abs(Gp.get(i, j)));
+      }
+    }
+    if (maxGrad < tol) break;
+    let nextT = Tmat.subtract(Gp.scale(alpha));
+    const nextArr = nextT.toArray();
+    for (let j = 0; j < k; j++) {
+      let ss = 0;
+      for (let i = 0; i < k; i++) ss += nextArr[i][j] ** 2;
+      const invNorm = 1 / Math.sqrt(ss || 1e-12);
+      for (let i = 0; i < k; i++) nextArr[i][j] = nextArr[i][j] * invNorm;
+    }
+    Tmat = chunkFSSEZIKV_cjs.Matrix.fromArray(nextArr);
+    T = nextArr;
+  }
+  const rotated = Lmat.multiply(Tmat).toArray();
+  let invT;
+  try {
+    invT = Tmat.inverse();
+  } catch {
+    invT = Tmat.pseudoInverse();
+  }
+  const PhiMat = invT.multiply(invT.transpose());
+  const Phi = PhiMat.toArray();
+  return { rotated, T, Phi };
+}
+function rotatePromax(L, power, maxIter, tol) {
+  const d = L.length;
+  const k = L[0].length;
+  const h2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let sum = 0;
+    for (let j = 0; j < k; j++) sum += L[i][j] * L[i][j];
+    h2[i] = sum;
+  }
+  const sqrtH2 = new Float64Array(d);
+  for (let i = 0; i < d; i++) sqrtH2[i] = Math.sqrt(Math.max(h2[i], 1e-15));
+  const L_norm = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => L[i][j] / sqrtH2[i])
+  );
+  const { rotated: vari, T: T_varimax } = rotateVarimax(L_norm, maxIter, tol);
+  const Q = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      const val = vari[i][j];
+      return Math.sign(val) * Math.abs(val) ** power;
+    })
+  );
+  const Vmat = chunkFSSEZIKV_cjs.Matrix.fromArray(vari);
+  const Qmat = chunkFSSEZIKV_cjs.Matrix.fromArray(Q);
+  let VtV_inv;
+  try {
+    VtV_inv = Vmat.transpose().multiply(Vmat).inverse();
+  } catch {
+    VtV_inv = Vmat.transpose().multiply(Vmat).pseudoInverse();
+  }
+  const U = VtV_inv.multiply(Vmat.transpose()).multiply(Qmat);
+  const Uarr = U.toArray();
+  const UtU = U.transpose().multiply(U);
+  let UtU_inv;
+  try {
+    UtU_inv = UtU.inverse();
+  } catch {
+    UtU_inv = UtU.pseudoInverse();
+  }
+  for (let j = 0; j < k; j++) {
+    const d_j = Math.max(UtU_inv.get(j, j), 1e-15);
+    const scale = Math.sqrt(d_j);
+    for (let i = 0; i < k; i++) Uarr[i][j] = Uarr[i][j] * scale;
+  }
+  const Umat = chunkFSSEZIKV_cjs.Matrix.fromArray(Uarr);
+  const rotatedNorm = Vmat.multiply(Umat).toArray();
+  const rotated = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => rotatedNorm[i][j] * sqrtH2[i])
+  );
+  const TvarMat = chunkFSSEZIKV_cjs.Matrix.fromArray(T_varimax);
+  const Tcompound = TvarMat.multiply(Umat);
+  const Tarr = Tcompound.toArray();
+  let invT;
+  try {
+    invT = Tcompound.inverse();
+  } catch {
+    invT = Tcompound.pseudoInverse();
+  }
+  const PhiMat = invT.multiply(invT.transpose());
+  const Phi = PhiMat.toArray();
+  return { rotated, T: Tarr, Phi };
+}
+function applyRotation(loadings, method, maxIter, tol) {
+  const k = loadings[0].length;
+  if (method === "none") {
+    const Phi = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+    );
+    return { rotated: loadings.map((r) => [...r]), Phi };
+  }
+  if (method === "varimax") {
+    const { rotated } = rotateVarimax(loadings, maxIter, tol);
+    const Phi = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+    );
+    return { rotated, Phi };
+  }
+  if (method === "oblimin" || method === "quartimin") {
+    const gamma = method === "quartimin" ? 0 : 0;
+    const { rotated, Phi } = rotateOblimin(loadings, gamma, maxIter, tol);
+    return { rotated, Phi };
+  }
+  if (method === "promax") {
+    const { rotated, Phi } = rotatePromax(loadings, 4, maxIter, tol);
+    return { rotated, Phi };
+  }
+  throw new Error(`runEFA: unknown rotation method '${method}'`);
+}
+function velicerMAP(R) {
+  const d = R.rows;
+  const { values, vectors } = R.eigen();
+  let bestK = 0;
+  let minMap = Infinity;
+  for (let k = 0; k < d - 1; k++) {
+    const Larr = Array.from(
+      { length: d },
+      (_, i) => Array.from(
+        { length: k + 1 },
+        (_2, j) => vectors.get(i, j) * Math.sqrt(Math.max(values[j], 0))
+      )
+    );
+    const Lmat = chunkFSSEZIKV_cjs.Matrix.fromArray(Larr);
+    const R_star = R.subtract(Lmat.multiply(Lmat.transpose()));
+    const C_star = Array.from(
+      { length: d },
+      (_, i) => Array.from({ length: d }, (_2, j) => {
+        const denom = Math.sqrt(Math.abs(R_star.get(i, i)) * Math.abs(R_star.get(j, j)));
+        return denom > 1e-15 ? R_star.get(i, j) / denom : i === j ? 1 : 0;
+      })
+    );
+    let sumSq = 0;
+    for (let r = 0; r < d; r++) {
+      for (let c = 0; c < r; c++) sumSq += C_star[r][c] ** 2;
+    }
+    const mapVal = sumSq / (d * (d - 1) / 2);
+    if (mapVal < minMap) {
+      minMap = mapVal;
+      bestK = k + 1;
+    }
+  }
+  return bestK;
+}
+function parallelAnalysis(observedEigenvalues, n, d, iterations, rng) {
+  const allEigens = Array.from({ length: d }, () => new Array(iterations).fill(0));
+  for (let iter = 0; iter < iterations; iter++) {
+    const randomData = Array.from(
+      { length: n },
+      () => Array.from({ length: d }, () => prngNormal(rng))
+    );
+    const randR = computeCorrelationMatrix(randomData, n, d);
+    const randEig = randR.eigen().values;
+    for (let i = 0; i < d; i++) {
+      allEigens[i][iter] = randEig[i];
+    }
+  }
+  const simulated = allEigens.map((eigArray) => {
+    const sorted = [...eigArray].sort((a, b) => a - b);
+    const idx = Math.floor(0.95 * iterations);
+    return sorted[Math.min(idx, iterations - 1)];
+  });
+  let suggested = 0;
+  for (let i = 0; i < d; i++) {
+    if (observedEigenvalues[i] > simulated[i]) suggested++;
+    else break;
+  }
+  return { simulated, suggested: Math.max(1, suggested) };
+}
+function computeKMOBartlett(R, n, d) {
+  let invR;
+  try {
+    invR = R.inverse();
+  } catch {
+    invR = R.pseudoInverse();
+  }
+  const S2diag = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    S2diag[i] = 1 / Math.max(invR.get(i, i), 1e-12);
+  }
+  const antiImage = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => {
+      if (i === j) return 1;
+      return -invR.get(i, j) / Math.sqrt(Math.max(invR.get(i, i) * invR.get(j, j), 1e-12));
+    })
+  );
+  let rSum = 0, qSum = 0;
+  const msaItems = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let rIdx = 0, qIdx = 0;
+    for (let j = 0; j < d; j++) {
+      if (i === j) continue;
+      rIdx += R.get(i, j) ** 2;
+      qIdx += antiImage[i][j] ** 2;
+    }
+    msaItems[i] = rIdx / Math.max(rIdx + qIdx, 1e-12);
+    rSum += rIdx;
+    qSum += qIdx;
+  }
+  const kmo = rSum / Math.max(rSum + qSum, 1e-12);
+  let logDetR;
+  try {
+    logDetR = R.logDet();
+  } catch {
+    const ev = R.eigen().values;
+    logDetR = ev.reduce((s, v) => s + Math.log(Math.max(v, 1e-15)), 0);
+  }
+  const chiSq = -(n - 1 - (2 * d + 5) / 6) * logDetR;
+  const df = d * (d - 1) / 2;
+  const pValue = chunkMX4OLB7V_cjs.chiSqPValue(Math.max(chiSq, 0), df);
+  return {
+    kmo,
+    kmoPerItem: Array.from(msaItems),
+    bartlett: {
+      chiSq: Math.max(chiSq, 0),
+      df,
+      pValue
+    }
+  };
+}
+function computeImpliedCov(L, Phi, Theta) {
+  const d = L.length;
+  const k = L[0].length;
+  const sigma = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: d }, (_2, j) => {
+      let sum = 0;
+      for (let f1 = 0; f1 < k; f1++) {
+        for (let f2 = 0; f2 < k; f2++) {
+          sum += L[i][f1] * Phi[f1][f2] * L[j][f2];
+        }
+      }
+      return sum + (i === j ? Theta[i] : 0);
+    })
+  );
+  return chunkFSSEZIKV_cjs.Matrix.fromArray(sigma);
+}
+function cfaOptimize(S, model, d, maxIter, tol) {
+  const factors = Object.keys(model);
+  const k = factors.length;
+  const L = Array.from({ length: d }, () => new Array(k).fill(0));
+  const Theta = new Float64Array(d).fill(0.5);
+  const Phi = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  factors.forEach((f, c) => {
+    const items = model[f];
+    for (const r of items) {
+      if (r < d) L[r][c] = 0.7;
+    }
+  });
+  let converged = false;
+  let iter = 0;
+  const c1 = 1e-4;
+  function objective(Lc, Phic, Thetac) {
+    const Sigma = computeImpliedCov(Lc, Phic, Thetac);
+    let logDetSigma;
+    try {
+      logDetSigma = Sigma.logDet();
+    } catch {
+      return 1e10;
+    }
+    let logDetS;
+    try {
+      logDetS = S.logDet();
+    } catch {
+      return 1e10;
+    }
+    let trVal;
+    try {
+      trVal = Sigma.inverse().multiply(S).trace();
+    } catch {
+      return 1e10;
+    }
+    return Math.max(0, logDetSigma + trVal - logDetS - d);
+  }
+  for (iter = 0; iter < maxIter; iter++) {
+    const Sigma = computeImpliedCov(L, Phi, Theta);
+    let invSigma;
+    try {
+      invSigma = Sigma.inverse();
+    } catch {
+      try {
+        invSigma = Sigma.pseudoInverse();
+      } catch {
+        break;
+      }
+    }
+    const Delta = invSigma.multiply(Sigma.subtract(S)).multiply(invSigma);
+    const LMat = chunkFSSEZIKV_cjs.Matrix.fromArray(L);
+    const PhiMat = chunkFSSEZIKV_cjs.Matrix.fromArray(Phi);
+    const gL = Delta.multiply(LMat).multiply(PhiMat).scale(2);
+    const gPhi = LMat.transpose().multiply(Delta).multiply(LMat);
+    const currentLoss = objective(L, Phi, Theta);
+    let alpha = 1;
+    let armijoSatisfied = false;
+    while (!armijoSatisfied && alpha > 1e-6) {
+      let maxGrad = 0;
+      let dirDotGrad = 0;
+      const nextL = Array.from({ length: d }, () => new Array(k).fill(0));
+      factors.forEach((f, c) => {
+        for (const r of model[f]) {
+          if (r >= d) continue;
+          const grad = gL.get(r, c);
+          maxGrad = Math.max(maxGrad, Math.abs(grad));
+          nextL[r][c] = L[r][c] - alpha * grad;
+          dirDotGrad += grad * -grad;
+        }
+      });
+      const nextTheta = new Float64Array(d);
+      for (let i = 0; i < d; i++) {
+        const grad = Delta.get(i, i);
+        maxGrad = Math.max(maxGrad, Math.abs(grad));
+        nextTheta[i] = Math.max(1e-3, Theta[i] - alpha * grad);
+        dirDotGrad += grad * -grad;
+      }
+      const nextPhi = Array.from(
+        { length: k },
+        (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+      );
+      for (let r = 0; r < k; r++) {
+        for (let c = 0; c < r; c++) {
+          const grad = gPhi.get(r, c) + gPhi.get(c, r);
+          maxGrad = Math.max(maxGrad, Math.abs(grad));
+          const updated = Math.max(-0.99, Math.min(0.99, Phi[r][c] - alpha * grad));
+          nextPhi[r][c] = updated;
+          nextPhi[c][r] = updated;
+          dirDotGrad += grad * -grad;
+        }
+      }
+      if (maxGrad < tol) {
+        converged = true;
+        break;
+      }
+      const nextLoss = objective(nextL, nextPhi, nextTheta);
+      if (nextLoss <= currentLoss + c1 * alpha * dirDotGrad) {
+        armijoSatisfied = true;
+        for (let i = 0; i < d; i++) {
+          for (let j = 0; j < k; j++) L[i][j] = nextL[i][j];
+          Theta[i] = nextTheta[i];
+        }
+        for (let i = 0; i < k; i++) {
+          for (let j = 0; j < k; j++) Phi[i][j] = nextPhi[i][j];
+        }
+      } else {
+        alpha *= 0.5;
+      }
+    }
+    if (converged) break;
+    if (!armijoSatisfied) break;
+  }
+  return { L, Theta, Phi, converged, iterations: iter };
+}
+function cfaStandardErrors(L, Phi, Theta, S, model, n, d) {
+  const factors = Object.keys(model);
+  const k = factors.length;
+  const params = [];
+  factors.forEach((f, c) => {
+    for (const r of model[f]) {
+      if (r < d) params.push({ type: "loading", i: r, j: c });
+    }
+  });
+  for (let i = 0; i < d; i++) params.push({ type: "theta", i, j: 0 });
+  for (let r = 0; r < k; r++) {
+    for (let c = 0; c < r; c++) params.push({ type: "phi", i: r, j: c });
+  }
+  const nParams = params.length;
+  function getParam(idx) {
+    const p = params[idx];
+    if (p.type === "loading") return L[p.i][p.j];
+    if (p.type === "theta") return Theta[p.i];
+    return Phi[p.i][p.j];
+  }
+  function setParam(idx, val) {
+    const p = params[idx];
+    if (p.type === "loading") L[p.i][p.j] = val;
+    else if (p.type === "theta") Theta[p.i] = val;
+    else {
+      Phi[p.i][p.j] = val;
+      Phi[p.j][p.i] = val;
+    }
+  }
+  function obj() {
+    const Sigma = computeImpliedCov(L, Phi, Theta);
+    try {
+      const logDetSig = Sigma.logDet();
+      const logDetS = S.logDet();
+      const tr = Sigma.inverse().multiply(S).trace();
+      return Math.max(0, logDetSig + tr - logDetS - d);
+    } catch {
+      return 1e10;
+    }
+  }
+  const h = 1e-4;
+  const hessian = Array.from(
+    { length: nParams },
+    () => new Array(nParams).fill(0)
+  );
+  for (let i = 0; i < nParams; i++) {
+    for (let j = i; j < nParams; j++) {
+      const vi = getParam(i);
+      const vj = getParam(j);
+      if (i === j) {
+        setParam(i, vi + h);
+        const fPlus = obj();
+        setParam(i, vi - h);
+        const fMinus = obj();
+        setParam(i, vi);
+        const f0 = obj();
+        hessian[i][i] = (fPlus - 2 * f0 + fMinus) / (h * h);
+      } else {
+        setParam(i, vi + h);
+        setParam(j, vj + h);
+        const fpp = obj();
+        setParam(i, vi + h);
+        setParam(j, vj - h);
+        const fpm = obj();
+        setParam(i, vi - h);
+        setParam(j, vj + h);
+        const fmp = obj();
+        setParam(i, vi - h);
+        setParam(j, vj - h);
+        const fmm = obj();
+        setParam(i, vi);
+        setParam(j, vj);
+        hessian[i][j] = (fpp - fpm - fmp + fmm) / (4 * h * h);
+        hessian[j][i] = hessian[i][j];
+      }
+    }
+  }
+  const infoArr = hessian.map(
+    (row) => row.map((v) => (n - 1) / 2 * v)
+  );
+  let covMat;
+  try {
+    covMat = chunkFSSEZIKV_cjs.Matrix.fromArray(infoArr).inverse();
+  } catch {
+    try {
+      covMat = chunkFSSEZIKV_cjs.Matrix.fromArray(infoArr).pseudoInverse();
+    } catch {
+      const loadingSE2 = Array.from({ length: d }, () => new Array(k).fill(0.05));
+      const thetaSE2 = new Float64Array(d).fill(0.05);
+      const phiSE2 = Array.from({ length: k }, () => new Array(k).fill(0.05));
+      return { loadingSE: loadingSE2, thetaSE: thetaSE2, phiSE: phiSE2 };
+    }
+  }
+  const loadingSE = Array.from({ length: d }, () => new Array(k).fill(0));
+  const thetaSE = new Float64Array(d);
+  const phiSE = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let idx = 0; idx < nParams; idx++) {
+    const variance2 = Math.max(covMat.get(idx, idx), 0);
+    const se2 = Math.sqrt(variance2);
+    const p = params[idx];
+    if (p.type === "loading") loadingSE[p.i][p.j] = se2;
+    else if (p.type === "theta") thetaSE[p.i] = se2;
+    else phiSE[p.i][p.j] = se2;
+  }
+  return { loadingSE, thetaSE, phiSE };
+}
+function runFADiagnostics(data, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runFADiagnostics: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runFADiagnostics: need at least 2 variables");
+  const seed = options?.seed ?? 42;
+  const iterations = options?.parallelIterations ?? 100;
+  const rng = new PRNG2(seed);
+  const R = computeCorrelationMatrix(data, n, d);
+  const { kmo, kmoPerItem, bartlett } = computeKMOBartlett(R, n, d);
+  const eigenvalues = R.eigen().values;
+  const { simulated, suggested: parallelSuggested } = parallelAnalysis(
+    eigenvalues,
+    n,
+    d,
+    iterations,
+    rng
+  );
+  const mapSuggested = velicerMAP(R);
+  return {
+    kmo,
+    kmoPerItem,
+    bartlett,
+    mapSuggested,
+    parallelEigenvalues: [...eigenvalues],
+    parallelSimulated: [...simulated],
+    parallelSuggested
+  };
+}
+function runEFA(data, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runEFA: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runEFA: need at least 2 variables");
+  const extraction = options?.extraction ?? "ml";
+  const rotation = options?.rotation ?? "promax";
+  const maxIter = options?.maxIter ?? 1e3;
+  const tol = options?.tol ?? 1e-6;
+  const seed = options?.seed ?? 42;
+  const R = computeCorrelationMatrix(data, n, d);
+  const eigenvalues = R.eigen().values;
+  let nFactors = options?.nFactors;
+  if (nFactors === void 0) {
+    const rng = new PRNG2(seed);
+    const { suggested } = parallelAnalysis(eigenvalues, n, d, 100, rng);
+    nFactors = suggested;
+  }
+  if (nFactors < 1) throw new Error("runEFA: nFactors must be at least 1");
+  if (nFactors >= d) throw new Error("runEFA: nFactors must be less than number of variables");
+  const extracted = extraction === "ml" ? extractML(R, nFactors, maxIter, tol) : extractPAF(R, nFactors, maxIter, tol);
+  const { rotated, Phi } = applyRotation(extracted.loadings, rotation, maxIter, tol);
+  const communalities = new Float64Array(d);
+  const uniqueness = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let comm = 0;
+    for (let f1 = 0; f1 < nFactors; f1++) {
+      for (let f2 = 0; f2 < nFactors; f2++) {
+        comm += rotated[i][f1] * Phi[f1][f2] * rotated[i][f2];
+      }
+    }
+    communalities[i] = Math.max(1e-3, Math.min(0.9999, comm));
+    uniqueness[i] = 1 - communalities[i];
+  }
+  const thetaArr = new Float64Array(d);
+  for (let i = 0; i < d; i++) thetaArr[i] = Math.max(1e-3, uniqueness[i]);
+  const impliedSigma = computeImpliedCov(rotated, Phi, thetaArr);
+  const nLoadingParams = d * nFactors;
+  const nUniqueParams = d;
+  const nRotationConstraints = nFactors * (nFactors - 1) / 2;
+  const nFreeParams = nLoadingParams + nUniqueParams - nRotationConstraints;
+  const fit = computeFit(R, impliedSigma, n, d, nFreeParams, nFactors);
+  const stdLoadings = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: nFactors }, (_2, j) => {
+      const sigmaII = impliedSigma.get(i, i);
+      return rotated[i][j] * Math.sqrt(Phi[j][j]) / Math.sqrt(Math.max(sigmaII, 1e-12));
+    })
+  );
+  const variableNames = options?.variableNames ?? Array.from({ length: d }, (_, i) => `V${i + 1}`);
+  const factorNames = Array.from({ length: nFactors }, (_, i) => `F${i + 1}`);
+  const formatted = `EFA (${extraction}/${rotation}): ${chunkMX4OLB7V_cjs.formatCFAFit(fit)}`;
+  return {
+    loadings: rotated,
+    standardizedLoadings: stdLoadings,
+    uniqueness: Array.from(uniqueness),
+    communalities: Array.from(communalities),
+    factorCorrelations: Phi,
+    fit,
+    eigenvalues: [...eigenvalues],
+    nFactors,
+    rotation,
+    extraction,
+    variableNames,
+    factorNames,
+    formatted
+  };
+}
+function runCFA(data, model, options) {
+  const n = data.length;
+  if (n < 3) throw new Error("runCFA: need at least 3 observations");
+  const d = data[0].length;
+  if (d < 2) throw new Error("runCFA: need at least 2 variables");
+  const factors = Object.keys(model);
+  const k = factors.length;
+  if (k < 1) throw new Error("runCFA: model must specify at least 1 factor");
+  const maxIter = options?.maxIter ?? 1e3;
+  const tolVal = options?.tol ?? 1e-6;
+  const S = computeCorrelationMatrix(data, n, d);
+  const { L, Theta, Phi } = cfaOptimize(S, model, d, maxIter, tolVal);
+  const impliedSigma = computeImpliedCov(L, Phi, Theta);
+  let nLoadingParams = 0;
+  factors.forEach((f) => {
+    nLoadingParams += model[f].length;
+  });
+  const nUniqueParams = d;
+  const nCovParams = k * (k - 1) / 2;
+  const nFreeParams = nLoadingParams + nUniqueParams + nCovParams;
+  const fit = computeFit(S, impliedSigma, n, d, nFreeParams);
+  const Lcopy = L.map((r) => [...r]);
+  const Phicopy = Phi.map((r) => [...r]);
+  const Thetacopy = new Float64Array(Theta);
+  const { loadingSE, thetaSE, phiSE } = cfaStandardErrors(
+    Lcopy,
+    Phicopy,
+    Thetacopy,
+    S,
+    model,
+    n,
+    d
+  );
+  const paramLoadings = factors.map(
+    (f, c) => model[f].map((r) => {
+      if (r >= d) {
+        return { estimate: 0, se: 0, z: 0, pValue: 1, stdAll: 0 };
+      }
+      const est = L[r][c];
+      const se2 = Math.max(loadingSE[r][c], 1e-6);
+      const z = est / se2;
+      const pValue = 2 * (1 - chunkMX4OLB7V_cjs.normalCDF(Math.abs(z)));
+      const sigmaII = Math.max(impliedSigma.get(r, r), 1e-12);
+      const stdAll = est * Math.sqrt(Phi[c][c]) / Math.sqrt(sigmaII);
+      return { estimate: chunkMX4OLB7V_cjs.roundTo(est, 4), se: chunkMX4OLB7V_cjs.roundTo(se2, 4), z: chunkMX4OLB7V_cjs.roundTo(z, 3), pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4), stdAll: chunkMX4OLB7V_cjs.roundTo(stdAll, 4) };
+    })
+  );
+  const paramUniqueness = Array.from(Theta).map((est, i) => {
+    const se2 = Math.max(thetaSE[i], 1e-6);
+    const z = est / se2;
+    const pValue = 2 * (1 - chunkMX4OLB7V_cjs.normalCDF(Math.abs(z)));
+    const sigmaII = Math.max(impliedSigma.get(i, i), 1e-12);
+    const stdAll = est / sigmaII;
+    return { estimate: chunkMX4OLB7V_cjs.roundTo(est, 4), se: chunkMX4OLB7V_cjs.roundTo(se2, 4), z: chunkMX4OLB7V_cjs.roundTo(z, 3), pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4), stdAll: chunkMX4OLB7V_cjs.roundTo(stdAll, 4) };
+  });
+  const paramCov = Array.from(
+    { length: k },
+    (_, r) => Array.from({ length: k }, (_2, c) => {
+      if (r === c) {
+        return { estimate: 1, se: 0, z: Infinity, pValue: 0, stdAll: 1 };
+      }
+      const est = Phi[r][c];
+      const se2 = Math.max(phiSE[r][c] || phiSE[c][r], 1e-6);
+      const z = est / se2;
+      const pValue = 2 * (1 - chunkMX4OLB7V_cjs.normalCDF(Math.abs(z)));
+      return { estimate: chunkMX4OLB7V_cjs.roundTo(est, 4), se: chunkMX4OLB7V_cjs.roundTo(se2, 4), z: chunkMX4OLB7V_cjs.roundTo(z, 3), pValue: chunkMX4OLB7V_cjs.roundTo(pValue, 4), stdAll: chunkMX4OLB7V_cjs.roundTo(est, 4) };
+    })
+  );
+  const communalities = Array.from(Theta).map((t) => chunkMX4OLB7V_cjs.roundTo(1 - t, 4));
+  const uniquenessArr = Array.from(Theta).map((t) => chunkMX4OLB7V_cjs.roundTo(t, 4));
+  const stdLoadings = Array.from(
+    { length: d },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      const sigmaII = Math.max(impliedSigma.get(i, i), 1e-12);
+      return chunkMX4OLB7V_cjs.roundTo(L[i][j] * Math.sqrt(Phi[j][j]) / Math.sqrt(sigmaII), 4);
+    })
+  );
+  const eigenvalues = S.eigen().values.map((v) => chunkMX4OLB7V_cjs.roundTo(v, 4));
+  const variableNames = options?.variableNames ?? Array.from({ length: d }, (_, i) => `V${i + 1}`);
+  const factorNames = options?.factorNames ?? factors;
+  const formatted = `CFA: ${chunkMX4OLB7V_cjs.formatCFAFit(fit)}`;
+  return {
+    loadings: L,
+    standardizedLoadings: stdLoadings,
+    uniqueness: uniquenessArr,
+    communalities,
+    factorCorrelations: Phi,
+    fit,
+    eigenvalues,
+    nFactors: k,
+    rotation: "none",
+    extraction: "ml",
+    variableNames,
+    factorNames,
+    formatted,
+    parameterEstimates: {
+      loadings: paramLoadings,
+      uniquenesses: paramUniqueness,
+      factorCovariances: paramCov
+    },
+    model
+  };
+}
+
 exports.analyze = analyze;
 exports.chiSquareTest = chiSquareTest;
 exports.ciMean = ciMean;
@@ -3025,7 +4094,10 @@ exports.preprocessData = preprocessData;
 exports.rankBiserial = rankBiserial;
 exports.rankBiserialWilcoxon = rankBiserialWilcoxon;
 exports.regressionDiagnostics = regressionDiagnostics;
+exports.runCFA = runCFA;
 exports.runDBSCAN = runDBSCAN;
+exports.runEFA = runEFA;
+exports.runFADiagnostics = runFADiagnostics;
 exports.runHierarchical = runHierarchical;
 exports.runKMeans = runKMeans;
 exports.runLMM = runLMM;
@@ -3041,5 +4113,5 @@ exports.trimmedMean = trimmedMean;
 exports.tukeyHSD = tukeyHSD;
 exports.varimaxRotation = varimaxRotation;
 exports.wilcoxonSignedRank = wilcoxonSignedRank;
-//# sourceMappingURL=chunk-IAIN4JSY.cjs.map
-//# sourceMappingURL=chunk-IAIN4JSY.cjs.map
+//# sourceMappingURL=chunk-SSCGMSJT.cjs.map
+//# sourceMappingURL=chunk-SSCGMSJT.cjs.map

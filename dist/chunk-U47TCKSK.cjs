@@ -1,4 +1,6 @@
-import { quantile, sortAsc, normalQuantile, mean, normalCDF } from './chunk-IRX4LIZX.js';
+'use strict';
+
+var chunkMX4OLB7V_cjs = require('./chunk-MX4OLB7V.cjs');
 
 // src/viz/themes/default.ts
 var CARM_PALETTE = [
@@ -285,9 +287,9 @@ function renderViolinBoxD3(d3, container, data, config) {
     const violinScale = maxDensity > 0 ? violinWidth / maxDensity : 1;
     const areaFn = d3.area().x0((d) => cx - d[1] * violinScale).x1((d) => cx + d[1] * violinScale).y((d) => yScale(d[0])).curve(d3.curveCatmullRom);
     g.append("path").datum(kdePoints).attr("d", areaFn).attr("fill", color).attr("opacity", theme.violinOpacity).attr("stroke", color).attr("stroke-width", 1);
-    const q1 = quantile(gr.values, 0.25);
-    const med = quantile(gr.values, 0.5);
-    const q3 = quantile(gr.values, 0.75);
+    const q1 = chunkMX4OLB7V_cjs.quantile(gr.values, 0.25);
+    const med = chunkMX4OLB7V_cjs.quantile(gr.values, 0.5);
+    const q3 = chunkMX4OLB7V_cjs.quantile(gr.values, 0.75);
     const iqr = q3 - q1;
     const whiskerLo = Math.min(...gr.values.filter((v) => v >= q1 - 1.5 * iqr));
     const whiskerHi = Math.max(...gr.values.filter((v) => v <= q3 + 1.5 * iqr));
@@ -637,12 +639,12 @@ function renderQQD3(d3, container, values, config) {
   const width = W - margin.left - margin.right;
   const height = H - margin.top - margin.bottom;
   const n = values.length;
-  const sorted = sortAsc(values);
+  const sorted = chunkMX4OLB7V_cjs.sortAsc(values);
   const mean_ = sorted.reduce((s, v) => s + v, 0) / n;
   const sd_ = Math.sqrt(sorted.reduce((s, v) => s + (v - mean_) ** 2, 0) / (n - 1));
   const points = sorted.map((y, i) => {
     const p = (i + 1 - 0.375) / (n + 0.25);
-    const x = normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
+    const x = chunkMX4OLB7V_cjs.normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
     return { x, y };
   });
   container.innerHTML = "";
@@ -712,12 +714,12 @@ function renderResidualD3(d3, container, result, leverage, config) {
       xData = result.fitted;
       yData = result.residuals;
     } else if (idx === 1) {
-      const sorted = sortAsc(result.residuals);
+      const sorted = chunkMX4OLB7V_cjs.sortAsc(result.residuals);
       const n = sorted.length;
       yData = sorted;
       xData = sorted.map((_, i) => {
         const p = (i + 1 - 0.375) / (n + 0.25);
-        return normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
+        return chunkMX4OLB7V_cjs.normalQuantile(Math.max(1e-4, Math.min(0.9999, p)));
       });
     } else if (idx === 2) {
       xData = result.fitted;
@@ -737,7 +739,7 @@ function renderResidualD3(d3, container, result, leverage, config) {
       g.append("line").attr("x1", 0).attr("x2", pw).attr("y1", ys(0)).attr("y2", ys(0)).attr("stroke", theme.axisLine).attr("stroke-dasharray", "4,2");
     }
     if (idx === 1) {
-      const mean_ = mean(result.residuals);
+      const mean_ = chunkMX4OLB7V_cjs.mean(result.residuals);
       const sd_ = Math.sqrt(result.residuals.reduce((s, r) => s + (r - mean_) ** 2, 0) / (result.residuals.length - 1));
       const xd = xs.domain();
       const xd0 = xd[0] ?? 0, xd1 = xd[1] ?? 1;
@@ -784,9 +786,9 @@ function renderRaincloudD3(d3, container, data, config) {
     const dScale = maxD > 0 ? violinR / maxD : 1;
     const areaFn = d3.area().x0(cx).x1((d) => cx + d[1] * dScale).y((d) => yScale(d[0])).curve(d3.curveCatmullRom);
     g.append("path").datum(kdePoints).attr("d", areaFn).attr("fill", color).attr("opacity", theme.violinOpacity).attr("stroke", color).attr("stroke-width", 1);
-    const q1 = quantile(gr.values, 0.25);
-    const med = quantile(gr.values, 0.5);
-    const q3 = quantile(gr.values, 0.75);
+    const q1 = chunkMX4OLB7V_cjs.quantile(gr.values, 0.25);
+    const med = chunkMX4OLB7V_cjs.quantile(gr.values, 0.5);
+    const q3 = chunkMX4OLB7V_cjs.quantile(gr.values, 0.75);
     const iqr = q3 - q1;
     const wLo = Math.min(...gr.values.filter((v) => v >= q1 - 1.5 * iqr));
     const wHi = Math.max(...gr.values.filter((v) => v <= q3 + 1.5 * iqr));
@@ -1031,7 +1033,7 @@ function getDistributionFunctions(params) {
         xMin: mu - 4 * sigma,
         xMax: mu + 4 * sigma,
         pdf: (x) => Math.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * Math.sqrt(2 * Math.PI)),
-        cdf: (x) => normalCDF((x - mu) / sigma)
+        cdf: (x) => chunkMX4OLB7V_cjs.normalCDF((x - mu) / sigma)
       };
     }
     case "t": {
@@ -1266,9 +1268,9 @@ function renderBoxplot(container, data, config = {}) {
   import('d3').then((d3) => renderBoxplotD3(d3, container, data, config));
 }
 function computeBoxStats(values) {
-  const q1 = quantile(values, 0.25);
-  const med = quantile(values, 0.5);
-  const q3 = quantile(values, 0.75);
+  const q1 = chunkMX4OLB7V_cjs.quantile(values, 0.25);
+  const med = chunkMX4OLB7V_cjs.quantile(values, 0.5);
+  const q3 = chunkMX4OLB7V_cjs.quantile(values, 0.75);
   const iqr = q3 - q1;
   const fence_lo = q1 - 1.5 * iqr;
   const fence_hi = q3 + 1.5 * iqr;
@@ -3664,6 +3666,815 @@ function renderEdgeBundlingD3(d3, container, data, config) {
   if (config.caption) addCaption(svg, config.caption, W, H, theme);
 }
 
+// src/viz/plots/dendrogram.ts
+function renderDendrogram(container, data, config = {}) {
+  import('d3').then((d3) => renderDendrogramD3(d3, container, data, config));
+}
+function renderDendrogramD3(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const W = config.width ?? 600;
+  const H = config.height ?? 480;
+  const showCut = config.showCutLine !== false;
+  const showLabels = config.showLabels !== false;
+  const colorSubs = config.colorSubtrees !== false;
+  const margin = {
+    top: theme.marginTop,
+    right: theme.marginRight,
+    bottom: showLabels ? Math.max(theme.marginBottom, 100) : theme.marginBottom,
+    left: theme.marginLeft
+  };
+  const plotW = W - margin.left - margin.right;
+  const plotH = H - margin.top - margin.bottom;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const { merges, heights, dendrogramOrder, labels, k } = data;
+  const n = merges.length + 1;
+  const nodeX = new Float64Array(2 * n - 1);
+  const nodeY = new Float64Array(2 * n - 1);
+  const leafPos = new Float64Array(n);
+  for (let i = 0; i < dendrogramOrder.length; i++) {
+    leafPos[dendrogramOrder[i]] = i;
+  }
+  for (let i = 0; i < n; i++) {
+    nodeX[i] = leafPos[i];
+    nodeY[i] = 0;
+  }
+  for (let s = 0; s < merges.length; s++) {
+    const m = merges[s];
+    const internalIdx = n + s;
+    nodeX[internalIdx] = (nodeX[m.a] + nodeX[m.b]) / 2;
+    nodeY[internalIdx] = heights[s];
+  }
+  const nodeCluster = new Int32Array(2 * n - 1);
+  for (let i = 0; i < n; i++) {
+    nodeCluster[i] = labels[i];
+  }
+  for (let s = 0; s < merges.length; s++) {
+    const m = merges[s];
+    const cA = nodeCluster[m.a];
+    const cB = nodeCluster[m.b];
+    nodeCluster[n + s] = cA === cB ? cA : -1;
+  }
+  const subtreeSize = new Float64Array(2 * n - 1);
+  for (let i = 0; i < n; i++) subtreeSize[i] = 1;
+  for (let s = 0; s < merges.length; s++) {
+    const m = merges[s];
+    subtreeSize[n + s] = subtreeSize[m.a] + subtreeSize[m.b];
+  }
+  const maxHeight = Math.max(...heights) * 1.05;
+  const xScale = d3.scaleLinear().domain([0, n - 1]).range([0, plotW]);
+  const yScale = d3.scaleLinear().domain([0, maxHeight]).range([plotH, 0]);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  const subtitle = `${data.linkage} linkage, K = ${k}, cophenetic r = ${data.copheneticCorrelation.toFixed(3)}`;
+  addSubtitle(svg, config.title ?? "Dendrogram", subtitle, W, theme);
+  if (config.caption) {
+    addCaption(svg, config.caption, W, H, theme);
+  }
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const yAxis = d3.axisLeft(yScale).ticks(6);
+  g.append("g").attr("class", "y-axis").call(yAxis).call((sel) => {
+    sel.select(".domain").attr("stroke", theme.axisLine);
+    sel.selectAll(".tick line").attr("stroke", theme.gridLine);
+    sel.selectAll(".tick text").attr("fill", theme.textMuted).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall);
+  });
+  g.append("g").attr("class", "grid").call(d3.axisLeft(yScale).ticks(6).tickSize(-plotW).tickFormat(() => "")).call((sel) => {
+    sel.select(".domain").remove();
+    sel.selectAll(".tick line").attr("stroke", theme.gridLine).attr("stroke-opacity", 0.5);
+  });
+  g.append("text").attr("transform", "rotate(-90)").attr("x", -plotH / 2).attr("y", -margin.left + 16).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).text("Merge Height");
+  for (let s = 0; s < merges.length; s++) {
+    const m = merges[s];
+    const internalIdx = n + s;
+    const ax = xScale(nodeX[m.a]);
+    const ay = yScale(nodeY[m.a]);
+    const bx = xScale(nodeX[m.b]);
+    const by = yScale(nodeY[m.b]);
+    const my = yScale(nodeY[internalIdx]);
+    const pathD = `M${ax},${ay} V${my} H${bx} V${by}`;
+    const cluster = nodeCluster[internalIdx];
+    const color = colorSubs && cluster >= 0 ? getColor(cluster, theme) : theme.axisLine;
+    const sizeA = subtreeSize[m.a];
+    const sizeB = subtreeSize[m.b];
+    const sizeC = subtreeSize[internalIdx];
+    const mergeH = heights[s];
+    g.append("path").attr("d", pathD).attr("fill", "none").attr("stroke", color).attr("stroke-width", 1.5).attr("stroke-linejoin", "round").style("cursor", "pointer").on("mouseenter", (event) => {
+      const content = [
+        formatTooltipRow("Merge height", mergeH.toFixed(3)),
+        formatTooltipRow("Left subtree", String(sizeA)),
+        formatTooltipRow("Right subtree", String(sizeB)),
+        formatTooltipRow("Combined", String(sizeC))
+      ].join("");
+      showTooltip(event, content, theme);
+    }).on("mousemove", (event) => {
+      const content = [
+        formatTooltipRow("Merge height", mergeH.toFixed(3)),
+        formatTooltipRow("Left subtree", String(sizeA)),
+        formatTooltipRow("Right subtree", String(sizeB)),
+        formatTooltipRow("Combined", String(sizeC))
+      ].join("");
+      showTooltip(event, content, theme);
+    }).on("mouseleave", () => hideTooltip());
+  }
+  if (showCut && k > 1 && k <= n) {
+    const belowIdx = n - k - 1;
+    const aboveIdx = n - k;
+    const hBelow = belowIdx >= 0 ? heights[belowIdx] : 0;
+    const hAbove = aboveIdx < heights.length ? heights[aboveIdx] : maxHeight;
+    const cutY = yScale((hBelow + hAbove) / 2);
+    g.append("line").attr("x1", -8).attr("x2", plotW + 8).attr("y1", cutY).attr("y2", cutY).attr("stroke", theme.textMuted).attr("stroke-width", 1.5).attr("stroke-dasharray", "6,4").attr("opacity", 0.7);
+    g.append("text").attr("x", plotW + 4).attr("y", cutY - 6).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textMuted).attr("text-anchor", "end").text(`K = ${k}`);
+  }
+  if (showLabels) {
+    const obsLabels = data.observationLabels;
+    const step = n > 80 ? Math.ceil(n / 40) : 1;
+    for (let i = 0; i < dendrogramOrder.length; i++) {
+      if (i % step !== 0) continue;
+      const leafIdx = dendrogramOrder[i];
+      const lx = xScale(i);
+      const ly = plotH + 8;
+      const label = obsLabels?.[leafIdx] ?? String(leafIdx + 1);
+      const cluster = labels[leafIdx];
+      g.append("text").attr("x", lx).attr("y", ly).attr("transform", `rotate(-60, ${lx}, ${ly})`).attr("font-family", theme.fontFamily).attr("font-size", Math.min(theme.fontSizeSmall, Math.max(8, plotW / n * 0.8))).attr("fill", colorSubs ? getColor(cluster, theme) : theme.textMuted).attr("text-anchor", "end").attr("dominant-baseline", "auto").text(label);
+    }
+  }
+}
+
+// src/viz/plots/fa-plot.ts
+function renderFAPlot(container, data, config = {}) {
+  import('d3').then((d3) => {
+    const type = config.type ?? "loadings";
+    if (type === "scree") renderScree2(d3, container, data, config);
+    else if (type === "loadings") renderLoadings(d3, container, data, config);
+    else if (type === "path") renderPath(d3, container, data, config);
+    else if (type === "communality") renderCommunality(d3, container, data, config);
+    else if (type === "factor-correlation") renderFactorCorrelation(d3, container, data, config);
+    else if (type === "fit-indices") renderFitIndices(d3, container, data, config);
+  });
+}
+function isCFA(data) {
+  return "parameterEstimates" in data;
+}
+function renderScree2(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const W = config.width ?? 520, H = config.height ?? 380;
+  const margin = { top: theme.marginTop, right: theme.marginRight, bottom: theme.marginBottom, left: theme.marginLeft };
+  const width = W - margin.left - margin.right;
+  const height = H - margin.top - margin.bottom;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  const diag = config.diagnostics;
+  const subtitleParts = [];
+  if (diag) {
+    subtitleParts.push(`Parallel Analysis: ${diag.parallelSuggested} factors`);
+    subtitleParts.push(`MAP: ${diag.mapSuggested} factors`);
+  }
+  addSubtitle(svg, config.title ?? "Scree Plot with Parallel Analysis", subtitleParts.join("; "), W, theme);
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const eigenvalues = data.eigenvalues;
+  const comps = eigenvalues.map((_, i) => i + 1);
+  const maxEv = Math.max(...eigenvalues, ...diag?.parallelSimulated ?? [], 1);
+  const xScale = d3.scaleBand().domain(comps).range([0, width]).padding(0.25);
+  const yScale = d3.scaleLinear().domain([0, maxEv * 1.15]).range([height, 0]).nice();
+  g.selectAll(".grid").data(yScale.ticks(5)).join("line").attr("x1", 0).attr("x2", width).attr("y1", (d) => yScale(d)).attr("y2", (d) => yScale(d)).attr("stroke", theme.gridLine).attr("stroke-width", 1);
+  g.append("line").attr("x1", 0).attr("x2", width).attr("y1", yScale(1)).attr("y2", yScale(1)).attr("stroke", theme.axisLine).attr("stroke-dasharray", "6,3").attr("stroke-width", 1.5);
+  g.append("text").attr("x", width + 4).attr("y", yScale(1) + 4).attr("font-size", 9).attr("fill", theme.textMuted).text("Kaiser");
+  eigenvalues.forEach((ev, i) => {
+    const x = xScale(i + 1) ?? 0;
+    const barColor = i < data.nFactors ? getColor(0, theme) : theme.gridLine;
+    g.append("rect").attr("x", x).attr("y", yScale(ev)).attr("width", xScale.bandwidth()).attr("height", height - yScale(ev)).attr("fill", barColor).attr("opacity", 0.8).attr("rx", 2).on("mouseover", (event) => {
+      const pctVar = eigenvalues.length > 0 ? (ev / eigenvalues.reduce((s, v) => s + v, 0) * 100).toFixed(1) : "0";
+      showTooltip(event, [
+        formatTooltipRow("Component", `${i + 1}`),
+        formatTooltipRow("Eigenvalue", ev),
+        formatTooltipRow("% Variance", `${pctVar}%`)
+      ].join(""), theme);
+    }).on("mouseout", hideTooltip);
+    g.append("text").attr("x", x + xScale.bandwidth() / 2).attr("y", yScale(ev) - 4).attr("text-anchor", "middle").attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.text).text(ev.toFixed(2));
+  });
+  if (config.showParallelAnalysis !== false && diag?.parallelSimulated) {
+    const sim = diag.parallelSimulated;
+    const lineData = comps.map((c, i) => ({
+      x: (xScale(c) ?? 0) + xScale.bandwidth() / 2,
+      y: yScale(sim[i] ?? 0)
+    }));
+    const line = d3.line().x((d) => d.x).y((d) => d.y);
+    g.append("path").datum(lineData).attr("d", line).attr("fill", "none").attr("stroke", getColor(2, theme)).attr("stroke-width", 2).attr("stroke-dasharray", "5,3");
+    lineData.forEach((pt) => {
+      g.append("circle").attr("cx", pt.x).attr("cy", pt.y).attr("r", 3).attr("fill", getColor(2, theme));
+    });
+    const legY = 8;
+    g.append("line").attr("x1", width - 120).attr("x2", width - 90).attr("y1", legY).attr("y2", legY).attr("stroke", getColor(2, theme)).attr("stroke-width", 2).attr("stroke-dasharray", "5,3");
+    g.append("text").attr("x", width - 86).attr("y", legY + 4).attr("font-size", 9).attr("fill", theme.textMuted).text("Simulated (95th)");
+  }
+  g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
+  g.append("g").call(d3.axisLeft(yScale).ticks(5)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
+  g.append("text").attr("x", width / 2).attr("y", height + 44).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize).attr("fill", theme.text).text("Factor");
+  g.append("text").attr("transform", "rotate(-90)").attr("x", -height / 2).attr("y", -48).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize).attr("fill", theme.text).text("Eigenvalue");
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+function renderLoadings(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const threshold = config.loadingThreshold ?? 0.3;
+  const nItems = data.loadings.length;
+  const nFactors = data.nFactors;
+  const itemOrder = Array.from({ length: nItems }, (_, i) => i);
+  itemOrder.sort((a, b) => {
+    const rowA = data.loadings[a];
+    const rowB = data.loadings[b];
+    const maxFactorA = rowA.indexOf(Math.max(...rowA.map(Math.abs)));
+    const maxFactorB = rowB.indexOf(Math.max(...rowB.map(Math.abs)));
+    if (maxFactorA !== maxFactorB) return maxFactorA - maxFactorB;
+    return Math.max(...rowB.map(Math.abs)) - Math.max(...rowA.map(Math.abs));
+  });
+  const cellW = 56, cellH = 28;
+  const extraCols = 1 ;
+  const W = config.width ?? (nFactors + extraCols) * cellW + 140;
+  const H = config.height ?? nItems * cellH + 100;
+  const margin = { top: 60, left: 110 };
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  addSubtitle(svg, config.title ?? "Factor Loadings", data.formatted, W, theme);
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const colorScale = d3.scaleSequential().domain([-1, 1]).interpolator(d3.interpolateRdBu);
+  const commScale = d3.scaleSequential().domain([0, 1]).interpolator(d3.interpolateGreens);
+  const varLabels = config.variableLabels ?? data.variableNames;
+  const facLabels = config.factorLabels ?? data.factorNames;
+  facLabels.forEach((label, ci) => {
+    g.append("text").attr("x", ci * cellW + cellW / 2).attr("y", -8).attr("text-anchor", "middle").attr("font-size", theme.fontSizeSmall).attr("font-weight", "600").attr("fill", theme.text).text(label);
+  });
+  {
+    g.append("text").attr("x", nFactors * cellW + cellW / 2).attr("y", -8).attr("text-anchor", "middle").attr("font-size", theme.fontSizeSmall).attr("font-weight", "600").attr("fill", theme.text).text("h\xB2");
+  }
+  itemOrder.forEach((origIdx, rowIdx) => {
+    const row = data.loadings[origIdx];
+    const label = varLabels[origIdx] ?? `V${origIdx + 1}`;
+    g.append("text").attr("x", -6).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "end").attr("font-size", theme.fontSizeSmall).attr("fill", theme.text).text(label);
+    row.forEach((val, ci) => {
+      const dimmed = Math.abs(val) < threshold;
+      g.append("rect").attr("x", ci * cellW).attr("y", rowIdx * cellH).attr("width", cellW - 2).attr("height", cellH - 2).attr("rx", 3).attr("fill", colorScale(val)).attr("opacity", dimmed ? 0.3 : 1).on("mouseover", (event) => {
+        showTooltip(event, [
+          formatTooltipRow(label, ""),
+          formatTooltipRow(facLabels[ci] ?? `F${ci + 1}`, val)
+        ].join(""), theme);
+      }).on("mouseout", hideTooltip);
+      g.append("text").attr("x", ci * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).attr("opacity", dimmed ? 0.5 : 1).text(val.toFixed(2));
+    });
+    {
+      const comm = data.communalities[origIdx] ?? 0;
+      g.append("rect").attr("x", nFactors * cellW).attr("y", rowIdx * cellH).attr("width", cellW - 2).attr("height", cellH - 2).attr("rx", 3).attr("fill", commScale(comm));
+      g.append("text").attr("x", nFactors * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", comm > 0.6 ? "#fff" : theme.text).text(comm.toFixed(2));
+    }
+  });
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+function resolvePathStyle(s) {
+  return {
+    factorRx: s?.factorRx ?? 56,
+    factorRy: s?.factorRy ?? 28,
+    factorStroke: s?.factorStroke ?? 2.5,
+    factorFontSize: s?.factorFontSize ?? 14,
+    factorFontWeight: s?.factorFontWeight ?? "800",
+    factorGlow: s?.factorGlow ?? true,
+    factorGlowRadius: s?.factorGlowRadius ?? 6,
+    factorHighlight: s?.factorHighlight ?? true,
+    itemWidth: s?.itemWidth ?? 96,
+    itemHeight: s?.itemHeight ?? 30,
+    itemRadius: s?.itemRadius ?? 5,
+    itemStroke: s?.itemStroke ?? 1.2,
+    itemFontSize: s?.itemFontSize ?? 11,
+    itemFontWeight: s?.itemFontWeight ?? "600",
+    itemAccentWidth: s?.itemAccentWidth ?? 4,
+    itemGradient: s?.itemGradient ?? true,
+    errorRx: s?.errorRx ?? 14,
+    errorRy: s?.errorRy ?? 12,
+    errorStroke: s?.errorStroke ?? 1.2,
+    errorFontSize: s?.errorFontSize ?? 9,
+    errorSelfLoop: s?.errorSelfLoop ?? true,
+    errorSelfLoopSize: s?.errorSelfLoopSize ?? 12,
+    arrowMinWidth: s?.arrowMinWidth ?? 0.8,
+    arrowMaxWidth: s?.arrowMaxWidth ?? 2.5,
+    arrowMinOpacity: s?.arrowMinOpacity ?? 0.4,
+    arrowMaxOpacity: s?.arrowMaxOpacity ?? 0.95,
+    arrowMarkerSize: s?.arrowMarkerSize ?? 6,
+    arrowCurvature: s?.arrowCurvature ?? 0.4,
+    loadingFontSize: s?.loadingFontSize ?? 9.5,
+    loadingFontWeight: s?.loadingFontWeight ?? "700",
+    loadingPillRadius: s?.loadingPillRadius ?? 7,
+    loadingLabelOffset: s?.loadingLabelOffset ?? -6,
+    loadingPosition: s?.loadingPosition ?? 0.6,
+    halo: s?.halo ?? true,
+    haloColor: s?.haloColor ?? "#ffffff",
+    haloWidth: s?.haloWidth ?? 3.5,
+    covColor: s?.covColor ?? "#8892a0",
+    covMinWidth: s?.covMinWidth ?? 1,
+    covMaxWidth: s?.covMaxWidth ?? 3,
+    covMarkerSize: s?.covMarkerSize ?? 6,
+    covLabelFontSize: s?.covLabelFontSize ?? 10,
+    covNestSpacing: s?.covNestSpacing ?? 20,
+    errorArrowWidth: s?.errorArrowWidth ?? 0.8,
+    errorArrowMarkerSize: s?.errorArrowMarkerSize ?? 5,
+    itemGap: s?.itemGap ?? 6,
+    factorGroupGap: s?.factorGroupGap ?? 32,
+    arrowSpan: s?.arrowSpan ?? 120,
+    errorSpan: s?.errorSpan ?? 36,
+    covArcReserve: s?.covArcReserve ?? 70,
+    topPadding: s?.topPadding ?? 74,
+    bottomPadding: s?.bottomPadding ?? 44,
+    rightPadding: s?.rightPadding ?? 50,
+    factorColors: s?.factorColors ?? [],
+    fitCardWidth: s?.fitCardWidth ?? 210,
+    fitCardHeight: s?.fitCardHeight ?? 118,
+    crossLoadingThreshold: s?.crossLoadingThreshold ?? 0.2,
+    crossLoadingDash: s?.crossLoadingDash ?? "5,4",
+    crossLoadingOpacity: s?.crossLoadingOpacity ?? 0.3,
+    showGroupBrackets: s?.showGroupBrackets ?? true,
+    groupBracketOpacity: s?.groupBracketOpacity ?? 0.12,
+    showShadows: s?.showShadows ?? true
+  };
+}
+function fColor(fi, ps, theme) {
+  if (ps.factorColors.length > 0) return ps.factorColors[fi % ps.factorColors.length];
+  return getColor(fi, theme);
+}
+function renderPath(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const ps = resolvePathStyle(config.pathStyle);
+  const showErrors = config.showErrorTerms !== false;
+  const showFit = config.showFitBox !== false;
+  const nFactors = data.nFactors;
+  const nItems = data.loadings.length;
+  const varLabels = config.variableLabels ?? data.variableNames;
+  const facLabels = config.factorLabels ?? data.factorNames;
+  const hasCFA = isCFA(data);
+  const factorItems = Array.from({ length: nFactors }, () => []);
+  if (hasCFA) {
+    const cfaModel = data.model;
+    for (let fi = 0; fi < nFactors; fi++) {
+      const key = facLabels[fi];
+      const items = cfaModel[key];
+      if (items) {
+        for (let j = 0; j < items.length; j++) factorItems[fi].push(items[j]);
+      }
+    }
+  } else {
+    for (let i = 0; i < nItems; i++) {
+      const row = data.loadings[i];
+      let maxF = 0, maxVal = 0;
+      for (let f = 0; f < nFactors; f++) {
+        if (Math.abs(row[f]) > maxVal) {
+          maxVal = Math.abs(row[f]);
+          maxF = f;
+        }
+      }
+      factorItems[maxF].push(i);
+    }
+  }
+  const groupHeights = factorItems.map(
+    (items) => Math.max(items.length * (ps.itemHeight + ps.itemGap) - ps.itemGap, ps.factorRy * 2)
+  );
+  const totalGroupH = groupHeights.reduce((s, h) => s + h, 0) + (nFactors - 1) * ps.factorGroupGap;
+  const bottomPad = ps.bottomPadding;
+  const factorCx = ps.covArcReserve + ps.factorRx + 16;
+  const itemLeft = factorCx + ps.factorRx + ps.arrowSpan;
+  const itemRight = itemLeft + ps.itemWidth;
+  const errorCx = showErrors ? itemRight + ps.errorSpan + ps.errorRx : itemRight + 10;
+  const selfLoopExtra = showErrors && ps.errorSelfLoop ? ps.errorSelfLoopSize + 30 : 0;
+  const W = config.width ?? errorCx + (showErrors ? ps.errorRx : 0) + selfLoopExtra + ps.rightPadding;
+  const H = config.height ?? ps.topPadding + totalGroupH + bottomPad;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background).attr("xmlns", "http://www.w3.org/2000/svg");
+  addSubtitle(
+    svg,
+    config.title ?? (hasCFA ? "Confirmatory Factor Analysis \u2014 Path Diagram" : "Exploratory Factor Analysis \u2014 Path Diagram"),
+    data.formatted,
+    W,
+    theme
+  );
+  const defs = svg.append("defs");
+  const g = svg.append("g");
+  if (ps.factorGlow) {
+    const glowFilter = defs.append("filter").attr("id", "fa-glow").attr("x", "-40%").attr("y", "-40%").attr("width", "180%").attr("height", "180%");
+    glowFilter.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", ps.factorGlowRadius).attr("result", "blur");
+    glowFilter.append("feColorMatrix").attr("in", "blur").attr("type", "saturate").attr("values", "0.35").attr("result", "desatBlur");
+    const glowMerge = glowFilter.append("feMerge");
+    glowMerge.append("feMergeNode").attr("in", "desatBlur");
+    glowMerge.append("feMergeNode").attr("in", "SourceGraphic");
+  }
+  if (ps.showShadows) {
+    const shadowMed = defs.append("filter").attr("id", "fa-shadow-med").attr("x", "-20%").attr("y", "-15%").attr("width", "140%").attr("height", "140%");
+    shadowMed.append("feDropShadow").attr("dx", 0).attr("dy", 2).attr("stdDeviation", 4).attr("flood-color", "rgba(0,0,0,0.10)");
+    const shadowSm = defs.append("filter").attr("id", "fa-shadow-sm").attr("x", "-10%").attr("y", "-10%").attr("width", "120%").attr("height", "130%");
+    shadowSm.append("feDropShadow").attr("dx", 0).attr("dy", 1).attr("stdDeviation", 2).attr("flood-color", "rgba(0,0,0,0.07)");
+  }
+  for (let f = 0; f < nFactors; f++) {
+    const color = fColor(f, ps, theme);
+    const grad = defs.append("radialGradient").attr("id", `fa-fgrad-${f}`).attr("cx", "35%").attr("cy", "28%").attr("r", "70%");
+    grad.append("stop").attr("offset", "0%").attr("stop-color", "#fff").attr("stop-opacity", 0.55);
+    grad.append("stop").attr("offset", "35%").attr("stop-color", color).attr("stop-opacity", 0.18);
+    grad.append("stop").attr("offset", "100%").attr("stop-color", color).attr("stop-opacity", 0.06);
+    if (ps.itemGradient) {
+      const lg = defs.append("linearGradient").attr("id", `fa-igrad-${f}`).attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "0%");
+      lg.append("stop").attr("offset", "0%").attr("stop-color", color).attr("stop-opacity", 0.08);
+      lg.append("stop").attr("offset", "100%").attr("stop-color", color).attr("stop-opacity", 0);
+    }
+  }
+  const mw = ps.arrowMarkerSize, mh = ps.arrowMarkerSize * 0.7;
+  for (let f = 0; f < nFactors; f++) {
+    const color = fColor(f, ps, theme);
+    defs.append("marker").attr("id", `fa-arr-${f}`).attr("viewBox", "0 0 10 7").attr("refX", 9.5).attr("refY", 3.5).attr("markerWidth", mw).attr("markerHeight", mh).attr("orient", "auto").append("path").attr("d", "M0,0.5 L9,3.5 L0,6.5 L2,3.5 Z").attr("fill", color);
+  }
+  defs.append("marker").attr("id", "fa-arr-ns").attr("viewBox", "0 0 10 7").attr("refX", 9.5).attr("refY", 3.5).attr("markerWidth", mw).attr("markerHeight", mh).attr("orient", "auto").append("path").attr("d", "M0,0.5 L9,3.5 L0,6.5 L2,3.5 Z").attr("fill", theme.textMuted);
+  const cmw = ps.covMarkerSize, cmh = ps.covMarkerSize * 0.7;
+  defs.append("marker").attr("id", "fa-cov-s").attr("viewBox", "0 0 10 7").attr("refX", 1).attr("refY", 3.5).attr("markerWidth", cmw).attr("markerHeight", cmh).attr("orient", "auto").append("path").attr("d", "M10,0.5 L1,3.5 L10,6.5 L8,3.5 Z").attr("fill", ps.covColor);
+  defs.append("marker").attr("id", "fa-cov-e").attr("viewBox", "0 0 10 7").attr("refX", 9).attr("refY", 3.5).attr("markerWidth", cmw).attr("markerHeight", cmh).attr("orient", "auto").append("path").attr("d", "M0,0.5 L9,3.5 L0,6.5 L2,3.5 Z").attr("fill", ps.covColor);
+  const emw = ps.errorArrowMarkerSize, emh = ps.errorArrowMarkerSize * 0.7;
+  defs.append("marker").attr("id", "fa-arr-err").attr("viewBox", "0 0 10 7").attr("refX", 9).attr("refY", 3.5).attr("markerWidth", emw).attr("markerHeight", emh).attr("orient", "auto").append("path").attr("d", "M0,0.5 L9,3.5 L0,6.5 L2,3.5 Z").attr("fill", theme.axisLine);
+  const factorCy = [];
+  const itemCy = new Array(nItems).fill(0);
+  let yAccum = ps.topPadding;
+  for (let fi = 0; fi < nFactors; fi++) {
+    const items = factorItems[fi];
+    const gh = groupHeights[fi];
+    factorCy.push(yAccum + gh / 2);
+    for (let j = 0; j < items.length; j++) {
+      itemCy[items[j]] = yAccum + j * (ps.itemHeight + ps.itemGap) + ps.itemHeight / 2;
+    }
+    yAccum += gh + ps.factorGroupGap;
+  }
+  if (ps.showGroupBrackets) {
+    for (let fi = 0; fi < nFactors; fi++) {
+      const items = factorItems[fi];
+      if (items.length < 2) continue;
+      const firstY = itemCy[items[0]];
+      const lastY = itemCy[items[items.length - 1]];
+      g.append("line").attr("x1", itemLeft - 6).attr("y1", firstY).attr("x2", itemLeft - 6).attr("y2", lastY).attr("stroke", fColor(fi, ps, theme)).attr("stroke-width", 1.5).attr("opacity", ps.groupBracketOpacity).attr("stroke-linecap", "round");
+    }
+  }
+  const Phi = data.factorCorrelations;
+  for (let fi = 0; fi < nFactors; fi++) {
+    for (let fj = fi + 1; fj < nFactors; fj++) {
+      const corr = Phi[fi][fj];
+      if (Math.abs(corr) < 0.01) continue;
+      const y1 = factorCy[fi], y2 = factorCy[fj];
+      const span = Math.abs(y2 - y1);
+      const nestLevel = fj - fi;
+      const arcX = factorCx - ps.factorRx - 14 - nestLevel * ps.covNestSpacing - span * 0.04;
+      const absCorr = Math.abs(corr);
+      const strokeW = ps.covMinWidth + absCorr * (ps.covMaxWidth - ps.covMinWidth);
+      const path = `M${factorCx - ps.factorRx - 2},${y1} C${arcX},${y1} ${arcX},${y2} ${factorCx - ps.factorRx - 2},${y2}`;
+      g.append("path").attr("d", path).attr("fill", "none").attr("stroke", ps.covColor).attr("stroke-width", strokeW).attr("stroke-linecap", "round").attr("marker-start", "url(#fa-cov-s)").attr("marker-end", "url(#fa-cov-e)");
+      const pillW = 38, pillH = 17;
+      const t = 0.5, t1 = 0.5;
+      const labelX = t1 * t1 * t1 * (factorCx - ps.factorRx - 2) + 3 * t1 * t1 * t * arcX + 3 * t1 * t * t * arcX + t * t * t * (factorCx - ps.factorRx - 2);
+      const labelY = t1 * t1 * t1 * y1 + 3 * t1 * t1 * t * y1 + 3 * t1 * t * t * y2 + t * t * t * y2;
+      g.append("rect").attr("x", labelX - pillW / 2).attr("y", labelY - pillH / 2).attr("width", pillW).attr("height", pillH).attr("rx", 8).attr("fill", theme.background).attr("stroke", theme.gridLine).attr("stroke-width", 0.7);
+      g.append("text").attr("x", labelX).attr("y", labelY + 3.5).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.covLabelFontSize).attr("font-weight", "600").attr("fill", ps.covColor).text(corr.toFixed(2));
+    }
+  }
+  for (let fi = 0; fi < nFactors; fi++) {
+    const items = factorItems[fi];
+    const color = fColor(fi, ps, theme);
+    for (let idx = 0; idx < items.length; idx++) {
+      const itemIdx = items[idx];
+      if (itemIdx >= nItems) continue;
+      const loading = data.loadings[itemIdx][fi];
+      if (Math.abs(loading) < 0.01) continue;
+      let sig = true;
+      let stars = "";
+      if (hasCFA) {
+        const pe = data.parameterEstimates.loadings[fi]?.[idx];
+        if (pe) {
+          sig = pe.pValue < 0.05;
+          stars = pe.pValue < 1e-3 ? "***" : pe.pValue < 0.01 ? "**" : pe.pValue < 0.05 ? "*" : "";
+        }
+      }
+      const x1 = factorCx + ps.factorRx + 2;
+      const y1 = factorCy[fi];
+      const x2 = itemLeft - 2;
+      const y2 = itemCy[itemIdx];
+      const dy = y2 - y1;
+      const curv = ps.arrowCurvature;
+      const cp1x = x1 + ps.arrowSpan * curv, cp1y = y1 + dy * 0.05;
+      const cp2x = x2 - ps.arrowSpan * (curv * 0.85), cp2y = y2;
+      const absL = Math.abs(loading);
+      const strokeW = ps.arrowMinWidth + absL * (ps.arrowMaxWidth - ps.arrowMinWidth);
+      const opacity = ps.arrowMinOpacity + absL * (ps.arrowMaxOpacity - ps.arrowMinOpacity);
+      const arrowColor = sig ? color : theme.textMuted;
+      const markerId = sig ? `fa-arr-${fi}` : "fa-arr-ns";
+      g.append("path").attr("d", `M${x1},${y1} C${cp1x},${cp1y} ${cp2x},${cp2y} ${x2},${y2}`).attr("fill", "none").attr("stroke", arrowColor).attr("stroke-width", strokeW).attr("stroke-linecap", "round").attr("opacity", opacity).attr("marker-end", `url(#${markerId})`);
+      const mt = ps.loadingPosition, mt1 = 1 - mt;
+      const lx = mt1 * mt1 * mt1 * x1 + 3 * mt1 * mt1 * mt * cp1x + 3 * mt1 * mt * mt * cp2x + mt * mt * mt * x2;
+      const ly = mt1 * mt1 * mt1 * y1 + 3 * mt1 * mt1 * mt * cp1y + 3 * mt1 * mt * mt * cp2y + mt * mt * mt * y2;
+      const labelText = `${loading.toFixed(2)}${stars}`;
+      const lbl = g.append("text").attr("x", lx).attr("y", ly + ps.loadingLabelOffset).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.loadingFontSize).attr("font-weight", ps.loadingFontWeight).attr("fill", arrowColor).text(labelText);
+      if (ps.halo) lbl.attr("paint-order", "stroke").attr("stroke", ps.haloColor).attr("stroke-width", ps.haloWidth).attr("stroke-linejoin", "round");
+    }
+  }
+  if (!hasCFA) {
+    for (let i = 0; i < nItems; i++) {
+      const row = data.loadings[i];
+      let primaryF = 0, maxVal = 0;
+      for (let f = 0; f < nFactors; f++) {
+        if (Math.abs(row[f]) > maxVal) {
+          maxVal = Math.abs(row[f]);
+          primaryF = f;
+        }
+      }
+      for (let f = 0; f < nFactors; f++) {
+        if (f === primaryF) continue;
+        if (Math.abs(row[f]) < ps.crossLoadingThreshold) continue;
+        const x1 = factorCx + ps.factorRx + 2, y1 = factorCy[f];
+        const x2 = itemLeft - 2, y2 = itemCy[i];
+        const dy = y2 - y1;
+        const curv = ps.arrowCurvature;
+        g.append("path").attr("d", `M${x1},${y1} C${x1 + ps.arrowSpan * curv},${y1 + dy * 0.05} ${x2 - ps.arrowSpan * curv * 0.85},${y2} ${x2},${y2}`).attr("fill", "none").attr("stroke", theme.textMuted).attr("stroke-width", 0.9).attr("stroke-dasharray", ps.crossLoadingDash).attr("opacity", ps.crossLoadingOpacity);
+      }
+    }
+  }
+  for (let fi = 0; fi < nFactors; fi++) {
+    const cy = factorCy[fi];
+    const color = fColor(fi, ps, theme);
+    if (ps.factorGlow) {
+      g.append("ellipse").attr("cx", factorCx).attr("cy", cy).attr("rx", ps.factorRx + 4).attr("ry", ps.factorRy + 3).attr("fill", color).attr("opacity", 0.06).attr("filter", "url(#fa-glow)");
+    }
+    if (ps.showShadows) {
+      g.append("ellipse").attr("cx", factorCx).attr("cy", cy).attr("rx", ps.factorRx).attr("ry", ps.factorRy).attr("fill", "none").attr("filter", "url(#fa-shadow-med)").attr("stroke", "transparent");
+    }
+    g.append("ellipse").attr("cx", factorCx).attr("cy", cy).attr("rx", ps.factorRx).attr("ry", ps.factorRy).attr("fill", `url(#fa-fgrad-${fi})`).attr("stroke", color).attr("stroke-width", ps.factorStroke);
+    if (ps.factorHighlight && ps.factorRx > 20 && ps.factorRy > 15) {
+      g.append("ellipse").attr("cx", factorCx).attr("cy", cy - 4).attr("rx", ps.factorRx - 10).attr("ry", ps.factorRy - 10).attr("fill", "none").attr("stroke", "#fff").attr("stroke-width", 1).attr("opacity", 0.25);
+    }
+    g.append("text").attr("x", factorCx).attr("y", cy + 1).attr("text-anchor", "middle").attr("dominant-baseline", "middle").attr("font-family", theme.fontFamily).attr("font-size", ps.factorFontSize).attr("font-weight", ps.factorFontWeight).attr("letter-spacing", "-0.4").attr("fill", theme.text).text(facLabels[fi] ?? `F${fi + 1}`);
+  }
+  for (let i = 0; i < nItems; i++) {
+    const cy = itemCy[i];
+    let primaryFactor = 0, primVal = 0;
+    for (let f = 0; f < nFactors; f++) {
+      if (Math.abs(data.loadings[i][f]) > primVal) {
+        primVal = Math.abs(data.loadings[i][f]);
+        primaryFactor = f;
+      }
+    }
+    const accentColor = fColor(primaryFactor, ps, theme);
+    if (ps.showShadows) {
+      g.append("rect").attr("x", itemLeft).attr("y", cy - ps.itemHeight / 2).attr("width", ps.itemWidth).attr("height", ps.itemHeight).attr("rx", ps.itemRadius).attr("fill", theme.surface).attr("filter", "url(#fa-shadow-sm)");
+    }
+    g.append("rect").attr("x", itemLeft).attr("y", cy - ps.itemHeight / 2).attr("width", ps.itemWidth).attr("height", ps.itemHeight).attr("rx", ps.itemRadius).attr("fill", ps.itemGradient ? `url(#fa-igrad-${primaryFactor})` : theme.background).attr("stroke", accentColor).attr("stroke-width", ps.itemStroke).attr("stroke-opacity", 0.5);
+    if (ps.itemAccentWidth > 0) {
+      g.append("rect").attr("x", itemLeft).attr("y", cy - ps.itemHeight / 2).attr("width", ps.itemAccentWidth).attr("height", ps.itemHeight).attr("rx", Math.min(ps.itemAccentWidth, ps.itemRadius)).attr("fill", accentColor).attr("opacity", 0.85);
+    }
+    g.append("text").attr("x", itemLeft + ps.itemWidth / 2 + ps.itemAccentWidth / 2).attr("y", cy + 1).attr("text-anchor", "middle").attr("dominant-baseline", "middle").attr("font-family", theme.fontFamily).attr("font-size", ps.itemFontSize).attr("font-weight", ps.itemFontWeight).attr("fill", theme.text).text(varLabels[i] ?? `V${i + 1}`);
+    g.append("rect").attr("x", itemLeft).attr("y", cy - ps.itemHeight / 2).attr("width", ps.itemWidth).attr("height", ps.itemHeight).attr("fill", "transparent").attr("cursor", "default").on("mouseover", (event) => {
+      const rows = facLabels.map(
+        (fl, fi) => formatTooltipRow(fl, data.loadings[i][fi] ?? 0)
+      ).join("");
+      showTooltip(event, [
+        formatTooltipRow(varLabels[i] ?? `V${i + 1}`, ""),
+        rows,
+        formatTooltipRow("h\xB2", data.communalities[i] ?? 0)
+      ].join(""), theme);
+    }).on("mouseout", hideTooltip);
+  }
+  if (showErrors) {
+    for (let i = 0; i < nItems; i++) {
+      const cy = itemCy[i];
+      const uniq = data.uniqueness[i] ?? 0;
+      const errArrX1 = errorCx - ps.errorRx - 1;
+      const errArrX2 = itemRight + 2;
+      g.append("line").attr("x1", errArrX1).attr("y1", cy).attr("x2", errArrX2).attr("y2", cy).attr("stroke", theme.axisLine).attr("stroke-width", ps.errorArrowWidth).attr("marker-end", "url(#fa-arr-err)");
+      const errMidX = (errArrX1 + errArrX2) / 2;
+      const oneLbl = g.append("text").attr("x", errMidX).attr("y", cy - 5).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize).attr("font-weight", "600").attr("fill", theme.textMuted).text("1");
+      if (ps.halo) oneLbl.attr("paint-order", "stroke").attr("stroke", ps.haloColor).attr("stroke-width", ps.haloWidth).attr("stroke-linejoin", "round");
+      g.append("ellipse").attr("cx", errorCx).attr("cy", cy).attr("rx", ps.errorRx).attr("ry", ps.errorRy).attr("fill", theme.surface).attr("stroke", theme.axisLine).attr("stroke-width", ps.errorStroke);
+      if (ps.errorSelfLoop) {
+        const loopRight = errorCx + ps.errorRx + ps.errorSelfLoopSize;
+        g.append("path").attr("d", `M${errorCx + ps.errorRx},${cy - 3} C${loopRight},${cy - 14} ${loopRight},${cy + 14} ${errorCx + ps.errorRx},${cy + 3}`).attr("fill", "none").attr("stroke", theme.axisLine).attr("stroke-width", ps.errorArrowWidth).attr("marker-end", "url(#fa-arr-err)");
+        const errLbl = g.append("text").attr("x", loopRight + 2).attr("y", cy + ps.errorFontSize * 0.35).attr("text-anchor", "start").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize - 0.5).attr("font-weight", "500").attr("fill", theme.textMuted).text(uniq.toFixed(2));
+        if (ps.halo) errLbl.attr("paint-order", "stroke").attr("stroke", ps.haloColor).attr("stroke-width", ps.haloWidth).attr("stroke-linejoin", "round");
+      }
+      g.append("text").attr("x", errorCx).attr("y", cy + 1).attr("text-anchor", "middle").attr("dominant-baseline", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize).attr("font-weight", "600").attr("fill", theme.textMuted).text(`e${i + 1}`);
+    }
+  }
+  if (showFit) {
+    const fit = data.fit;
+    const fitColor = (good, ok) => good ? "#2e7d32" : ok ? "#e65100" : "#c62828";
+    const table = d3.select(container).append("table").style("border-collapse", "collapse").style("margin", "12px auto 4px").style("font-family", theme.fontFamilyMono).style("font-size", "12px").style("color", theme.text).style("min-width", "420px");
+    const thead = table.append("thead");
+    const headerRow = thead.append("tr").style("border-bottom", `2px solid ${theme.text}`);
+    const headers = ["Index", "Value", "90% CI", "Verdict"];
+    headers.forEach((h) => {
+      headerRow.append("th").style("padding", "6px 14px").style("text-align", h === "Index" ? "left" : "right").style("font-weight", "700").style("font-size", "11px").style("letter-spacing", "0.5px").style("color", theme.textMuted).text(h);
+    });
+    const tbody = table.append("tbody");
+    const fitRows = [
+      {
+        label: "\u03C7\xB2",
+        value: `${chunkMX4OLB7V_cjs.formatStat(fit.chiSq)} (df = ${fit.df})`,
+        ci: "",
+        verdict: `${chunkMX4OLB7V_cjs.formatP(fit.pValue)}`,
+        color: theme.textAnnotation
+      },
+      {
+        label: "RMSEA",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.rmsea, 3),
+        ci: `[${chunkMX4OLB7V_cjs.formatStat(fit.rmseaCI[0], 3)}, ${chunkMX4OLB7V_cjs.formatStat(fit.rmseaCI[1], 3)}]`,
+        verdict: fit.rmsea <= 0.05 ? "Good" : fit.rmsea <= 0.08 ? "Acceptable" : "Poor",
+        color: fitColor(fit.rmsea <= 0.05, fit.rmsea <= 0.08)
+      },
+      {
+        label: "CFI",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.cfi, 3),
+        ci: "",
+        verdict: fit.cfi >= 0.95 ? "Good" : fit.cfi >= 0.9 ? "Acceptable" : "Poor",
+        color: fitColor(fit.cfi >= 0.95, fit.cfi >= 0.9)
+      },
+      {
+        label: "TLI",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.tli, 3),
+        ci: "",
+        verdict: fit.tli >= 0.95 ? "Good" : fit.tli >= 0.9 ? "Acceptable" : "Poor",
+        color: fitColor(fit.tli >= 0.95, fit.tli >= 0.9)
+      },
+      {
+        label: "SRMR",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.srmr, 3),
+        ci: "",
+        verdict: fit.srmr <= 0.05 ? "Good" : fit.srmr <= 0.08 ? "Acceptable" : "Poor",
+        color: fitColor(fit.srmr <= 0.05, fit.srmr <= 0.08)
+      },
+      {
+        label: "AIC",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.aic, 1),
+        ci: "",
+        verdict: "",
+        color: theme.textAnnotation
+      },
+      {
+        label: "BIC",
+        value: chunkMX4OLB7V_cjs.formatStat(fit.bic, 1),
+        ci: "",
+        verdict: "",
+        color: theme.textAnnotation
+      }
+    ];
+    fitRows.forEach((row, i) => {
+      const tr = tbody.append("tr").style("border-bottom", i < fitRows.length - 1 ? `1px solid ${theme.gridLine}` : "none");
+      tr.append("td").style("padding", "5px 14px").style("font-weight", "600").style("white-space", "nowrap").text(row.label);
+      tr.append("td").style("padding", "5px 14px").style("text-align", "right").style("font-weight", "500").text(row.value);
+      tr.append("td").style("padding", "5px 14px").style("text-align", "right").style("color", theme.textMuted).style("font-size", "11px").text(row.ci);
+      const verdictCell = tr.append("td").style("padding", "5px 14px").style("text-align", "right").style("font-weight", "700").style("color", row.color);
+      if (row.verdict) {
+        verdictCell.append("span").style("display", "inline-block").style("width", "8px").style("height", "8px").style("border-radius", "50%").style("background", row.color).style("margin-right", "6px").style("vertical-align", "middle");
+        verdictCell.append("span").style("vertical-align", "middle").text(row.verdict);
+      }
+    });
+  }
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+function renderCommunality(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const nItems = data.communalities.length;
+  const W = config.width ?? 500;
+  const H = config.height ?? Math.max(nItems * 28 + 120, 250);
+  const margin = { top: theme.marginTop, right: 70, bottom: theme.marginBottom, left: 110 };
+  const width = W - margin.left - margin.right;
+  const height = H - margin.top - margin.bottom;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  addSubtitle(svg, config.title ?? "Communalities", data.formatted, W, theme);
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const varLabels = config.variableLabels ?? data.variableNames;
+  const indices = Array.from({ length: nItems }, (_, i) => i);
+  indices.sort((a, b) => (data.communalities[b] ?? 0) - (data.communalities[a] ?? 0));
+  const names = indices.map((i) => varLabels[i] ?? `V${i + 1}`);
+  const values = indices.map((i) => data.communalities[i] ?? 0);
+  const xScale = d3.scaleLinear().domain([0, 1]).range([0, width]).nice();
+  const yScale = d3.scaleBand().domain(names).range([0, height]).padding(0.25);
+  const commColor = (v) => {
+    if (v < 0.3) return "#e15759";
+    if (v < 0.5) return "#f28e2b";
+    return "#59a14f";
+  };
+  g.selectAll(".grid").data(xScale.ticks(5)).join("line").attr("x1", (d) => xScale(d)).attr("x2", (d) => xScale(d)).attr("y1", 0).attr("y2", height).attr("stroke", theme.gridLine).attr("stroke-width", 1);
+  g.append("line").attr("x1", xScale(0.4)).attr("x2", xScale(0.4)).attr("y1", 0).attr("y2", height).attr("stroke", theme.axisLine).attr("stroke-dasharray", "6,3").attr("stroke-width", 1.5);
+  values.forEach((val, i) => {
+    const y = yScale(names[i]) ?? 0;
+    g.append("rect").attr("x", 0).attr("y", y).attr("width", xScale(val)).attr("height", yScale.bandwidth()).attr("fill", commColor(val)).attr("opacity", 0.8).attr("rx", 2).on("mouseover", (event) => {
+      const origIdx = indices[i];
+      showTooltip(event, [
+        formatTooltipRow("Variable", varLabels[origIdx] ?? `V${origIdx + 1}`),
+        formatTooltipRow("Communality", val),
+        formatTooltipRow("Uniqueness", data.uniqueness[origIdx] ?? 0)
+      ].join(""), theme);
+    }).on("mouseout", hideTooltip);
+    g.append("text").attr("x", xScale(val) + 4).attr("y", y + yScale.bandwidth() / 2 + 4).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.text).text(val.toFixed(2));
+  });
+  g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale).ticks(5)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
+  g.append("g").call(d3.axisLeft(yScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
+  g.append("text").attr("x", width / 2).attr("y", height + 44).attr("text-anchor", "middle").attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize).attr("fill", theme.text).text("Communality (h\xB2)");
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+function renderFactorCorrelation(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const Phi = data.factorCorrelations;
+  const k = data.nFactors;
+  const facLabels = config.factorLabels ?? data.factorNames;
+  let isOrthogonal = true;
+  for (let i = 0; i < k && isOrthogonal; i++) {
+    for (let j = 0; j < k && isOrthogonal; j++) {
+      if (i !== j && Math.abs(Phi[i][j]) > 1e-3) isOrthogonal = false;
+    }
+  }
+  const cellSize = 60;
+  const W = config.width ?? k * cellSize + 140;
+  const H = config.height ?? k * cellSize + 120;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  addSubtitle(svg, config.title ?? "Factor Correlations (\u03A6)", data.rotation === "varimax" ? "Orthogonal rotation \u2014 \u03A6 = I" : "", W, theme);
+  if (isOrthogonal) {
+    svg.append("text").attr("x", W / 2).attr("y", H / 2).attr("text-anchor", "middle").attr("font-size", 14).attr("fill", theme.textMuted).text("Orthogonal rotation: all factor correlations = 0");
+    return;
+  }
+  const margin = { top: 60, left: 80 };
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const colorScale = d3.scaleSequential().domain([-1, 1]).interpolator(d3.interpolateRdBu);
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      const val = Phi[i][j];
+      g.append("rect").attr("x", j * cellSize).attr("y", i * cellSize).attr("width", cellSize - 2).attr("height", cellSize - 2).attr("rx", 3).attr("fill", i === j ? theme.surface : colorScale(val)).on("mouseover", (event) => {
+        if (i !== j) {
+          showTooltip(event, [
+            formatTooltipRow(`${facLabels[i]} \xD7 ${facLabels[j]}`, ""),
+            formatTooltipRow("r", val)
+          ].join(""), theme);
+        }
+      }).on("mouseout", hideTooltip);
+      if (i !== j) {
+        g.append("text").attr("x", j * cellSize + cellSize / 2).attr("y", i * cellSize + cellSize / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", 12).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).text(val.toFixed(2));
+      }
+    }
+  }
+  facLabels.forEach((lbl, i) => {
+    g.append("text").attr("x", -6).attr("y", i * cellSize + cellSize / 2 + 4).attr("text-anchor", "end").attr("font-size", theme.fontSizeSmall).attr("fill", theme.text).text(lbl);
+    g.append("text").attr("x", i * cellSize + cellSize / 2).attr("y", -8).attr("text-anchor", "middle").attr("font-size", theme.fontSizeSmall).attr("fill", theme.text).text(lbl);
+  });
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+function renderFitIndices(d3, container, data, config) {
+  const theme = config.theme ?? DEFAULT_THEME;
+  const W = config.width ?? 500, H = config.height ?? 340;
+  const margin = { top: theme.marginTop, right: 40, left: 80 };
+  const width = W - margin.left - margin.right;
+  container.innerHTML = "";
+  applyTheme(container, theme);
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H).style("background", theme.background);
+  addSubtitle(svg, config.title ?? "Model Fit Indices", data.formatted, W, theme);
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const fit = data.fit;
+  const gauges = [
+    { label: "RMSEA", value: fit.rmsea, range: [0, 0.15], good: 0.05, ok: 0.08, reversed: true, ci: fit.rmseaCI },
+    { label: "CFI", value: fit.cfi, range: [0.8, 1], good: 0.95, ok: 0.9, reversed: false },
+    { label: "TLI", value: fit.tli, range: [0.8, 1], good: 0.95, ok: 0.9, reversed: false },
+    { label: "SRMR", value: fit.srmr, range: [0, 0.12], good: 0.05, ok: 0.08, reversed: true }
+  ];
+  const barH = 24;
+  const gap = 50;
+  const startY = 10;
+  gauges.forEach((gauge, i) => {
+    const y = startY + i * gap;
+    const xScale = d3.scaleLinear().domain([gauge.range[0], gauge.range[1]]).range([0, width]).clamp(true);
+    if (gauge.reversed) {
+      g.append("rect").attr("x", 0).attr("y", y).attr("width", xScale(gauge.good)).attr("height", barH).attr("fill", "#59a14f").attr("opacity", 0.15).attr("rx", 4);
+      g.append("rect").attr("x", xScale(gauge.good)).attr("y", y).attr("width", xScale(gauge.ok) - xScale(gauge.good)).attr("height", barH).attr("fill", "#f28e2b").attr("opacity", 0.15);
+      g.append("rect").attr("x", xScale(gauge.ok)).attr("y", y).attr("width", width - xScale(gauge.ok)).attr("height", barH).attr("fill", "#e15759").attr("opacity", 0.15).attr("rx", 4);
+    } else {
+      g.append("rect").attr("x", 0).attr("y", y).attr("width", xScale(gauge.ok)).attr("height", barH).attr("fill", "#e15759").attr("opacity", 0.15).attr("rx", 4);
+      g.append("rect").attr("x", xScale(gauge.ok)).attr("y", y).attr("width", xScale(gauge.good) - xScale(gauge.ok)).attr("height", barH).attr("fill", "#f28e2b").attr("opacity", 0.15);
+      g.append("rect").attr("x", xScale(gauge.good)).attr("y", y).attr("width", width - xScale(gauge.good)).attr("height", barH).attr("fill", "#59a14f").attr("opacity", 0.15).attr("rx", 4);
+    }
+    g.append("line").attr("x1", xScale(gauge.good)).attr("x2", xScale(gauge.good)).attr("y1", y).attr("y2", y + barH).attr("stroke", theme.axisLine).attr("stroke-dasharray", "2,2").attr("stroke-width", 1);
+    g.append("line").attr("x1", xScale(gauge.ok)).attr("x2", xScale(gauge.ok)).attr("y1", y).attr("y2", y + barH).attr("stroke", theme.axisLine).attr("stroke-dasharray", "2,2").attr("stroke-width", 1);
+    if ("ci" in gauge && gauge.ci) {
+      const ciLo = gauge.ci[0];
+      const ciHi = gauge.ci[1];
+      g.append("rect").attr("x", xScale(ciLo)).attr("y", y + barH / 2 - 3).attr("width", xScale(ciHi) - xScale(ciLo)).attr("height", 6).attr("fill", getColor(0, theme)).attr("opacity", 0.3).attr("rx", 2);
+    }
+    const valColor = gauge.reversed ? gauge.value <= gauge.good ? "#59a14f" : gauge.value <= gauge.ok ? "#f28e2b" : "#e15759" : gauge.value >= gauge.good ? "#59a14f" : gauge.value >= gauge.ok ? "#f28e2b" : "#e15759";
+    g.append("circle").attr("cx", xScale(gauge.value)).attr("cy", y + barH / 2).attr("r", 6).attr("fill", valColor).attr("stroke", "#fff").attr("stroke-width", 2);
+    g.append("text").attr("x", -6).attr("y", y + barH / 2 + 4).attr("text-anchor", "end").attr("font-size", theme.fontSizeSmall).attr("font-weight", "600").attr("fill", theme.text).text(gauge.label);
+    g.append("text").attr("x", width + 6).attr("y", y + barH / 2 + 4).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall).attr("fill", valColor).attr("font-weight", "600").text(gauge.value.toFixed(3));
+  });
+  const textY = startY + gauges.length * gap + 10;
+  g.append("text").attr("x", 0).attr("y", textY).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textAnnotation).text(`\u03C7\xB2(${fit.df}) = ${chunkMX4OLB7V_cjs.formatStat(fit.chiSq)}, ${chunkMX4OLB7V_cjs.formatP(fit.pValue)}`);
+  g.append("text").attr("x", 0).attr("y", textY + 16).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall).attr("fill", theme.textAnnotation).text(`AIC = ${chunkMX4OLB7V_cjs.formatStat(fit.aic, 1)}, BIC = ${chunkMX4OLB7V_cjs.formatStat(fit.bic, 1)}`);
+  if (config.caption) addCaption(svg, config.caption, W, H, theme);
+}
+
 // src/viz/export.ts
 function exportSVG(container, filename = "carm-plot.svg") {
   const svgEl = container.querySelector("svg");
@@ -3722,6 +4533,69 @@ function triggerDownload(url, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 
-export { CARM_PALETTE, DARK_THEME, DEFAULT_THEME, OKABE_ITO, addCaption, addNLabel, addRegressionEquation, addStatBadge, addSubtitle, applyTheme, exportPNG, exportSVG, formatTooltipRow, getColor, hideTooltip, renderAlluvialPlot, renderArcDiagram, renderAreaChart, renderBarStats, renderBoxplot, renderBrackets, renderBubbleChart, renderChordDiagram, renderCoefPlot, renderCorrelogram, renderDensity, renderDistribution, renderDotPlot, renderEdgeBundling, renderForestPlot, renderFunnel, renderGridLines, renderGroupedBar, renderHistogram, renderLineChart, renderLollipop, renderMarimekko, renderMixedPlot, renderMosaicPlot, renderPCAPlot, renderPairPlot, renderParallelCoords, renderPareto, renderPieChart, renderQQPlot, renderROCCurve, renderRadarChart, renderRaincloud, renderResidualPanel, renderScatterStats, renderSparkline, renderStripPlot, renderSunburst, renderSwarmPlot, renderTreemap, renderViolinBox, renderWaffleChart, renderXAxis, renderYAxis, showTooltip, themeColorScale, totalBracketHeight };
-//# sourceMappingURL=chunk-MPRPR3Z3.js.map
-//# sourceMappingURL=chunk-MPRPR3Z3.js.map
+exports.CARM_PALETTE = CARM_PALETTE;
+exports.DARK_THEME = DARK_THEME;
+exports.DEFAULT_THEME = DEFAULT_THEME;
+exports.OKABE_ITO = OKABE_ITO;
+exports.addCaption = addCaption;
+exports.addNLabel = addNLabel;
+exports.addRegressionEquation = addRegressionEquation;
+exports.addStatBadge = addStatBadge;
+exports.addSubtitle = addSubtitle;
+exports.applyTheme = applyTheme;
+exports.exportPNG = exportPNG;
+exports.exportSVG = exportSVG;
+exports.formatTooltipRow = formatTooltipRow;
+exports.getColor = getColor;
+exports.hideTooltip = hideTooltip;
+exports.renderAlluvialPlot = renderAlluvialPlot;
+exports.renderArcDiagram = renderArcDiagram;
+exports.renderAreaChart = renderAreaChart;
+exports.renderBarStats = renderBarStats;
+exports.renderBoxplot = renderBoxplot;
+exports.renderBrackets = renderBrackets;
+exports.renderBubbleChart = renderBubbleChart;
+exports.renderChordDiagram = renderChordDiagram;
+exports.renderCoefPlot = renderCoefPlot;
+exports.renderCorrelogram = renderCorrelogram;
+exports.renderDendrogram = renderDendrogram;
+exports.renderDensity = renderDensity;
+exports.renderDistribution = renderDistribution;
+exports.renderDotPlot = renderDotPlot;
+exports.renderEdgeBundling = renderEdgeBundling;
+exports.renderFAPlot = renderFAPlot;
+exports.renderForestPlot = renderForestPlot;
+exports.renderFunnel = renderFunnel;
+exports.renderGridLines = renderGridLines;
+exports.renderGroupedBar = renderGroupedBar;
+exports.renderHistogram = renderHistogram;
+exports.renderLineChart = renderLineChart;
+exports.renderLollipop = renderLollipop;
+exports.renderMarimekko = renderMarimekko;
+exports.renderMixedPlot = renderMixedPlot;
+exports.renderMosaicPlot = renderMosaicPlot;
+exports.renderPCAPlot = renderPCAPlot;
+exports.renderPairPlot = renderPairPlot;
+exports.renderParallelCoords = renderParallelCoords;
+exports.renderPareto = renderPareto;
+exports.renderPieChart = renderPieChart;
+exports.renderQQPlot = renderQQPlot;
+exports.renderROCCurve = renderROCCurve;
+exports.renderRadarChart = renderRadarChart;
+exports.renderRaincloud = renderRaincloud;
+exports.renderResidualPanel = renderResidualPanel;
+exports.renderScatterStats = renderScatterStats;
+exports.renderSparkline = renderSparkline;
+exports.renderStripPlot = renderStripPlot;
+exports.renderSunburst = renderSunburst;
+exports.renderSwarmPlot = renderSwarmPlot;
+exports.renderTreemap = renderTreemap;
+exports.renderViolinBox = renderViolinBox;
+exports.renderWaffleChart = renderWaffleChart;
+exports.renderXAxis = renderXAxis;
+exports.renderYAxis = renderYAxis;
+exports.showTooltip = showTooltip;
+exports.themeColorScale = themeColorScale;
+exports.totalBracketHeight = totalBracketHeight;
+//# sourceMappingURL=chunk-U47TCKSK.cjs.map
+//# sourceMappingURL=chunk-U47TCKSK.cjs.map

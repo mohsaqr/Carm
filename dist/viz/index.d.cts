@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
-import { j as PairwiseResult, G as GroupData, S as StatResult, k as RegressionResult, b as DescriptiveResult, f as FrequencyRow, R as RegressionCoef, L as LMMResult, i as PCAResult } from '../types-DC8rlZlK.cjs';
-import { C as CorrelationMatrix } from '../correlation-gmbnWkDH.cjs';
+import { m as PairwiseResult, G as GroupData, S as StatResult, o as RegressionResult, b as DescriptiveResult, i as FrequencyRow, R as RegressionCoef, L as LMMResult, l as PCAResult, F as FADiagnostics, d as FAResult, C as CFAResult } from '../matrix-fbbvM_BU.cjs';
+import { a as CorrelationMatrix, H as HACMerge } from '../clustering-CJM9uuM9.cjs';
 
 /**
  * Default (light) theme for Carm visualizations.
@@ -1232,6 +1232,140 @@ interface EdgeBundlingConfig {
 declare function renderEdgeBundling(container: HTMLElement, data: EdgeBundlingData, config?: EdgeBundlingConfig): void;
 
 /**
+ * Dendrogram visualization for hierarchical agglomerative clustering.
+ * Renders a U-shaped elbow dendrogram with cluster coloring, cut line,
+ * leaf labels, and hover tooltips.
+ *
+ * Uses manual coordinate computation (not d3.hierarchy) because dendrograms
+ * need continuous y-axis (merge height) and specific DFS leaf ordering,
+ * which d3.cluster/d3.tree cannot represent correctly.
+ */
+
+interface DendrogramData {
+    readonly merges: readonly HACMerge[];
+    readonly heights: readonly number[];
+    readonly dendrogramOrder: readonly number[];
+    readonly labels: readonly number[];
+    readonly k: number;
+    readonly linkage: string;
+    readonly copheneticCorrelation: number;
+    readonly observationLabels?: readonly string[];
+}
+interface DendrogramConfig {
+    readonly title?: string;
+    readonly caption?: string;
+    readonly width?: number;
+    readonly height?: number;
+    readonly theme?: CarmTheme;
+    readonly orientation?: 'vertical' | 'horizontal';
+    readonly showCutLine?: boolean;
+    readonly showLabels?: boolean;
+    readonly colorSubtrees?: boolean;
+}
+/**
+ * Render a dendrogram into the given container.
+ * @param container - HTMLElement to render into (cleared on call)
+ * @param data - merge data from runHierarchical + cutTree
+ * @param config - visual configuration
+ */
+declare function renderDendrogram(container: HTMLElement, data: DendrogramData, config?: DendrogramConfig): void;
+
+/**
+ * Factor Analysis visualizations (6 plot types).
+ * Scree with parallel analysis, loadings heatmap, CFA/SEM path diagram,
+ * communality bar chart, factor correlation matrix, fit indices dashboard.
+ *
+ * All plots follow Carm viz conventions: dynamic D3 import, CarmTheme,
+ * addSubtitle/addCaption annotations, tooltip interactions.
+ */
+
+type FAPlotType = 'scree' | 'loadings' | 'path' | 'communality' | 'factor-correlation' | 'fit-indices';
+/**
+ * Obsessive control over every visual element of the SEM path diagram.
+ * Every field has a sensible default — override only what you need.
+ */
+interface FAPathStyle {
+    readonly factorRx?: number;
+    readonly factorRy?: number;
+    readonly factorStroke?: number;
+    readonly factorFontSize?: number;
+    readonly factorFontWeight?: string;
+    readonly factorGlow?: boolean;
+    readonly factorGlowRadius?: number;
+    readonly factorHighlight?: boolean;
+    readonly itemWidth?: number;
+    readonly itemHeight?: number;
+    readonly itemRadius?: number;
+    readonly itemStroke?: number;
+    readonly itemFontSize?: number;
+    readonly itemFontWeight?: string;
+    readonly itemAccentWidth?: number;
+    readonly itemGradient?: boolean;
+    readonly errorRx?: number;
+    readonly errorRy?: number;
+    readonly errorStroke?: number;
+    readonly errorFontSize?: number;
+    readonly errorSelfLoop?: boolean;
+    readonly errorSelfLoopSize?: number;
+    readonly arrowMinWidth?: number;
+    readonly arrowMaxWidth?: number;
+    readonly arrowMinOpacity?: number;
+    readonly arrowMaxOpacity?: number;
+    readonly arrowMarkerSize?: number;
+    readonly arrowCurvature?: number;
+    readonly loadingFontSize?: number;
+    readonly loadingFontWeight?: string;
+    readonly loadingPillRadius?: number;
+    readonly loadingLabelOffset?: number;
+    readonly loadingPosition?: number;
+    readonly halo?: boolean;
+    readonly haloColor?: string;
+    readonly haloWidth?: number;
+    readonly covColor?: string;
+    readonly covMinWidth?: number;
+    readonly covMaxWidth?: number;
+    readonly covMarkerSize?: number;
+    readonly covLabelFontSize?: number;
+    readonly covNestSpacing?: number;
+    readonly errorArrowWidth?: number;
+    readonly errorArrowMarkerSize?: number;
+    readonly itemGap?: number;
+    readonly factorGroupGap?: number;
+    readonly arrowSpan?: number;
+    readonly errorSpan?: number;
+    readonly covArcReserve?: number;
+    readonly topPadding?: number;
+    readonly bottomPadding?: number;
+    readonly rightPadding?: number;
+    readonly factorColors?: readonly string[];
+    readonly fitCardWidth?: number;
+    readonly fitCardHeight?: number;
+    readonly crossLoadingThreshold?: number;
+    readonly crossLoadingDash?: string;
+    readonly crossLoadingOpacity?: number;
+    readonly showGroupBrackets?: boolean;
+    readonly groupBracketOpacity?: number;
+    readonly showShadows?: boolean;
+}
+interface FAPlotConfig {
+    readonly title?: string;
+    readonly caption?: string;
+    readonly width?: number;
+    readonly height?: number;
+    readonly theme?: CarmTheme;
+    readonly type?: FAPlotType;
+    readonly variableLabels?: readonly string[];
+    readonly factorLabels?: readonly string[];
+    readonly loadingThreshold?: number;
+    readonly showParallelAnalysis?: boolean;
+    readonly showErrorTerms?: boolean;
+    readonly showFitBox?: boolean;
+    readonly diagnostics?: FADiagnostics;
+    readonly pathStyle?: FAPathStyle;
+}
+declare function renderFAPlot(container: HTMLElement, data: FAResult | CFAResult, config?: FAPlotConfig): void;
+
+/**
  * SVG + PNG export for Carm plots.
  * Exports at publication quality (300 DPI for PNG).
  */
@@ -1240,4 +1374,4 @@ declare function exportSVG(container: HTMLElement, filename?: string): void;
 /** Export plot container as PNG at specified DPI (default 300). */
 declare function exportPNG(container: HTMLElement, filename?: string, dpi?: number): Promise<void>;
 
-export { type AlluvialConfig, type AlluvialData, type AlluvialFlow, type AlluvialNode, type ArcDiagramConfig, type ArcDiagramData, type ArcDiagramEdge, type ArcDiagramNode, type AreaChartConfig, type AreaChartData, type AreaSeries, type BarStatsConfig, type BarStatsData, type BoxplotConfig, type BoxplotData, type BoxplotGroup, type BracketConfig, type BubbleChartConfig, type BubbleChartData, type BubblePoint, type BundleEdge, type BundleNode, CARM_PALETTE, type CarmTheme, type ChordDiagramConfig, type ChordDiagramData, type CoefPlotConfig, type CorrelogramConfig, DARK_THEME, DEFAULT_THEME, type DensityConfig, type DensityData, type DensitySeries, type DistributionConfig, type DistributionName, type DistributionParams, type DotPlotConfig, type DotPlotData, type EdgeBundlingConfig, type EdgeBundlingData, type ForestPlotConfig, type ForestPlotData, type ForestPooled, type ForestStudy, type FunnelConfig, type FunnelData, type FunnelStage, type GroupedBarConfig, type GroupedBarData, type GroupedBarSeries, type HistogramConfig, type HistogramData, type LineChartConfig, type LineChartData, type LineChartSeries, type LollipopConfig, type LollipopData, type MarimekkoConfig, type MarimekkoData, type MixedPlotConfig, type MosaicPlotConfig, type MosaicPlotData, OKABE_ITO, type PCAPlotConfig, type PairPlotConfig, type PairPlotData, type ParallelCoordsConfig, type ParallelCoordsData, type ParetoConfig, type ParetoData, type PieChartConfig, type PieChartData, type PieSlice, type QQPlotConfig, type ROCCurveConfig, type ROCCurveData, type RadarChartConfig, type RadarChartData, type RaincloudConfig, type RaincloudData, type ResidualPanelConfig, type ScatterStatsConfig, type ScatterStatsData, type SparklineConfig, type SparklineData, type StripGroup, type StripPlotConfig, type StripPlotData, type SunburstConfig, type SunburstData, type SunburstNode, type SwarmPlotConfig, type SwarmPlotData, type ThemeName, type TreemapChild, type TreemapConfig, type TreemapData, type ViolinBoxConfig, type ViolinBoxData, type WaffleChartConfig, type WaffleChartData, addCaption, addNLabel, addRegressionEquation, addStatBadge, addSubtitle, applyTheme, exportPNG, exportSVG, formatTooltipRow, getColor, hideTooltip, renderAlluvialPlot, renderArcDiagram, renderAreaChart, renderBarStats, renderBoxplot, renderBrackets, renderBubbleChart, renderChordDiagram, renderCoefPlot, renderCorrelogram, renderDensity, renderDistribution, renderDotPlot, renderEdgeBundling, renderForestPlot, renderFunnel, renderGridLines, renderGroupedBar, renderHistogram, renderLineChart, renderLollipop, renderMarimekko, renderMixedPlot, renderMosaicPlot, renderPCAPlot, renderPairPlot, renderParallelCoords, renderPareto, renderPieChart, renderQQPlot, renderROCCurve, renderRadarChart, renderRaincloud, renderResidualPanel, renderScatterStats, renderSparkline, renderStripPlot, renderSunburst, renderSwarmPlot, renderTreemap, renderViolinBox, renderWaffleChart, renderXAxis, renderYAxis, showTooltip, themeColorScale, totalBracketHeight };
+export { type AlluvialConfig, type AlluvialData, type AlluvialFlow, type AlluvialNode, type ArcDiagramConfig, type ArcDiagramData, type ArcDiagramEdge, type ArcDiagramNode, type AreaChartConfig, type AreaChartData, type AreaSeries, type BarStatsConfig, type BarStatsData, type BoxplotConfig, type BoxplotData, type BoxplotGroup, type BracketConfig, type BubbleChartConfig, type BubbleChartData, type BubblePoint, type BundleEdge, type BundleNode, CARM_PALETTE, type CarmTheme, type ChordDiagramConfig, type ChordDiagramData, type CoefPlotConfig, type CorrelogramConfig, DARK_THEME, DEFAULT_THEME, type DendrogramConfig, type DendrogramData, type DensityConfig, type DensityData, type DensitySeries, type DistributionConfig, type DistributionName, type DistributionParams, type DotPlotConfig, type DotPlotData, type EdgeBundlingConfig, type EdgeBundlingData, type FAPathStyle, type FAPlotConfig, type FAPlotType, type ForestPlotConfig, type ForestPlotData, type ForestPooled, type ForestStudy, type FunnelConfig, type FunnelData, type FunnelStage, type GroupedBarConfig, type GroupedBarData, type GroupedBarSeries, type HistogramConfig, type HistogramData, type LineChartConfig, type LineChartData, type LineChartSeries, type LollipopConfig, type LollipopData, type MarimekkoConfig, type MarimekkoData, type MixedPlotConfig, type MosaicPlotConfig, type MosaicPlotData, OKABE_ITO, type PCAPlotConfig, type PairPlotConfig, type PairPlotData, type ParallelCoordsConfig, type ParallelCoordsData, type ParetoConfig, type ParetoData, type PieChartConfig, type PieChartData, type PieSlice, type QQPlotConfig, type ROCCurveConfig, type ROCCurveData, type RadarChartConfig, type RadarChartData, type RaincloudConfig, type RaincloudData, type ResidualPanelConfig, type ScatterStatsConfig, type ScatterStatsData, type SparklineConfig, type SparklineData, type StripGroup, type StripPlotConfig, type StripPlotData, type SunburstConfig, type SunburstData, type SunburstNode, type SwarmPlotConfig, type SwarmPlotData, type ThemeName, type TreemapChild, type TreemapConfig, type TreemapData, type ViolinBoxConfig, type ViolinBoxData, type WaffleChartConfig, type WaffleChartData, addCaption, addNLabel, addRegressionEquation, addStatBadge, addSubtitle, applyTheme, exportPNG, exportSVG, formatTooltipRow, getColor, hideTooltip, renderAlluvialPlot, renderArcDiagram, renderAreaChart, renderBarStats, renderBoxplot, renderBrackets, renderBubbleChart, renderChordDiagram, renderCoefPlot, renderCorrelogram, renderDendrogram, renderDensity, renderDistribution, renderDotPlot, renderEdgeBundling, renderFAPlot, renderForestPlot, renderFunnel, renderGridLines, renderGroupedBar, renderHistogram, renderLineChart, renderLollipop, renderMarimekko, renderMixedPlot, renderMosaicPlot, renderPCAPlot, renderPairPlot, renderParallelCoords, renderPareto, renderPieChart, renderQQPlot, renderROCCurve, renderRadarChart, renderRaincloud, renderResidualPanel, renderScatterStats, renderSparkline, renderStripPlot, renderSunburst, renderSwarmPlot, renderTreemap, renderViolinBox, renderWaffleChart, renderXAxis, renderYAxis, showTooltip, themeColorScale, totalBracketHeight };
