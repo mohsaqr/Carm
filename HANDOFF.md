@@ -1,47 +1,41 @@
 # Session Handoff — 2026-02-26
 
 ## Completed
-- **Random starts for GPFoblq rotation** — matches lavaan's GPA×30 strategy
-  - `randomOrthogonalMatrix(k, rng)`: Haar-distributed via Modified Gram-Schmidt QR + sign correction
-  - `gpfOblq()`: now accepts optional `Tinit` and returns criterion value `f`
-  - `gpfOblqWithRandomStarts()`: orchestrator — T=I first, then N-1 random starts, picks lowest f
-  - `applyRotation()`: delegates oblique methods through multi-start when `randomStarts > 1`
-  - `runEFA()`: reads `randomStarts` from `EFAOptions`, threads to `applyRotation`
-- **Default `randomStarts=50`** — empirically validated on two real datasets:
-  - rraw dataset (525×31, 5 factors): 50 starts achieves MAE=0.000001 vs lavaan (perfect match)
-  - Teacher burnout (876×23, 4 factors): 10 starts sufficient; 50 starts gives extra safety margin
-  - Timing: 50 starts ~3s, 100 starts ~4.6s, 1000 starts ~31s (linear scaling)
-- **Full cross-validation**: Promax 100/100, Geomin 100/100, Real dataset 6/6, Diagnostics 100/100
-- **Comprehensive technical reports** (validation/ folder, NEVER delete):
-  - `validation/FA-TECHNICAL-REPORT.md` (1,085 lines): Complete EFA/CFA coverage — ML/PAF extraction, all 6 rotations, GPFoblq engine, random starts, CFA, fit indices, diagnostics, numerical infrastructure, cross-validation results, loading comparisons, API reference, 18 references
-  - `validation/RANDOM-STARTS-REPORT.md` (692 lines): Focused random starts report — Haar matrices, multi-start GPFoblq, empirical validation, convergence analysis, timing benchmarks
-  - `validation/GMM-TECHNICAL-REPORT.md`: GMM/clustering technical report — EM algorithm, covariance models, K-Means++, numerical tricks, cross-validation against R mclust
-- **All committed and pushed to main**:
-  - `fa3c31b` — default randomStarts=50, cross-validation passing
-  - `a2141ac` — FA technical reports
-  - `13ff4a9` — GMM/clustering technical report (HEAD)
+- **Comprehensive technical reports for all Carm modules** — 5 reports written/extended in parallel:
+  1. `validation/FA-TECHNICAL-REPORT.md` (1,629 lines, +543): Extended with Section 20 (20 engineering decisions) and Section 21 (6 mathematical tricks)
+  2. `validation/CORE-MATH-TECHNICAL-REPORT.md` (1,566 lines, new): Covers `core/math.ts` + `core/matrix.ts` — special functions, distributions, Matrix class, 15 eng decisions, 8 math tricks
+  3. `validation/DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md` (1,338 lines, new): Covers `descriptive.ts`, `comparison.ts`, `effect-size.ts`, `frequency.ts`, `post-hoc.ts` — 15 eng decisions, 5 math tricks
+  4. `validation/CORRELATION-REGRESSION-TECHNICAL-REPORT.md` (1,194 lines, new): Covers `correlation.ts`, `regression.ts`, `pca.ts` — 12 eng decisions, 4 math tricks
+  5. `validation/MIXED-MODEL-TECHNICAL-REPORT.md` (925 lines, new): Covers `mixed.ts` — profiled REML, Woodbury identity, 10 eng decisions, 4 math tricks
+- **Total**: 8,188 lines across 6 reports (including existing GMM report), 72 engineering decisions, 27 mathematical tricks
+- **Committed and pushed**: `d8cb3bb` on main
 
 ## Current State
-- Branch: `main` at `13ff4a9`
+- Branch: `main` at `d8cb3bb`
 - `npx tsc --noEmit`: 0 errors
 - `npx tsup`: Build success
 - `npx vitest run`: 496/496 pass
-- Cross-validation: 100/100 promax, 100/100 geomin, real dataset pass, diagnostics pass
-- All technical reports committed to validation/
-- Unstaged changes: CHANGES.md, HANDOFF.md, LEARNINGS.md (session documentation updates)
+- All 6 technical reports committed to `validation/`:
+  - `FA-TECHNICAL-REPORT.md` (1,629 lines)
+  - `GMM-TECHNICAL-REPORT.md` (1,536 lines)
+  - `CORE-MATH-TECHNICAL-REPORT.md` (1,566 lines)
+  - `DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md` (1,338 lines)
+  - `CORRELATION-REGRESSION-TECHNICAL-REPORT.md` (1,194 lines)
+  - `MIXED-MODEL-TECHNICAL-REPORT.md` (925 lines)
 
 ## Key Decisions
-- Default randomStarts=50 (was 100, reduced after empirical testing showed 50 sufficient for both datasets)
-- Start 0 is always T=I (backward compatible, deterministic)
-- Random orthogonal matrices: Haar distribution via QR of N(0,1) matrix + sign correction
-- Sign correction: Q[:,j] *= sign(R[j][j]) — standard QR convention
-- When Tinit != I, compute initial L = A * inv(T)' (not just copy A)
+- Every report follows the GMM template: header → algorithm sections → API reference → references → engineering decisions → mathematical tricks → appendices
+- Engineering decisions follow the pattern: Problem → Root cause → Solution → Why this over alternatives → Result
+- Mathematical tricks follow: Why needed → The trick → Implementation → Impact
+- All line numbers verified against actual source code at time of writing
+- Reports written in parallel by 5 agents for efficiency
 
 ## Open Issues
-- Oblimin/quartimin cross-validation against R not yet done (uses same GPFoblq, should work)
+- Oblimin/quartimin cross-validation against R not yet done
 - CFA cross-validation against lavaan not yet done
 - No vitest unit tests for FA (only R cross-validation scripts in validation/)
-- `validation/FA-TECHNICAL-REPORT.html` is untracked (rendered version of the MD report)
+- `validation/FA-TECHNICAL-REPORT.html` and other HTML files are untracked rendered versions
+- Line numbers in reports may drift as source code evolves — note commit hash `d8cb3bb`
 
 ## Next Steps
 1. Write vitest tests encoding R-verified expected values for FA
@@ -57,4 +51,4 @@
 - Type check: `npx tsc --noEmit`
 - Tests: `npx vitest run`
 - Validation: `npx tsx validation/ts-harness/fa-full-report.ts`
-- Reports: `validation/FA-TECHNICAL-REPORT.md`, `validation/RANDOM-STARTS-REPORT.md`, `validation/GMM-TECHNICAL-REPORT.md`
+- Reports: `validation/*.md` (6 technical reports)

@@ -1,3 +1,12 @@
+### 2026-02-26 — Comprehensive technical reports for all Carm modules
+- `validation/FA-TECHNICAL-REPORT.md` (+543 lines): Extended with Section 20 (20 engineering decisions: two-phase ML, cosine-annealed LR, death penalty, outer Kaiser normalization, varimax SVD via eigen, log-space geomin, GPFoblq always-accept, Haar matrices, CFA numerical Hessian, Bartlett correction, TLI clamping, oblique communalities, Float64Array, Heywood clamping, sign convention, ML init, Velicer MAP guard, RMSEA CI, CFA constraints, 50 random starts) and Section 21 (6 mathematical tricks: eigen for polar factor, concentrated ML, promax OLS, anti-image KMO, Cholesky logdet, modified Gram-Schmidt)
+- `validation/CORE-MATH-TECHNICAL-REPORT.md` (1,566 lines, new): Covers `core/math.ts` + `core/matrix.ts` — special functions (logGamma, incompleteBeta, incompleteGamma, erf), distributions (normal, t, F, chi-square), Nelder-Mead, p-adjustment, Matrix class (Cholesky, Gauss-Jordan, Jacobi SVD/eigen), 15 engineering decisions, 8 mathematical tricks
+- `validation/DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md` (1,338 lines, new): Covers `descriptive.ts`, `comparison.ts`, `effect-size.ts`, `frequency.ts`, `post-hoc.ts` — Shapiro-Wilk, t-tests, ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis, Friedman, effect sizes, chi-square, Fisher's exact, Tukey/Games-Howell/Dunn's, 15 engineering decisions, 5 mathematical tricks
+- `validation/CORRELATION-REGRESSION-TECHNICAL-REPORT.md` (1,194 lines, new): Covers `correlation.ts`, `regression.ts`, `pca.ts` — Pearson/Spearman/Kendall, partial correlation, OLS engine, logistic IRLS, diagnostics, PCA via SVD, varimax, 12 engineering decisions, 4 mathematical tricks
+- `validation/MIXED-MODEL-TECHNICAL-REPORT.md` (925 lines, new): Covers `mixed.ts` — profiled REML, Woodbury identity, matrix determinant lemma, multi-start Nelder-Mead, GLS, BLUPs, ICC, Satterthwaite df, 10 engineering decisions, 4 mathematical tricks
+- Total: 8,188 lines across 6 reports, 72 engineering decisions, 27 mathematical tricks
+- Committed as `d8cb3bb` on main
+
 ### 2026-02-26 — GMM/Clustering Technical Report
 - `validation/GMM-TECHNICAL-REPORT.md`: Comprehensive report on GMM/clustering implementation — EM algorithm, 6 covariance models, K-Means++ init, log-space tricks, cross-validation against R mclust, LCA/LTA/KMeans coverage
 - Committed as `13ff4a9` on main
