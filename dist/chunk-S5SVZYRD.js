@@ -4030,7 +4030,7 @@ function runEFA(data, options) {
   const maxIter = options?.maxIter ?? 1e3;
   const tol = options?.tol ?? 1e-6;
   const seed = options?.seed ?? 42;
-  const randomStarts = options?.randomStarts ?? 100;
+  const randomStarts = options?.randomStarts ?? 50;
   const R = computeCorrelationMatrix(data, n, d);
   const eigenvalues = R.eigen().values;
   let nFactors = options?.nFactors;
@@ -4202,5 +4202,5 @@ function runCFA(data, model, options) {
 }
 
 export { analyze, chiSquareTest, ciMean, cohensD, cohensDCI, cohensDPaired, computeBLUPs, contingencyTable, correlationMatrix, cutTree, cutTreeHeight, describe, detectFieldType, dunnTest, etaSquared, etaSquaredKW, euclideanDistMatrix, findBestGMM, fisherExactTest, fitGMM, fitGMMRange, fitKMeansRange, fitLCA, fitLTA, frequencyTable, friedmanTest, gamesHowell, goodnessOfFit, hedgesG, inverseTransform, kDistancePlot, kendallTau, kruskalWallis, kurtosis, linearRegression, logisticRegression, mannWhitneyU, multipleRegression, omegaSquared, oneWayANOVA, partialCorrelation, pearsonCorrelation, phiCoefficient, polynomialRegression, predictGMM, predictKMeans, preprocessData, rankBiserial, rankBiserialWilcoxon, regressionDiagnostics, runCFA, runDBSCAN, runEFA, runFADiagnostics, runHierarchical, runKMeans, runLMM, runPCA, screeData, shapiroWilk, silhouetteScores, skewness, spearmanCorrelation, tTestIndependent, tTestPaired, trimmedMean, tukeyHSD, varimaxRotation, wilcoxonSignedRank };
-//# sourceMappingURL=chunk-7DHEWXJO.js.map
-//# sourceMappingURL=chunk-7DHEWXJO.js.map
+//# sourceMappingURL=chunk-S5SVZYRD.js.map
+//# sourceMappingURL=chunk-S5SVZYRD.js.map

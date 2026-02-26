@@ -154,7 +154,7 @@ export interface EFAOptions {
   readonly seed?: number                   // default: 42 (for parallel analysis)
   readonly maxIter?: number                // default: 1000
   readonly tol?: number                    // default: 1e-6
-  readonly randomStarts?: number           // default: 100
+  readonly randomStarts?: number           // default: 50
   readonly variableNames?: readonly string[]
 }
 
@@ -1695,7 +1695,7 @@ export function runEFA(
   const maxIter = options?.maxIter ?? 1000
   const tol = options?.tol ?? 1e-6
   const seed = options?.seed ?? 42
-  const randomStarts = options?.randomStarts ?? 100
+  const randomStarts = options?.randomStarts ?? 50
 
   const R = computeCorrelationMatrix(data, n, d)
   const eigenvalues = R.eigen().values  // sorted descending

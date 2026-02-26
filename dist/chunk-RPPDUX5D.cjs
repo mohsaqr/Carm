@@ -4032,7 +4032,7 @@ function runEFA(data, options) {
   const maxIter = options?.maxIter ?? 1e3;
   const tol = options?.tol ?? 1e-6;
   const seed = options?.seed ?? 42;
-  const randomStarts = options?.randomStarts ?? 100;
+  const randomStarts = options?.randomStarts ?? 50;
   const R = computeCorrelationMatrix(data, n, d);
   const eigenvalues = R.eigen().values;
   let nFactors = options?.nFactors;
@@ -4272,5 +4272,5 @@ exports.trimmedMean = trimmedMean;
 exports.tukeyHSD = tukeyHSD;
 exports.varimaxRotation = varimaxRotation;
 exports.wilcoxonSignedRank = wilcoxonSignedRank;
-//# sourceMappingURL=chunk-DMWF3UK6.cjs.map
-//# sourceMappingURL=chunk-DMWF3UK6.cjs.map
+//# sourceMappingURL=chunk-RPPDUX5D.cjs.map
+//# sourceMappingURL=chunk-RPPDUX5D.cjs.map
