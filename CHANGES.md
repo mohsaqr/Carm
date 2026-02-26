@@ -1,3 +1,53 @@
+### 2026-02-26 — GMM/Clustering Technical Report
+- `validation/GMM-TECHNICAL-REPORT.md`: Comprehensive report on GMM/clustering implementation — EM algorithm, 6 covariance models, K-Means++ init, log-space tricks, cross-validation against R mclust, LCA/LTA/KMeans coverage
+- Committed as `13ff4a9` on main
+
+### 2026-02-26 — FA Technical Reports (validation folder)
+- `validation/FA-TECHNICAL-REPORT.md`: Comprehensive 1,085-line report covering all of Carm's factor analysis — ML/PAF extraction, all 6 rotations, GPFoblq engine, random starts, CFA, fit indices, diagnostics, numerical infrastructure, cross-validation methodology/results, detailed loading comparisons, API reference, 18 references
+- `validation/RANDOM-STARTS-REPORT.md`: Focused 692-line report on random starts implementation — Haar-distributed orthogonal matrices, multi-start GPFoblq, empirical validation on two real datasets, convergence analysis, timing benchmarks
+- Committed as `a2141ac` on main
+
+### 2026-02-26 — Default randomStarts changed to 50
+- `src/stats/factor-analysis.ts`: Changed default from 1→100→50, empirically validated on rraw (525×31) and Teacher Burnout (876×23) datasets
+- 50 starts achieves perfect lavaan match (MAE=0.000001) on both datasets
+- Timing: ~3s for 50 starts (linear scaling)
+- Cross-validation: Promax 100/100, Geomin 100/100, Real 6/6, Diagnostics 100/100
+- Committed as `fa3c31b` on main
+
+### 2026-02-26 — Random starts for GPFoblq rotation + lavaan cross-validation
+- `src/stats/factor-analysis.ts`:
+  - Added `randomStarts?: number` to `EFAOptions` (default: 1, backward compatible)
+  - Added `randomOrthogonalMatrix(k, rng)` — Haar-distributed via Modified Gram-Schmidt QR with sign correction
+  - Modified `gpfOblq()` to accept optional `Tinit` parameter and return criterion value `f`
+  - Added `gpfOblqWithRandomStarts()` — runs T=I first, then randomStarts-1 random orthogonal starts, picks lowest criterion
+  - Modified `applyRotation()` to accept `randomStarts` and `seed`, delegates to multi-start for oblique methods
+  - Threaded `randomStarts` through `runEFA()`
+- `tmp/teacher-burnout-lavaan-ref.R`: generates high-precision lavaan reference (ML, geomin, GPA×30) on n=438 split
+- `tmp/teacher-burnout-random-starts.ts`: full comparison of randomStarts=1 vs 30 against lavaan
+- `tmp/teacher-burnout-lavaan-ml-ref.json`: lavaan reference loadings (eps=0.001, 10 decimal precision)
+- `tmp/teacher-burnout-lavaan-ml-ref-d01.json`: lavaan reference loadings (eps=0.01)
+- Results: eps=0.001 MAE 0.089→0.000001 (100% reduction); eps=0.01 already matches (MAE=0.000003)
+- Tests: tsc clean, 496/496 vitest pass, 100/100 promax + 100/100 geomin cross-validation pass, determinism verified
+
+### 2026-02-26 — Teacher burnout dataset cross-validation
+- tmp/teacher-burnout-carm.ts: Carm EFA on 876×23 teacher burnout dataset (geomin delta=0.001 and 0.01)
+- tmp/teacher-burnout-psych.R: R reference generation (GPArotation + psych + promax)
+- tmp/teacher-burnout-compare.ts: Precise MAE comparison — Carm matches R to 0.000002 MAE
+- Result: Carm exactly matches R/GPArotation. lavaan differs due to 30 random GPA starts (not a bug).
+
+### 2026-02-26 — Geomin rotation: 100/100 cross-validation pass
+
+- `src/stats/factor-analysis.ts`:
+  - **GPFoblq algorithm**: Implemented general oblique gradient projection matching R's `GPArotation::GPFoblq` exactly. Two critical bugs found in initial implementation:
+    1. Gradient used `A` (unrotated) + `inv(T')` instead of `L` (rotated) + `T^{-1}`. Only equivalent at T=I (first iteration), diverges after.
+    2. Algorithm only updated T when Armijo condition was met. R always takes the last tested step.
+  - **Geomin criterion**: `f = Σ exp((1/k) Σ log(L² + δ))` with gradient matching R's `vgQ.geomin`.
+  - **Oblimin criterion**: Also routed through GPFoblq (replacing old simplified implementation).
+  - **Canonical sign convention**: Added to both `extractML` and `extractPAF` — ensures largest-absolute-value element in each factor column is positive, matching LAPACK's dsyev convention.
+  - Added `'geomin'` rotation option + `geominDelta` parameter (default 0.01).
+- **Cross-validation**: 100/100 synthetic datasets pass for geomin (MAE=0.0000). Real dataset (525×31) passes for k=3,5.
+- **Promax**: Still passes 100/100 (no regression).
+
 ### 2026-02-26 — FA cross-validation: 100/100 pass + real dataset verified
 
 - `src/stats/factor-analysis.ts`:

@@ -1,4 +1,43 @@
-## 2026-02-26 (Factor Analysis — Cross-validation fixes)
+## 2026-02-26 (Factor Analysis — Geomin rotation + GPFoblq)
+
+### Random starts for GPFoblq (lavaan GPA×30 strategy)
+- lavaan uses 30 random orthogonal starting matrices (Haar-distributed via QR of N(0,1) matrix with sign correction), picks the solution with lowest criterion value. GPArotation uses single start from T=I.
+- Carm now supports `randomStarts` option (default: 50). With 50 random starts, it matches lavaan's GPA×30 behavior on all tested datasets. Start 0 is always T=I (deterministic).
+- Random orthogonal matrix generation: fill k×k with N(0,1), Modified Gram-Schmidt QR, then sign-correct Q columns by sign(R diagonal). Matches both `GPArotation::Random.Start()` and `lavaan::lav_matrix_rotate_gen()`.
+- When Tinit ≠ I, initial L = A × inv(T)' (not just A). The gradient formula is the same general form.
+- Start 0 is always T=I (deterministic, reproducible). Random starts use the PRNG seeded from options.seed.
+
+### Teacher burnout cross-validation: randomStarts=30 achieves exact lavaan match
+- eps=0.001 (lavaan default): single start MAE=0.089, maxErr=0.446, Tucker's φ=0.903 → randomStarts=30 MAE=0.000001, maxErr=0.000005, φ=1.000000. 100% MAE reduction, all 115 cells within 0.05.
+- eps=0.01: single start already matches lavaan perfectly (MAE=0.000003). Criterion surface has a single basin — no random starts needed.
+- Performance: single start ~500ms, 30 starts ~1100ms (2× slower, still fast for 438×23 dataset).
+- The local optimum issue with eps=0.001 is concentrated on EE and DE items (EE MAE=0.199, DE MAE=0.097 with single start).
+- `lavInspect(fit, "std")$lambda` gives standardized loadings matching the summary output. `lavInspect(fit, "est")$lambda` gives unstandardized — different values.
+
+### lavaan vs GPArotation geomin: different optimization strategies
+- lavaan uses GPA(30) — 30 random rotation starts, picks global optimum. GPArotation (and Carm with randomStarts=1) use single start from T=I. With randomStarts=30, Carm now matches lavaan exactly (MAE < 1e-5 on teacher burnout 438×23). lavaan's epsilon=0.001 defaults also differ from GPArotation's delta=0.01.
+
+### geomin delta=0.001 convergence
+- With delta=0.001 (lavaan default), GPFoblq may not converge in 1000 iterations on complex datasets (23 vars, 5 factors). delta=0.01 converges reliably. Both produce valid solutions.
+
+### GPFoblq gradient uses L (rotated), not A (unrotated)
+- R's `GPArotation::GPFoblq` computes gradient as `G = -t(t(L) %*% VgQ$Gq %*% solve(Tmat))` = `-(L' × Gq × T^{-1})'`.
+- Note: uses **L** (current rotated loadings) and **T^{-1}**, NOT A (original unrotated) and inv(T').
+- The two formulas are only equivalent when T = I (first iteration). After step 1, using A gives the wrong gradient direction.
+- This caused 70/100 geomin cross-validation failures (all k≥3 cases) despite our unrotated loadings matching R 100/100.
+- The initial gradient formula (using A and solve(t(Tmat))) in R is a shortcut valid only at T=I. The loop formula (using L and solve(Tmat)) is the correct general form.
+
+### GPFoblq always takes a step after line search
+- R's GPFoblq updates `Tmat <- Tmatt; f <- VgQt$f; G <- ...` AFTER the inner line search loop, regardless of whether the Armijo condition was satisfied.
+- Our initial implementation only updated inside the `if (improvement > ...)` block, causing the algorithm to stall when no step size satisfied Armijo.
+- Fix: declare Tmatt/Lnew/vgQnew outside the inner loop, always update after it.
+
+### Canonical sign convention for eigenvector determinism
+- After ML or PAF extraction, for each factor column, ensure the element with the largest absolute value is positive.
+- Matches LAPACK's dsyev convention used by R. Essential for non-rotation-invariant methods (geomin, oblimin) where the starting orientation determines which local optimum is found.
+- Not needed for varimax/promax (rotation-invariant), but harmless to apply universally.
+
+## 2026-02-26 (Factor Analysis — Promax cross-validation fixes)
 
 ### psych::fa promax rotation uses outer Kaiser normalization
 - `psych::fa(rotate="promax")` does NOT call `stats::promax()` or `psych::Promax()` directly. It dispatches via `psych::kaiser(loadings, rotate="Promax")`, which adds outer Kaiser normalization:
