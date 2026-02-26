@@ -524,10 +524,12 @@ declare function inverseTransform(data: readonly (readonly number[])[], params: 
 interface EFAOptions {
     readonly nFactors?: number;
     readonly extraction?: 'paf' | 'ml';
-    readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'none';
+    readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'none';
+    readonly geominDelta?: number;
     readonly seed?: number;
     readonly maxIter?: number;
     readonly tol?: number;
+    readonly randomStarts?: number;
     readonly variableNames?: readonly string[];
 }
 interface CFAOptions {

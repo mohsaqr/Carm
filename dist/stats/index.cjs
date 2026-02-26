@@ -1,6 +1,6 @@
 'use strict';
 
-var chunkSSCGMSJT_cjs = require('../chunk-SSCGMSJT.cjs');
+var chunkDMWF3UK6_cjs = require('../chunk-DMWF3UK6.cjs');
 require('../chunk-FSSEZIKV.cjs');
 var chunkMX4OLB7V_cjs = require('../chunk-MX4OLB7V.cjs');
 
@@ -8,279 +8,279 @@ var chunkMX4OLB7V_cjs = require('../chunk-MX4OLB7V.cjs');
 
 Object.defineProperty(exports, "analyze", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.analyze; }
+  get: function () { return chunkDMWF3UK6_cjs.analyze; }
 });
 Object.defineProperty(exports, "chiSquareTest", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.chiSquareTest; }
+  get: function () { return chunkDMWF3UK6_cjs.chiSquareTest; }
 });
 Object.defineProperty(exports, "ciMean", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.ciMean; }
+  get: function () { return chunkDMWF3UK6_cjs.ciMean; }
 });
 Object.defineProperty(exports, "cohensD", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.cohensD; }
+  get: function () { return chunkDMWF3UK6_cjs.cohensD; }
 });
 Object.defineProperty(exports, "cohensDCI", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.cohensDCI; }
+  get: function () { return chunkDMWF3UK6_cjs.cohensDCI; }
 });
 Object.defineProperty(exports, "cohensDPaired", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.cohensDPaired; }
+  get: function () { return chunkDMWF3UK6_cjs.cohensDPaired; }
 });
 Object.defineProperty(exports, "computeBLUPs", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.computeBLUPs; }
+  get: function () { return chunkDMWF3UK6_cjs.computeBLUPs; }
 });
 Object.defineProperty(exports, "contingencyTable", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.contingencyTable; }
+  get: function () { return chunkDMWF3UK6_cjs.contingencyTable; }
 });
 Object.defineProperty(exports, "correlationMatrix", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.correlationMatrix; }
+  get: function () { return chunkDMWF3UK6_cjs.correlationMatrix; }
 });
 Object.defineProperty(exports, "cutTree", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.cutTree; }
+  get: function () { return chunkDMWF3UK6_cjs.cutTree; }
 });
 Object.defineProperty(exports, "cutTreeHeight", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.cutTreeHeight; }
+  get: function () { return chunkDMWF3UK6_cjs.cutTreeHeight; }
 });
 Object.defineProperty(exports, "describe", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.describe; }
+  get: function () { return chunkDMWF3UK6_cjs.describe; }
 });
 Object.defineProperty(exports, "detectFieldType", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.detectFieldType; }
+  get: function () { return chunkDMWF3UK6_cjs.detectFieldType; }
 });
 Object.defineProperty(exports, "dunnTest", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.dunnTest; }
+  get: function () { return chunkDMWF3UK6_cjs.dunnTest; }
 });
 Object.defineProperty(exports, "etaSquared", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.etaSquared; }
+  get: function () { return chunkDMWF3UK6_cjs.etaSquared; }
 });
 Object.defineProperty(exports, "etaSquaredKW", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.etaSquaredKW; }
+  get: function () { return chunkDMWF3UK6_cjs.etaSquaredKW; }
 });
 Object.defineProperty(exports, "euclideanDistMatrix", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.euclideanDistMatrix; }
+  get: function () { return chunkDMWF3UK6_cjs.euclideanDistMatrix; }
 });
 Object.defineProperty(exports, "findBestGMM", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.findBestGMM; }
+  get: function () { return chunkDMWF3UK6_cjs.findBestGMM; }
 });
 Object.defineProperty(exports, "fisherExactTest", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fisherExactTest; }
+  get: function () { return chunkDMWF3UK6_cjs.fisherExactTest; }
 });
 Object.defineProperty(exports, "fitGMM", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fitGMM; }
+  get: function () { return chunkDMWF3UK6_cjs.fitGMM; }
 });
 Object.defineProperty(exports, "fitGMMRange", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fitGMMRange; }
+  get: function () { return chunkDMWF3UK6_cjs.fitGMMRange; }
 });
 Object.defineProperty(exports, "fitKMeansRange", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fitKMeansRange; }
+  get: function () { return chunkDMWF3UK6_cjs.fitKMeansRange; }
 });
 Object.defineProperty(exports, "fitLCA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fitLCA; }
+  get: function () { return chunkDMWF3UK6_cjs.fitLCA; }
 });
 Object.defineProperty(exports, "fitLTA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.fitLTA; }
+  get: function () { return chunkDMWF3UK6_cjs.fitLTA; }
 });
 Object.defineProperty(exports, "frequencyTable", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.frequencyTable; }
+  get: function () { return chunkDMWF3UK6_cjs.frequencyTable; }
 });
 Object.defineProperty(exports, "friedmanTest", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.friedmanTest; }
+  get: function () { return chunkDMWF3UK6_cjs.friedmanTest; }
 });
 Object.defineProperty(exports, "gamesHowell", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.gamesHowell; }
+  get: function () { return chunkDMWF3UK6_cjs.gamesHowell; }
 });
 Object.defineProperty(exports, "goodnessOfFit", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.goodnessOfFit; }
+  get: function () { return chunkDMWF3UK6_cjs.goodnessOfFit; }
 });
 Object.defineProperty(exports, "hedgesG", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.hedgesG; }
+  get: function () { return chunkDMWF3UK6_cjs.hedgesG; }
 });
 Object.defineProperty(exports, "inverseTransform", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.inverseTransform; }
+  get: function () { return chunkDMWF3UK6_cjs.inverseTransform; }
 });
 Object.defineProperty(exports, "kDistancePlot", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.kDistancePlot; }
+  get: function () { return chunkDMWF3UK6_cjs.kDistancePlot; }
 });
 Object.defineProperty(exports, "kendallTau", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.kendallTau; }
+  get: function () { return chunkDMWF3UK6_cjs.kendallTau; }
 });
 Object.defineProperty(exports, "kruskalWallis", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.kruskalWallis; }
+  get: function () { return chunkDMWF3UK6_cjs.kruskalWallis; }
 });
 Object.defineProperty(exports, "kurtosis", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.kurtosis; }
+  get: function () { return chunkDMWF3UK6_cjs.kurtosis; }
 });
 Object.defineProperty(exports, "linearRegression", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.linearRegression; }
+  get: function () { return chunkDMWF3UK6_cjs.linearRegression; }
 });
 Object.defineProperty(exports, "logisticRegression", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.logisticRegression; }
+  get: function () { return chunkDMWF3UK6_cjs.logisticRegression; }
 });
 Object.defineProperty(exports, "mannWhitneyU", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.mannWhitneyU; }
+  get: function () { return chunkDMWF3UK6_cjs.mannWhitneyU; }
 });
 Object.defineProperty(exports, "multipleRegression", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.multipleRegression; }
+  get: function () { return chunkDMWF3UK6_cjs.multipleRegression; }
 });
 Object.defineProperty(exports, "omegaSquared", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.omegaSquared; }
+  get: function () { return chunkDMWF3UK6_cjs.omegaSquared; }
 });
 Object.defineProperty(exports, "oneWayANOVA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.oneWayANOVA; }
+  get: function () { return chunkDMWF3UK6_cjs.oneWayANOVA; }
 });
 Object.defineProperty(exports, "partialCorrelation", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.partialCorrelation; }
+  get: function () { return chunkDMWF3UK6_cjs.partialCorrelation; }
 });
 Object.defineProperty(exports, "pearsonCorrelation", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.pearsonCorrelation; }
+  get: function () { return chunkDMWF3UK6_cjs.pearsonCorrelation; }
 });
 Object.defineProperty(exports, "phiCoefficient", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.phiCoefficient; }
+  get: function () { return chunkDMWF3UK6_cjs.phiCoefficient; }
 });
 Object.defineProperty(exports, "polynomialRegression", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.polynomialRegression; }
+  get: function () { return chunkDMWF3UK6_cjs.polynomialRegression; }
 });
 Object.defineProperty(exports, "predictGMM", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.predictGMM; }
+  get: function () { return chunkDMWF3UK6_cjs.predictGMM; }
 });
 Object.defineProperty(exports, "predictKMeans", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.predictKMeans; }
+  get: function () { return chunkDMWF3UK6_cjs.predictKMeans; }
 });
 Object.defineProperty(exports, "preprocessData", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.preprocessData; }
+  get: function () { return chunkDMWF3UK6_cjs.preprocessData; }
 });
 Object.defineProperty(exports, "rankBiserial", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.rankBiserial; }
+  get: function () { return chunkDMWF3UK6_cjs.rankBiserial; }
 });
 Object.defineProperty(exports, "rankBiserialWilcoxon", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.rankBiserialWilcoxon; }
+  get: function () { return chunkDMWF3UK6_cjs.rankBiserialWilcoxon; }
 });
 Object.defineProperty(exports, "regressionDiagnostics", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.regressionDiagnostics; }
+  get: function () { return chunkDMWF3UK6_cjs.regressionDiagnostics; }
 });
 Object.defineProperty(exports, "runCFA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runCFA; }
+  get: function () { return chunkDMWF3UK6_cjs.runCFA; }
 });
 Object.defineProperty(exports, "runDBSCAN", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runDBSCAN; }
+  get: function () { return chunkDMWF3UK6_cjs.runDBSCAN; }
 });
 Object.defineProperty(exports, "runEFA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runEFA; }
+  get: function () { return chunkDMWF3UK6_cjs.runEFA; }
 });
 Object.defineProperty(exports, "runFADiagnostics", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runFADiagnostics; }
+  get: function () { return chunkDMWF3UK6_cjs.runFADiagnostics; }
 });
 Object.defineProperty(exports, "runHierarchical", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runHierarchical; }
+  get: function () { return chunkDMWF3UK6_cjs.runHierarchical; }
 });
 Object.defineProperty(exports, "runKMeans", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runKMeans; }
+  get: function () { return chunkDMWF3UK6_cjs.runKMeans; }
 });
 Object.defineProperty(exports, "runLMM", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runLMM; }
+  get: function () { return chunkDMWF3UK6_cjs.runLMM; }
 });
 Object.defineProperty(exports, "runPCA", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.runPCA; }
+  get: function () { return chunkDMWF3UK6_cjs.runPCA; }
 });
 Object.defineProperty(exports, "screeData", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.screeData; }
+  get: function () { return chunkDMWF3UK6_cjs.screeData; }
 });
 Object.defineProperty(exports, "shapiroWilk", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.shapiroWilk; }
+  get: function () { return chunkDMWF3UK6_cjs.shapiroWilk; }
 });
 Object.defineProperty(exports, "silhouetteScores", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.silhouetteScores; }
+  get: function () { return chunkDMWF3UK6_cjs.silhouetteScores; }
 });
 Object.defineProperty(exports, "skewness", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.skewness; }
+  get: function () { return chunkDMWF3UK6_cjs.skewness; }
 });
 Object.defineProperty(exports, "spearmanCorrelation", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.spearmanCorrelation; }
+  get: function () { return chunkDMWF3UK6_cjs.spearmanCorrelation; }
 });
 Object.defineProperty(exports, "tTestIndependent", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.tTestIndependent; }
+  get: function () { return chunkDMWF3UK6_cjs.tTestIndependent; }
 });
 Object.defineProperty(exports, "tTestPaired", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.tTestPaired; }
+  get: function () { return chunkDMWF3UK6_cjs.tTestPaired; }
 });
 Object.defineProperty(exports, "trimmedMean", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.trimmedMean; }
+  get: function () { return chunkDMWF3UK6_cjs.trimmedMean; }
 });
 Object.defineProperty(exports, "tukeyHSD", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.tukeyHSD; }
+  get: function () { return chunkDMWF3UK6_cjs.tukeyHSD; }
 });
 Object.defineProperty(exports, "varimaxRotation", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.varimaxRotation; }
+  get: function () { return chunkDMWF3UK6_cjs.varimaxRotation; }
 });
 Object.defineProperty(exports, "wilcoxonSignedRank", {
   enumerable: true,
-  get: function () { return chunkSSCGMSJT_cjs.wilcoxonSignedRank; }
+  get: function () { return chunkDMWF3UK6_cjs.wilcoxonSignedRank; }
 });
 Object.defineProperty(exports, "mean", {
   enumerable: true,

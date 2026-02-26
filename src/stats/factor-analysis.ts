@@ -55,6 +55,53 @@ function prngNormal(rng: PRNG): number {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
 }
 
+/**
+ * Generate a Haar-distributed random orthogonal k×k matrix.
+ * Uses Modified Gram-Schmidt QR decomposition with sign correction,
+ * matching GPArotation::Random.Start() and lavaan::lav_matrix_rotate_gen().
+ *
+ * Algorithm:
+ *   1. Fill k×k matrix with N(0,1)
+ *   2. Modified Gram-Schmidt → Q, R
+ *   3. Sign correction: Q[:,j] *= sign(R[j][j])
+ */
+function randomOrthogonalMatrix(k: number, rng: PRNG): number[][] {
+  // Step 1: fill with N(0,1)
+  const M: number[][] = Array.from({ length: k }, () =>
+    Array.from({ length: k }, () => prngNormal(rng))
+  )
+
+  // Step 2: Modified Gram-Schmidt QR
+  const Q: number[][] = M.map(r => [...r])
+  const Rdiag = new Float64Array(k)
+
+  for (let j = 0; j < k; j++) {
+    // Subtract projections of previous columns
+    for (let prev = 0; prev < j; prev++) {
+      let dot = 0
+      for (let i = 0; i < k; i++) dot += Q[i]![j]! * Q[i]![prev]!
+      for (let i = 0; i < k; i++) Q[i]![j] = Q[i]![j]! - dot * Q[i]![prev]!
+    }
+    // Normalize column j
+    let norm = 0
+    for (let i = 0; i < k; i++) norm += Q[i]![j]! ** 2
+    norm = Math.sqrt(norm)
+    Rdiag[j] = norm
+    if (norm > 1e-15) {
+      for (let i = 0; i < k; i++) Q[i]![j] = Q[i]![j]! / norm
+    }
+  }
+
+  // Step 3: Sign correction — Q[:,j] *= sign(R[j][j])
+  for (let j = 0; j < k; j++) {
+    if (Rdiag[j]! < 0) {
+      for (let i = 0; i < k; i++) Q[i]![j] = -Q[i]![j]!
+    }
+  }
+
+  return Q
+}
+
 // ─── Correlation Matrix ──────────────────────────────────────────────────
 
 /**
@@ -102,10 +149,12 @@ function computeCorrelationMatrix(
 export interface EFAOptions {
   readonly nFactors?: number               // auto-detect via parallel analysis if omitted
   readonly extraction?: 'paf' | 'ml'       // default: 'ml'
-  readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'none'  // default: 'promax'
+  readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'none'  // default: 'promax'
+  readonly geominDelta?: number              // geomin epsilon/delta (default: 0.01)
   readonly seed?: number                   // default: 42 (for parallel analysis)
   readonly maxIter?: number                // default: 1000
   readonly tol?: number                    // default: 1e-6
+  readonly randomStarts?: number           // default: 100
   readonly variableNames?: readonly string[]
 }
 
@@ -323,6 +372,18 @@ function extractPAF(
     if (maxDelta < tol) break
   }
 
+  // Canonical sign convention: match LAPACK's dsyev (used by R)
+  for (let f = 0; f < k; f++) {
+    let maxAbs = 0, maxIdx = 0
+    for (let i = 0; i < d; i++) {
+      const a = Math.abs(loadings[i]![f]!)
+      if (a > maxAbs) { maxAbs = a; maxIdx = i }
+    }
+    if (loadings[maxIdx]![f]! < 0) {
+      for (let i = 0; i < d; i++) loadings[i]![f] = -loadings[i]![f]!
+    }
+  }
+
   return { loadings, communalities: h2 }
 }
 
@@ -466,6 +527,21 @@ function extractML(
 
   // Extract final loadings from polished uniquenesses
   L = extractLoadingsFromTheta(finalTheta)
+
+  // Canonical sign convention: for each factor column, ensure the element
+  // with the largest absolute value is positive. This matches LAPACK's dsyev
+  // convention used by R's eigen() and factanal, and ensures geomin/oblimin
+  // gradient descent starts from the same orientation as R.
+  for (let f = 0; f < k; f++) {
+    let maxAbs = 0, maxIdx = 0
+    for (let i = 0; i < d; i++) {
+      const a = Math.abs(L[i]![f]!)
+      if (a > maxAbs) { maxAbs = a; maxIdx = i }
+    }
+    if (L[maxIdx]![f]! < 0) {
+      for (let i = 0; i < d; i++) L[i]![f] = -L[i]![f]!
+    }
+  }
 
   const h2 = new Float64Array(d)
   for (let i = 0; i < d; i++) {
@@ -615,84 +691,226 @@ function rotateVarimax(
   return { rotated: rot, T }
 }
 
+// ─── Oblique rotation criteria ──────────────────────────────────────────
+
+/** Criterion + gradient for a rotation method, evaluated on rotated loadings L. */
+interface CriterionResult {
+  readonly f: number            // criterion value to minimize
+  readonly Gq: number[][]       // gradient ∂f/∂L (p × k)
+}
+
 /**
- * Oblimin (oblique) rotation via gradient projection.
- * gamma = 0 gives quartimin; gamma = 0.5 gives biquartimin.
+ * Oblimin criterion (gamma = 0 → quartimin, gamma = 0.5 → biquartimin).
+ * f = (1/4) Σ_i Σ_{j≠m} λ²_ij λ²_im − (γ/4d) Σ_j Σ_m (Σ_i λ²_ij)(Σ_i λ²_im) for j≠m
+ * Gq_ij = λ_ij (Σ_{m≠j} λ²_im − (γ/d) Σ_m λ²_im)
  * Reference: Jennrich (2002), Psychometrika 67(1):7-27
  */
-function rotateOblimin(
-  L: number[][],
-  gamma: number,
-  maxIter: number,
-  tol: number
-): { rotated: number[][]; T: number[][]; Phi: number[][] } {
-  const d = L.length
-  const k = L[0]!.length
-  const Lmat = Matrix.fromArray(L)
-  let T: number[][] = Array.from({ length: k }, (_, i) =>
-    Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))
-  )
-  let Tmat = Matrix.fromArray(T)
-  const alpha = 1.0
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    const Lambda = Lmat.multiply(Tmat)
-    const LambdaArr = Lambda.toArray()
-
-    // Compute gradient for oblimin criterion
-    const G: number[][] = Array.from({ length: d }, () => new Array<number>(k).fill(0))
-    for (let i = 0; i < d; i++) {
-      let rowSum = 0
-      for (let m = 0; m < k; m++) rowSum += LambdaArr[i]![m]! ** 2
-      for (let j = 0; j < k; j++) {
-        const sumSq = rowSum - LambdaArr[i]![j]! ** 2
-        G[i]![j] = LambdaArr[i]![j]! * (sumSq - (gamma / d) * rowSum)
-      }
-    }
-    const Gmat = Matrix.fromArray(G)
-
-    const L_T_G = Lmat.transpose().multiply(Gmat)
-    // Project gradient: for oblique, subtract diagonal part
-    const diagLTG: number[][] = Array.from({ length: k }, (_, i) =>
-      Array.from({ length: k }, (_, j) => (i === j ? L_T_G.get(i, i) : 0))
-    )
-    const Gp = Gmat.subtract(Tmat.multiply(Matrix.fromArray(diagLTG)))
-
-    let maxGrad = 0
-    for (let i = 0; i < k; i++) {
-      for (let j = 0; j < k; j++) {
-        maxGrad = Math.max(maxGrad, Math.abs(Gp.get(i, j)))
-      }
-    }
-    if (maxGrad < tol) break
-
-    let nextT = Tmat.subtract(Gp.scale(alpha))
-
-    // Normalize columns
-    const nextArr = nextT.toArray()
+function criterionOblimin(L: number[][], gamma: number): CriterionResult {
+  const p = L.length, k = L[0]!.length
+  const Gq: number[][] = Array.from({ length: p }, () => new Array<number>(k).fill(0))
+  let f = 0
+  for (let i = 0; i < p; i++) {
+    let rowSumSq = 0
+    for (let m = 0; m < k; m++) rowSumSq += L[i]![m]! ** 2
     for (let j = 0; j < k; j++) {
-      let ss = 0
-      for (let i = 0; i < k; i++) ss += nextArr[i]![j]! ** 2
-      const invNorm = 1 / Math.sqrt(ss || 1e-12)
-      for (let i = 0; i < k; i++) nextArr[i]![j] = nextArr[i]![j]! * invNorm
+      const lij = L[i]![j]!
+      const otherSumSq = rowSumSq - lij * lij
+      Gq[i]![j] = lij * (otherSumSq - (gamma / p) * rowSumSq)
+      f += lij * lij * otherSumSq
     }
-    Tmat = Matrix.fromArray(nextArr)
-    T = nextArr
+  }
+  f /= 4
+  return { f, Gq }
+}
+
+/**
+ * Geomin criterion.
+ * f = Σ_i [Π_j (λ²_ij + δ)]^(1/k)
+ * Gq_ij = (2/k) × λ_ij / (λ²_ij + δ) × [Π_m (λ²_im + δ)]^(1/k)
+ *
+ * Reference: Yates (1987); Browne (2001), Psychometrika 66(3):289-307
+ * Implementation matches R GPArotation::vgQ.geomin exactly.
+ */
+function criterionGeomin(L: number[][], delta: number): CriterionResult {
+  const p = L.length, k = L[0]!.length
+  const Gq: number[][] = Array.from({ length: p }, () => new Array<number>(k).fill(0))
+  let f = 0
+  for (let i = 0; i < p; i++) {
+    // pro_i = exp( (1/k) * Σ_j log(λ²_ij + δ) ) = [Π_j (λ²_ij + δ)]^(1/k)
+    let logSum = 0
+    for (let j = 0; j < k; j++) logSum += Math.log(L[i]![j]! ** 2 + delta)
+    const pro = Math.exp(logSum / k)
+    f += pro
+    for (let j = 0; j < k; j++) {
+      Gq[i]![j] = (2 / k) * L[i]![j]! / (L[i]![j]! ** 2 + delta) * pro
+    }
+  }
+  return { f, Gq }
+}
+
+/**
+ * General oblique rotation via gradient projection (GPFoblq).
+ * Matches R's GPArotation::GPFoblq algorithm exactly:
+ *   - Rotated loadings: L = A × inv(T)'  (oblique parameterization)
+ *   - Gradient w.r.t. T: G = −(L' × Gq × T^{-1})'  (using L, not A)
+ *   - Oblique projection: Gp = G − T × diag(colSums(T ⊙ G))
+ *   - Armijo line search with column normalization
+ *   - Always take step after line search (even if Armijo not satisfied)
+ *   - Phi = T' × T
+ *
+ * Reference: Bernaards & Jennrich (2005), "Gradient projection algorithms
+ *   and software for arbitrary rotation criteria in factor analysis."
+ *   Educational and Psychological Measurement, 65(5):676-696.
+ * Implementation: R GPArotation::GPFoblq (v2024.3-1)
+ */
+function gpfOblq(
+  A: number[][],
+  criterion: (L: number[][]) => CriterionResult,
+  maxIter: number,
+  tol: number,
+  Tinit?: number[][]
+): { rotated: number[][]; T: number[][]; Phi: number[][]; f: number } {
+  const k = A[0]!.length
+  const Amat = Matrix.fromArray(A)
+
+  // Initialize T from Tinit or default to I_{k×k}
+  let Tarr: number[][] = Tinit
+    ? Tinit.map(r => [...r])
+    : Array.from({ length: k }, (_, i) =>
+        Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))
+      )
+  let Tmat = Matrix.fromArray(Tarr)
+
+  // Initial rotated loadings: L = A × inv(T)'
+  // When T = I this is just A; when T ≠ I we must compute the actual rotation
+  let Larr: number[][]
+  if (Tinit) {
+    let invT: Matrix
+    try {
+      invT = Tmat.inverse()
+    } catch {
+      invT = Tmat.pseudoInverse()
+    }
+    Larr = Amat.multiply(invT.transpose()).toArray()
+  } else {
+    Larr = A.map(r => [...r])
   }
 
-  const rotated = Lmat.multiply(Tmat).toArray()
+  // Evaluate criterion
+  let vgQ = criterion(Larr)
+  let f = vgQ.f
 
-  // Phi = (T⁻¹)(T⁻¹)' — factor correlation matrix
+  // Initial gradient: R uses G <- -t(t(L) %*% VgQ$Gq %*% solve(Tmat))
+  // At T=I this is -(L' × Gq × I)' = -(L' × Gq)'
+  let G = computeGPFoblqGradient(Larr, vgQ.Gq, Tmat)
+
+  let al = 1.0
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Oblique projection: Gp = G - T × diag(colSums(T ⊙ G))
+    const colSumTG = new Float64Array(k)
+    for (let j = 0; j < k; j++) {
+      let s = 0
+      for (let i = 0; i < k; i++) s += Tarr[i]![j]! * G[i]![j]!
+      colSumTG[j] = s
+    }
+    const Gp: number[][] = Array.from({ length: k }, (_, i) =>
+      Array.from({ length: k }, (_, j) => G[i]![j]! - Tarr[i]![j]! * colSumTG[j]!)
+    )
+
+    // Convergence: s = ||Gp||_F
+    let s2 = 0
+    for (let i = 0; i < k; i++)
+      for (let j = 0; j < k; j++) s2 += Gp[i]![j]! ** 2
+    const s = Math.sqrt(s2)
+    if (s < tol) break
+
+    // Line search with backtracking (Armijo condition)
+    // R: al <- 2*al; for(i in 0:10) { ... if(improvement > 0.5*s^2*al) break; al <- al/2 }
+    // Then ALWAYS updates Tmat <- Tt; f <- VgQt$f; G <- ... (even if Armijo not met)
+    al = 2 * al
+    let Tmatt: number[][] = Tarr
+    let TmattMat = Tmat
+    let Lnew = Larr
+    let vgQnew = vgQ
+
+    for (let lsIter = 0; lsIter <= 10; lsIter++) {
+      // X = T - al * Gp
+      const X: number[][] = Array.from({ length: k }, (_, i) =>
+        Array.from({ length: k }, (_, j) => Tarr[i]![j]! - al * Gp[i]![j]!)
+      )
+
+      // Normalize columns: v = 1/||col_j||, Tt = X × diag(v)
+      for (let j = 0; j < k; j++) {
+        let ss = 0
+        for (let i = 0; i < k; i++) ss += X[i]![j]! ** 2
+        const invNorm = 1 / Math.sqrt(ss || 1e-15)
+        for (let i = 0; i < k; i++) X[i]![j] = X[i]![j]! * invNorm
+      }
+
+      // L = A × inv(Tt)'
+      const Ttmat = Matrix.fromArray(X)
+      let invTt: Matrix
+      try {
+        invTt = Ttmat.inverse()
+      } catch {
+        invTt = Ttmat.pseudoInverse()
+      }
+      Lnew = Amat.multiply(invTt.transpose()).toArray()
+
+      // Evaluate criterion
+      vgQnew = criterion(Lnew)
+      Tmatt = X
+      TmattMat = Ttmat
+
+      const improvement = f - vgQnew.f
+      if (improvement > 0.5 * s2 * al) break
+      al = al / 2
+    }
+
+    // R: ALWAYS update after line search (even if Armijo not satisfied)
+    // Tmat <- Tmatt; f <- VgQt$f; G <- -t(t(L) %*% VgQt$Gq %*% solve(Tmatt))
+    Tarr = Tmatt
+    Tmat = TmattMat
+    Larr = Lnew
+    f = vgQnew.f
+    G = computeGPFoblqGradient(Lnew, vgQnew.Gq, TmattMat)
+  }
+
+  // Factor correlation matrix: Phi = T' × T
+  const Phi: number[][] = Array.from({ length: k }, (_, i) =>
+    Array.from({ length: k }, (_, j) => {
+      let s = 0
+      for (let l = 0; l < k; l++) s += Tarr[l]![i]! * Tarr[l]![j]!
+      return s
+    })
+  )
+
+  return { rotated: Larr, T: Tarr, Phi, f }
+}
+
+/**
+ * Compute gradient of criterion w.r.t. rotation matrix T.
+ * R: G <- -t(t(L) %*% VgQt$Gq %*% solve(Tmatt))
+ *    = -(L' × Gq × T^{-1})'
+ * Note: uses L (rotated loadings) and T^{-1}, NOT A and inv(T').
+ */
+function computeGPFoblqGradient(L: number[][], Gq: number[][], Tmat: Matrix): number[][] {
+  const Lmat = Matrix.fromArray(L)
+  const GqMat = Matrix.fromArray(Gq)
   let invT: Matrix
   try {
     invT = Tmat.inverse()
   } catch {
     invT = Tmat.pseudoInverse()
   }
-  const PhiMat = invT.multiply(invT.transpose())
-  const Phi = PhiMat.toArray()
-
-  return { rotated, T, Phi }
+  // inner = L' × Gq × T^{-1}  (k×p × p×k × k×k = k×k)
+  const inner = Lmat.transpose().multiply(GqMat).multiply(invT)
+  // G = -inner^T
+  const G: number[][] = Array.from({ length: inner.rows }, (_, i) =>
+    Array.from({ length: inner.cols }, (_, j) => -inner.get(j, i))
+  )
+  return G
 }
 
 /**
@@ -816,7 +1034,10 @@ function applyRotation(
   loadings: number[][],
   method: string,
   maxIter: number,
-  tol: number
+  tol: number,
+  geominDelta: number = 0.01,
+  randomStarts: number = 1,
+  seed: number = 42
 ): { rotated: number[][]; Phi: number[][] } {
   const k = loadings[0]!.length
 
@@ -837,8 +1058,13 @@ function applyRotation(
 
   if (method === 'oblimin' || method === 'quartimin') {
     const gamma = method === 'quartimin' ? 0 : 0
-    const { rotated, Phi } = rotateOblimin(loadings, gamma, maxIter, tol)
-    return { rotated, Phi }
+    const criterionFn = (L: number[][]) => criterionOblimin(L, gamma)
+    return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed)
+  }
+
+  if (method === 'geomin') {
+    const criterionFn = (L: number[][]) => criterionGeomin(L, geominDelta)
+    return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed)
   }
 
   if (method === 'promax') {
@@ -847,6 +1073,40 @@ function applyRotation(
   }
 
   throw new Error(`runEFA: unknown rotation method '${method}'`)
+}
+
+/**
+ * Run gpfOblq with optional random starting matrices.
+ * Start 0 always uses T=I (deterministic, matches R/GPArotation).
+ * Starts 1..randomStarts-1 use Haar-distributed random orthogonal matrices.
+ * Returns the solution with the lowest criterion value.
+ *
+ * When randomStarts=30, this matches lavaan's GPA×30 strategy.
+ */
+function gpfOblqWithRandomStarts(
+  loadings: number[][],
+  criterionFn: (L: number[][]) => CriterionResult,
+  maxIter: number,
+  tol: number,
+  k: number,
+  randomStarts: number,
+  seed: number
+): { rotated: number[][]; Phi: number[][] } {
+  // Start 0: T = I (always, for backward compatibility)
+  let best = gpfOblq(loadings, criterionFn, maxIter, tol)
+
+  if (randomStarts > 1) {
+    const rng = new PRNG(seed)
+    for (let s = 1; s < randomStarts; s++) {
+      const Trand = randomOrthogonalMatrix(k, rng)
+      const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand)
+      if (result.f < best.f) {
+        best = result
+      }
+    }
+  }
+
+  return { rotated: best.rotated, Phi: best.Phi }
 }
 
 // ─── Velicer's MAP ───────────────────────────────────────────────────────
@@ -1431,9 +1691,11 @@ export function runEFA(
 
   const extraction = options?.extraction ?? 'ml'
   const rotation = options?.rotation ?? 'promax'
+  const geominDelta = options?.geominDelta ?? 0.01
   const maxIter = options?.maxIter ?? 1000
   const tol = options?.tol ?? 1e-6
   const seed = options?.seed ?? 42
+  const randomStarts = options?.randomStarts ?? 100
 
   const R = computeCorrelationMatrix(data, n, d)
   const eigenvalues = R.eigen().values  // sorted descending
@@ -1454,7 +1716,9 @@ export function runEFA(
     : extractPAF(R, nFactors, maxIter, tol)
 
   // Rotate
-  const { rotated, Phi } = applyRotation(extracted.loadings, rotation, maxIter, tol)
+  const { rotated, Phi } = applyRotation(
+    extracted.loadings, rotation, maxIter, tol, geominDelta, randomStarts, seed
+  )
 
   // Compute communalities and uniqueness from rotated solution + Phi
   const communalities = new Float64Array(d)
