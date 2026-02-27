@@ -1,13 +1,13 @@
 # Correlation, Regression & PCA in Carm: Technical Report
 
-## A Complete Implementation of Pearson/Spearman/Kendall Correlation, OLS/Logistic Regression, Diagnostics, and PCA with Varimax Rotation in TypeScript
+## A Complete Implementation of Pearson/Spearman/Kendall Correlation, OLS/Logistic/Poisson Regression, Diagnostics, and PCA with Varimax Rotation in TypeScript
 
 **Date:** 2026-02-26
 **Version:** Carm 1.0
-**Module:** `src/stats/correlation.ts` (283 lines), `src/stats/regression.ts` (379 lines), `src/stats/pca.ts` (157 lines)
-**Total:** ~819 LOC across 3 files
-**Dependencies:** Zero external math libraries — all linear algebra, distributions, and statistical computations from `core/math.ts` and `core/matrix.ts`
-**Validation:** Cross-validated with R's `cor.test()`, `lm()`, `glm()`, `prcomp()`, `varimax()`
+**Module:** `src/stats/correlation.ts` (283 lines), `src/stats/regression.ts` (636 lines), `src/stats/pca.ts` (157 lines)
+**Total:** ~1075 LOC across 3 files
+**Dependencies:** Zero external math libraries — all linear algebra, distributions, and statistical computations from `core/math.ts` (`logGamma`) and `core/matrix.ts`; APA formatting via `core/apa.ts` (`formatRegression`, `formatPoisson`)
+**Validation:** Cross-validated with R's `cor.test()`, `lm()`, `glm()`, `glm(family=poisson)`, `prcomp()`, `varimax()`
 
 ---
 
@@ -24,13 +24,14 @@
 9. [Multiple Linear Regression](#9-multiple-linear-regression)
 10. [Polynomial Regression](#10-polynomial-regression)
 11. [Logistic Regression via IRLS](#11-logistic-regression-via-irls)
-12. [Regression Diagnostics](#12-regression-diagnostics)
-13. [PCA via SVD](#13-pca-via-svd)
-14. [Varimax Rotation](#14-varimax-rotation)
-15. [Public API Reference](#15-public-api-reference)
-16. [References](#16-references)
-17. [Engineering Decisions: Problems, Solutions, and Optimizations](#17-engineering-decisions-problems-solutions-and-optimizations)
-18. [Mathematical Tricks That Made It Possible](#18-mathematical-tricks-that-made-it-possible)
+12. [Poisson Regression via IRLS](#12-poisson-regression-via-irls)
+13. [Regression Diagnostics](#13-regression-diagnostics)
+14. [PCA via SVD](#14-pca-via-svd)
+15. [Varimax Rotation](#15-varimax-rotation)
+16. [Public API Reference](#16-public-api-reference)
+17. [References](#17-references)
+18. [Engineering Decisions: Problems, Solutions, and Optimizations](#18-engineering-decisions-problems-solutions-and-optimizations)
+19. [Mathematical Tricks That Made It Possible](#19-mathematical-tricks-that-made-it-possible)
 
 ---
 
@@ -42,7 +43,8 @@ The three modules form a natural dependency chain built on a shared linear algeb
 
 ```
 core/math.ts  ──→  correlation.ts  ──→  regression.ts  ──→  pca.ts
-core/matrix.ts ─┘    (r, p, CI)       (OLS, logistic)    (SVD, varimax)
+core/matrix.ts ─┘    (r, p, CI)       (OLS, logistic,    (SVD, varimax)
+                                        Poisson)
 ```
 
 All three modules consume the `Matrix` class from `core/matrix.ts` for linear algebra operations (transpose, multiply, inverse, SVD) and distribution functions from `core/math.ts` (t-distribution p-values, normal CDF, quantiles). No external numerical libraries are used anywhere.
@@ -517,11 +519,155 @@ This prevents `log(0) = -Infinity` when all observations are in the same class (
 
 ---
 
-## 12. Regression Diagnostics
+## 12. Poisson Regression via IRLS
 
-### 12.1 Hat Matrix Diagonal (Leverage)
+### 12.1 The IRLS Algorithm for Poisson
 
-Leverage values (regression.ts, lines 327–345) come from the diagonal of the hat matrix H = X(X'X)^-1 X':
+Poisson regression (regression.ts, lines 459–635) uses Fisher scoring (IRLS) to model count data. The log link maps the linear predictor to the expected count, and the variance function V(μ) = μ defines the Poisson family. Starting from β₀ = log(mean(y)) with all other coefficients initialized to zero, each iteration solves a weighted least squares problem:
+
+```
+Link: log(μ) = Xβ → μ = exp(Xβ)
+Variance function: V(μ) = μ
+Working response: z = η + (y - μ) / μ
+Weights: W = diag(μ)
+WLS update: (X'WX) β_new = X'Wz
+```
+
+The working response z linearizes the log link around the current estimate: it is the first-order Taylor expansion of the link function applied to the observed data. The weights W = diag(μ) come from the variance function of the Poisson distribution — observations with larger expected counts contribute more to the weighted least squares objective because they carry more information (the Poisson variance equals the mean).
+
+### 12.2 Implementation via Square Root Weights
+
+Same pattern as logistic regression — the implementation uses √W transformation to avoid forming the n×n diagonal W explicitly:
+
+```typescript
+const sqrtW = w.map(Math.sqrt)
+const Xw = Matrix.fromArray(
+  Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * sqrtW[i]!))
+)
+const zw = z.map((zi, i) => zi * sqrtW[i]!)
+```
+
+This computes X_w = W^(1/2)X and z_w = W^(1/2)z, then solves (X_w'X_w)β = X_w'z_w, which is mathematically equivalent to the weighted normal equations (X'WX)β = X'Wz but avoids forming the n×n diagonal W. The transformed system is a standard OLS problem, reusing the same Matrix inverse machinery as `fitOLS()`.
+
+### 12.3 Step-Halving for Deviance Monotonicity
+
+Unlike logistic regression which uses max-coefficient-change convergence, Poisson regression uses two key differences in its convergence strategy:
+
+1. **Deviance-based convergence**: `|dev - devold| / (0.1 + |dev|) < tol` — this matches R's `glm()` convergence criterion. The relative change in deviance is more meaningful than coefficient change for GLMs because it directly measures model fit improvement on the natural scale of the likelihood.
+
+2. **Step-halving**: If a full Newton step increases deviance, the step size is halved up to 10 times. This prevents divergence with extreme count data where the log link can produce very large μ values.
+
+```typescript
+let stepScale = 1.0
+for (let half = 0; half < 10; half++) {
+  const betaTry = beta.map((b, j) => b + stepScale * (betaNew[j]! - b))
+  const etaTry = computeEta(betaTry)
+  const muTry = etaTry.map(e => Math.max(EPS_MU, safeExp(e)))
+  const trialDev = computeDeviance(y, muTry)
+  if (isFinite(trialDev) && (trialDev <= dev + 1e-8 || half === 9)) {
+    beta = betaTry; accepted = true; break
+  }
+  stepScale *= 0.5
+}
+```
+
+The `half === 9` fallback accepts the last halved step unconditionally, ensuring the iteration always advances (even if slightly uphill) rather than stalling indefinitely. The `1e-8` tolerance allows trivially small deviance increases caused by floating-point noise.
+
+### 12.4 Poisson Deviance
+
+The deviance for Poisson regression measures twice the difference between the saturated model (μ_i = y_i) and the fitted model log-likelihoods:
+
+```
+D = 2·Σ[y_i·log(y_i/μ_i) − (y_i − μ_i)]
+```
+
+Convention: 0·log(0) = 0, which handles zero counts naturally. Implementation at lines 492–501:
+
+```typescript
+const computeDeviance = (yArr: readonly number[], muArr: number[]): number => {
+  let dev = 0
+  for (let i = 0; i < n; i++) {
+    const yi = yArr[i] ?? 0
+    const mi = muArr[i]!
+    if (yi > 0) dev += yi * Math.log(yi / Math.max(EPS_MU, mi))
+    dev -= (yi - mi)
+  }
+  return 2 * dev
+}
+```
+
+The null deviance uses μ_i = ȳ for all observations, representing the intercept-only model. Both the model deviance and null deviance are computed at convergence (lines 611–612) and used for the pseudo-R² and APA-formatted output.
+
+### 12.5 Log-Likelihood
+
+The Poisson log-likelihood sums the log-probability of each observed count under the Poisson(μ_i) distribution:
+
+```
+ℓ(β) = Σ[y_i·log(μ_i) − μ_i − log(y_i!)]
+```
+
+The `log(y_i!)` term is computed via `logGamma(y_i + 1)` from `core/math.ts`, exploiting the identity Γ(n+1) = n! for non-negative integers. This avoids factorial overflow for large counts and handles non-integer y values gracefully. Implementation at lines 596–601:
+
+```typescript
+let logLik = 0
+for (let i = 0; i < n; i++) {
+  const yi = y[i] ?? 0
+  const mi = mu[i]!
+  logLik += yi * Math.log(Math.max(EPS_MU, mi)) - mi - logGamma(yi + 1)
+}
+```
+
+The null log-likelihood (lines 604–608) uses the same formula but with μ_i = ȳ for all observations, providing the baseline for pseudo-R² and information criteria comparisons.
+
+### 12.6 Coefficient Inference: Wald z-Test
+
+Same as logistic regression — standard errors come from the Fisher information matrix (X'WX)⁻¹ evaluated at the converged estimates, Wald z-statistics use the normal approximation, and two-sided p-values come from the standard normal CDF. Lines 578–593:
+
+```typescript
+const se = Math.sqrt(Math.max(0, covBeta.get(i, i)))
+const zStat = se === 0 ? 0 : b / se
+const pVal = 2 * (1 - normCDFLocal(Math.abs(zStat)))
+const ci: readonly [number, number] = [b - zCrit * se, b + zCrit * se]
+```
+
+The `Math.max(0, ...)` guard on the diagonal of (X'WX)⁻¹ prevents `sqrt` of a negative number from floating-point error in the matrix inversion, identical to the safeguard used in OLS and logistic regression.
+
+### 12.7 Information Criteria
+
+AIC = −2ℓ + 2p, BIC = −2ℓ + p·log(n). The penalty counts p parameters (intercept + predictors). Unlike OLS, no separate σ² parameter is estimated — the Poisson distribution has a single parameter μ, so the number of estimated parameters equals the number of regression coefficients. Lines 617–618:
+
+```typescript
+const aic = -2 * logLik + 2 * p
+const bic = -2 * logLik + Math.log(n) * p
+```
+
+### 12.8 McFadden Pseudo-R²
+
+The pseudo-R² is computed from the deviance ratio:
+
+```typescript
+const r2 = nullDeviance > 1e-12 ? 1 - deviance / nullDeviance : 0
+```
+
+R² = 1 − D/D_null where D is the model deviance and D_null is the null (intercept-only) deviance. This is equivalent to McFadden's pseudo-R² for the Poisson family: both measure the proportional reduction in a quantity that is monotone in the log-likelihood. When D_null is near zero (degenerate case where all y values are zero), the result is set to 0 rather than risking division by a tiny number. Line 615.
+
+### 12.9 Numerical Guards
+
+Three numerical safeguards prevent the common failure modes of Poisson IRLS:
+
+- **Overflow protection**: `safeExp(x) = exp(min(700, max(-700, x)))` prevents Infinity from large linear predictors (line 487). Without this, a single large coefficient could produce μ = exp(800) = Infinity, which propagates through all downstream computations. The bound of 700 is just below `Number.MAX_VALUE`'s exponent (~709.78).
+
+- **μ clamping**: `max(1e-10, μ)` prevents log(0) in deviance and working response (EPS_MU constant, line 488). When the fitted mean approaches zero (e.g., for very low predicted counts), the working response z = η + (y - μ)/μ involves division by μ, and the deviance involves log(y/μ). Clamping μ away from zero keeps both quantities finite.
+
+- **Weight clamping**: weights w = μ are clamped to min 1e-10 (line 524), same rationale as logistic regression. For Poisson, the weights equal the fitted means, so observations with very small predicted counts contribute negligible information. Clamping ensures X'WX remains invertible throughout the iteration, even when some observations have near-zero expected counts.
+
+---
+
+## 13. Regression Diagnostics
+
+### 13.1 Hat Matrix Diagonal (Leverage)
+
+Leverage values (regression.ts, lines 327–345) come from the diagonal of the hat matrix H = X(X'X)⁻¹X':
 
 ```typescript
 const hat = X.multiply(XtXInv).multiply(Xt)
@@ -530,7 +676,7 @@ const leverage = Array.from({ length: n }, (_, i) => hat.get(i, i))
 
 h_ii measures how far observation i's predictor values are from the centroid of the predictor space. High-leverage points (h_ii >> 2p/n) have outsized influence on the regression.
 
-### 12.2 Standardized Residuals
+### 13.2 Standardized Residuals
 
 Standardized residuals divide raw residuals by their estimated standard deviation:
 
@@ -541,7 +687,7 @@ return denom === 0 ? 0 : r / denom
 
 The factor (1 - h_ii) accounts for the fact that high-leverage points tend to have smaller residuals (the regression line is pulled toward them).
 
-### 12.3 Cook's Distance
+### 13.3 Cook's Distance
 
 Cook's distance combines leverage and residual size to measure overall influence:
 
@@ -554,7 +700,7 @@ const cooksDistance = result.residuals.map((r, i) => {
 
 This is equivalent to the standard formula D_i = (e*_i)^2 * h_ii / (p * (1 - h_ii)), where e*_i is the standardized residual. Points with D_i > 4/n (or D_i > 1 by a stricter criterion) are considered influential.
 
-### 12.4 VIF via Recursive Regression
+### 13.4 VIF via Recursive Regression
 
 Variance Inflation Factors (regression.ts, lines 363–375) are computed by regressing each predictor on all other predictors:
 
@@ -571,9 +717,9 @@ VIF_j = 1 / (1 - R²_j), where R²_j is the R-squared from regressing predictor 
 
 ---
 
-## 13. PCA via SVD
+## 14. PCA via SVD
 
-### 13.1 Data Standardization
+### 14.1 Data Standardization
 
 PCA (pca.ts, lines 21–70) begins by standardizing the data (centering and scaling to unit variance):
 
@@ -584,7 +730,7 @@ const X = Matrix.fromArray(pp.data as number[][])
 
 When `scale = true` (default), this produces z-scores, making PCA operate on the correlation matrix rather than the covariance matrix. This prevents variables with large scales from dominating the components.
 
-### 13.2 The 1/sqrt(n-1) Scaling Trick
+### 14.2 The 1/sqrt(n-1) Scaling Trick
 
 Before computing the SVD, the standardized matrix is scaled:
 
@@ -601,7 +747,7 @@ X_s'X_s = X'X / (n-1) = Σ̂  (the sample covariance matrix)
 
 If X_s = UΣV', then X_s'X_s = VΣ²V', so the squared singular values S² are the eigenvalues of the covariance matrix, and V contains the eigenvectors (principal component loadings).
 
-### 13.3 SVD Decomposition
+### 14.3 SVD Decomposition
 
 The SVD is computed by the one-sided Jacobi algorithm implemented in `Matrix.svd()` (core/matrix.ts, line 226):
 
@@ -617,7 +763,7 @@ const totalVar = S.reduce((sum, s) => sum + s * s, 0)
 const varianceExplained = eigenvalues.map(e => totalVar > 0 ? e / totalVar : 0)
 ```
 
-### 13.4 Loadings and Scores
+### 14.4 Loadings and Scores
 
 - **Loadings**: The right singular vectors V — columns are principal components, rows are original variables. `loadings[i][j]` is the weight of variable i on component j.
 - **Scores**: Computed as X * V (projecting the centered data onto the principal component axes).
@@ -626,7 +772,7 @@ const varianceExplained = eigenvalues.map(e => totalVar > 0 ? e / totalVar : 0)
 const scoresM = X.multiply(Vk)  // n x nc matrix of component scores
 ```
 
-### 13.5 Cumulative Variance
+### 14.5 Cumulative Variance
 
 Cumulative variance explained is computed as a running sum:
 
@@ -641,9 +787,9 @@ This supports the standard scree plot and the "% variance explained" threshold f
 
 ---
 
-## 14. Varimax Rotation
+## 15. Varimax Rotation
 
-### 14.1 Kaiser's Algorithm
+### 15.1 Kaiser's Algorithm
 
 Varimax rotation (pca.ts, lines 82–137) implements Kaiser's (1958) pairwise rotation algorithm that maximizes the variance of squared loadings within each factor.
 
@@ -657,7 +803,7 @@ const angle = Math.atan2(Y_, X_) / 4
 
 Where A, B, C, D are aggregates of the squared loadings for the pair (p, q). The division by 4 comes from the varimax criterion's quartic objective function.
 
-### 14.2 Pairwise Rotation
+### 15.2 Pairwise Rotation
 
 Each rotation is a 2D Givens rotation applied to columns p and q of the loading matrix:
 
@@ -675,7 +821,7 @@ T[r][p] = T[r][p] * cos + T[r][q] * sin
 T[r][q] = -T[r][p] * sin + T[r][q] * cos
 ```
 
-### 14.3 Convergence
+### 15.3 Convergence
 
 Convergence is measured by the total absolute rotation angle across all pairs in one sweep:
 
@@ -686,7 +832,7 @@ if (delta < tol) break  // tol = 1e-6
 
 The algorithm terminates when the total rotation per sweep drops below 1e-6 radians, indicating the solution is stable. Maximum iterations = 1000.
 
-### 14.4 Output
+### 15.4 Output
 
 The function returns both the rotated loadings and the rotation matrix:
 
@@ -698,9 +844,9 @@ The rotation matrix T can be used to rotate new scores: `rotatedScores = scores 
 
 ---
 
-## 15. Public API Reference
+## 16. Public API Reference
 
-### 15.1 Correlation (correlation.ts)
+### 16.1 Correlation (correlation.ts)
 
 ```typescript
 // Pearson product-moment correlation
@@ -740,7 +886,7 @@ correlationMatrix(
 // Returns: { r: number[][], pValues: number[][], n: number, labels: string[] }
 ```
 
-### 15.2 Regression (regression.ts)
+### 16.2 Regression (regression.ts)
 
 ```typescript
 // Simple linear regression: y = β₀ + β₁·x
@@ -774,6 +920,15 @@ logisticRegression(
   tol?: number             // default 1e-8
 ): RegressionResult
 
+// Poisson regression via IRLS (count data)
+poissonRegression(
+  y: readonly number[],    // non-negative counts
+  predictors: ReadonlyArray<{ name: string; values: readonly number[] }>,
+  ciLevel?: number,        // default 0.95
+  maxIter?: number,        // default 100
+  tol?: number             // default 1e-8
+): RegressionResult
+
 // Regression diagnostics
 regressionDiagnostics(
   result: RegressionResult,
@@ -782,7 +937,7 @@ regressionDiagnostics(
 // Returns: { leverage, cooksDistance, standardizedResiduals, vif }
 ```
 
-### 15.3 PCA (pca.ts)
+### 16.3 PCA (pca.ts)
 
 ```typescript
 // PCA via SVD on standardized data
@@ -807,7 +962,7 @@ screeData(pca: PCAResult): ScreeData
 
 ---
 
-## 16. References
+## 17. References
 
 1. **Pearson, K.** (1895). Notes on regression and inheritance in the case of two parents. *Proceedings of the Royal Society of London*, 58, 240–242.
 
@@ -825,25 +980,27 @@ screeData(pca: PCAResult): ScreeData
 
 8. **McCullagh, P. & Nelder, J. A.** (1989). *Generalized Linear Models* (2nd ed.). Chapman & Hall.
 
-9. **McFadden, D.** (1974). Conditional logit analysis of qualitative choice behavior. In P. Zarembka (Ed.), *Frontiers in Econometrics* (pp. 105–142). Academic Press.
+9. **Cameron, A. C. & Trivedi, P. K.** (1998). *Regression Analysis of Count Data*. Cambridge University Press. [Poisson regression theory and diagnostics]
 
-10. **Cook, R. D.** (1977). Detection of influential observation in linear regression. *Technometrics*, 19(1), 15–18.
+10. **McFadden, D.** (1974). Conditional logit analysis of qualitative choice behavior. In P. Zarembka (Ed.), *Frontiers in Econometrics* (pp. 105–142). Academic Press.
 
-11. **Belsley, D. A., Kuh, E., & Welsch, R. E.** (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. John Wiley & Sons.
+11. **Cook, R. D.** (1977). Detection of influential observation in linear regression. *Technometrics*, 19(1), 15–18.
 
-12. **Hotelling, H.** (1933). Analysis of a complex of statistical variables into principal components. *Journal of Educational Psychology*, 24(6), 417–441.
+12. **Belsley, D. A., Kuh, E., & Welsch, R. E.** (1980). *Regression Diagnostics: Identifying Influential Data and Sources of Collinearity*. John Wiley & Sons.
 
-13. **Pearson, K.** (1901). On lines and planes of closest fit to systems of points in space. *The London, Edinburgh, and Dublin Philosophical Magazine and Journal of Science*, 2(11), 559–572.
+13. **Hotelling, H.** (1933). Analysis of a complex of statistical variables into principal components. *Journal of Educational Psychology*, 24(6), 417–441.
 
-14. **Kaiser, H. F.** (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187–200.
+14. **Pearson, K.** (1901). On lines and planes of closest fit to systems of points in space. *The London, Edinburgh, and Dublin Philosophical Magazine and Journal of Science*, 2(11), 559–572.
+
+15. **Kaiser, H. F.** (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187–200.
 
 ---
 
-## 17. Engineering Decisions: Problems, Solutions, and Optimizations
+## 18. Engineering Decisions: Problems, Solutions, and Optimizations
 
 This section documents the engineering problems encountered during development, the decisions made, and how each was resolved. These are practical insights from building production-grade correlation, regression, and PCA modules from scratch.
 
-### 17.1 OLS via Normal Equations, Not QR Decomposition
+### 18.1 OLS via Normal Equations, Not QR Decomposition
 
 **Problem:** The standard recommendation for solving OLS in production numerical software is QR decomposition (`β = R⁻¹Q'y`), which is more numerically stable than the normal equations `β = (X'X)⁻¹X'y` when X'X is ill-conditioned.
 
@@ -855,7 +1012,7 @@ This section documents the engineering problems encountered during development, 
 
 **Result:** Correct OLS results cross-validated against R's `lm()` for all tested cases. The SVD-based inverse naturally handles moderate ill-conditioning.
 
-### 17.2 R² Clamping to Prevent Negative Values
+### 18.2 R² Clamping to Prevent Negative Values
 
 **Problem:** Theoretically, R² = 1 - SS_res/SS_tot is always in [0, 1] for OLS with an intercept. However, floating-point arithmetic can produce SS_res slightly larger than SS_tot, yielding R² < 0.
 
@@ -871,7 +1028,7 @@ const r2 = ss_tot > 0 ? Math.max(0, 1 - ss_res / ss_tot) : 0
 
 **Result:** R² is always in [0, 1] regardless of floating-point edge cases.
 
-### 17.3 AIC/BIC: `max(SS_res/n, 1e-15)` Prevents log(0)
+### 18.3 AIC/BIC: `max(SS_res/n, 1e-15)` Prevents log(0)
 
 **Problem:** When the model fits the data perfectly (e.g., fitting n points with n parameters), SS_res = 0. The AIC/BIC formulas involve `log(SS_res/n)`, which becomes `log(0) = -Infinity`.
 
@@ -888,7 +1045,7 @@ const logLik = -n / 2 * (Math.log(2 * Math.PI) + Math.log(rssSafe / n) + 1)
 
 **Result:** AIC and BIC are always finite numbers, even for perfect fits.
 
-### 17.4 Coefficient SE: `sqrt(max(0, ...))` Prevents sqrt of Negative
+### 18.4 Coefficient SE: `sqrt(max(0, ...))` Prevents sqrt of Negative
 
 **Problem:** The variance of coefficient j is `σ² * C_{jj}` where C = (X'X)⁻¹. The diagonal element C_{jj} should always be positive, but floating-point matrix inversion can produce tiny negative values.
 
@@ -904,7 +1061,7 @@ const se = Math.sqrt(Math.max(0, covBeta.get(i, i)))
 
 **Result:** No NaN propagation from ill-conditioned matrices.
 
-### 17.5 Logistic IRLS Weight Clamping: Why 1e-10
+### 18.5 Logistic IRLS Weight Clamping: Why 1e-10
 
 **Problem:** The IRLS weights w_i = μ_i(1 - μ_i) approach 0 when predicted probabilities approach 0 or 1 (complete or near-complete separation). Zero weights make X'WX singular, causing the matrix inverse to fail or produce garbage.
 
@@ -922,7 +1079,7 @@ const w = mu.map(m => Math.max(1e-10, m * (1 - m)))
 
 **Result:** Stable convergence even with near-complete separation. R's `glm()` uses a similar approach (the step-halving in IWLS).
 
-### 17.6 McFadden Pseudo-R²: NaN Guard for Degenerate Outcomes
+### 18.6 McFadden Pseudo-R²: NaN Guard for Degenerate Outcomes
 
 **Problem:** When all observations belong to the same class (all y = 0 or all y = 1), the null model has pMean = 0 or 1, and the null log-likelihood is n * (0 * log(0) + 1 * log(1)) = 0. McFadden's R² = 1 - LL/LL_null involves division by zero.
 
@@ -942,7 +1099,7 @@ const pMean = Math.min(1 - 1e-12, Math.max(1e-12, pMeanRaw))
 
 **Result:** Degenerate cases return NaN for R² instead of Infinity or -Infinity.
 
-### 17.7 VIF via Recursive Regression: Simple but O(p²n)
+### 18.7 VIF via Recursive Regression: Simple but O(p²n)
 
 **Problem:** Computing VIF for each predictor requires regressing that predictor on all others — effectively running p separate OLS regressions.
 
@@ -962,7 +1119,7 @@ const vif = predictors.map((_, j) => {
 
 **Result:** Correct VIF values, with NaN returned when a regression fails (e.g., singular predictor matrix).
 
-### 17.8 Spearman as Pearson-on-Ranks: Tie Handling for Free
+### 18.8 Spearman as Pearson-on-Ranks: Tie Handling for Free
 
 **Problem:** The classic Spearman formula `ρ = 1 - 6Σd²/(n(n²-1))` does not handle ties. Ties require correction terms involving the number of tied groups and their sizes.
 
@@ -974,7 +1131,7 @@ const vif = predictors.map((_, j) => {
 
 **Result:** Correct Spearman coefficients with ties, cross-validated against R's `cor.test(method = "spearman")`.
 
-### 17.9 Fisher z CI: Bounds Guaranteed in [-1, 1]
+### 18.9 Fisher z CI: Bounds Guaranteed in [-1, 1]
 
 **Problem:** A naive normal approximation CI for r can exceed [-1, 1]. For example, r = 0.95 with n = 10 gives SE ≈ 0.10, and the upper CI bound would be 0.95 + 1.96 * 0.10 = 1.146 > 1.
 
@@ -992,7 +1149,7 @@ Since tanh maps (-∞, +∞) to (-1, 1), the CI bounds are always in the valid r
 
 **Result:** Correct, bounded confidence intervals for r, matching R's `cor.test()`.
 
-### 17.10 Partial Correlation via Residualization: Multiple Controls
+### 18.10 Partial Correlation via Residualization: Multiple Controls
 
 **Problem:** The recursive partial correlation formula `r_xy.z = (r_xy - r_xz * r_yz) / sqrt((1-r_xz²)(1-r_yz²))` only handles one control variable at a time. Controlling for multiple variables requires applying the formula recursively — partial out z1, then partial out z2 from the already-partialled correlations, etc.
 
@@ -1004,7 +1161,7 @@ Since tanh maps (-∞, +∞) to (-1, 1), the CI bounds are always in the valid r
 
 **Result:** Correct partial correlations for any number of controls.
 
-### 17.11 PCA X/sqrt(n-1) Scaling: SVD to Covariance Eigenvalues
+### 18.11 PCA X/sqrt(n-1) Scaling: SVD to Covariance Eigenvalues
 
 **Problem:** SVD of the raw centered data matrix X gives singular values that relate to X'X, not to the sample covariance matrix S = X'X/(n-1). The eigenvalues of S (which are the variances of the principal components) are the squared singular values of X divided by (n-1).
 
@@ -1020,7 +1177,7 @@ Now `Xs'Xs = X'X/(n-1) = S`, so the SVD of Xs gives singular values whose square
 
 **Result:** Eigenvalues and variance explained match R's `prcomp()` to machine precision.
 
-### 17.12 SVD vs Eigendecomposition for PCA
+### 18.12 SVD vs Eigendecomposition for PCA
 
 **Problem:** PCA can be computed either by eigendecomposing the p x p covariance matrix, or by SVD of the n x p data matrix. Both give the same result (loadings = eigenvectors = right singular vectors).
 
@@ -1037,11 +1194,28 @@ Now `Xs'Xs = X'X/(n-1) = S`, so the SVD of Xs gives singular values whose square
 
 **Result:** Numerically stable PCA that works correctly even with moderate multicollinearity among variables.
 
+### 18.13 Poisson vs Logistic IRLS: Shared Pattern, Different Weights
+
+**Problem:** Poisson and logistic regression both use IRLS, but with different link functions and weight structures. The question was whether to share a generic IRLS solver or keep separate implementations.
+
+**Root cause:** The two GLM families share the same algorithmic skeleton (form working response, compute weights, solve WLS, check convergence), but differ in every detail: the link function, the variance function, the weight formula, the convergence criterion, and the need for step-halving.
+
+**Solution:** Both follow the same code pattern (√W transformation, WLS solve via Matrix inverse), but with different formulas:
+
+- **Logistic**: W = diag(μ(1-μ)), link = logit, convergence = max|Δβ|
+- **Poisson**: W = diag(μ), link = log, convergence = relative deviance change + step-halving
+
+Step-halving was added for Poisson because the log link can produce extreme μ values (exp(large η)), making the deviance surface less well-behaved than logistic's bounded [0,1] probabilities. With logistic regression, μ is always in (0,1), so the weights μ(1-μ) are bounded in (0, 0.25) and the optimization landscape is smoother. With Poisson, μ = exp(η) is unbounded above, and a single large Newton step can send η to +50 or beyond, producing μ ≈ 5 × 10²¹ and catastrophic deviance values.
+
+**Why separate implementations over a generic solver:** A generic IRLS framework would save ~30 lines of shared boilerplate but require passing link/variance/convergence functions as parameters, adding indirection that obscures the algorithm. Since we only have two GLM families, the duplication is minimal and each implementation is self-contained and readable.
+
+**Result:** Two parallel IRLS implementations that share the same mathematical structure but are independently tunable. The Poisson variant's step-halving does not slow down logistic regression, and the logistic variant's simpler convergence criterion does not miss the deviance-based stopping needed for Poisson.
+
 ---
 
-## 18. Mathematical Tricks That Made It Possible
+## 19. Mathematical Tricks That Made It Possible
 
-### 18.1 IRLS as Iterated Normal Equations
+### 19.1 IRLS as Iterated Normal Equations
 
 **Why needed:** Logistic regression has no closed-form solution — the log-likelihood is a nonlinear function of β, requiring iterative optimization. Newton-Raphson is the standard approach, but it requires computing the Hessian matrix (second derivatives of the log-likelihood), which is complex to derive and implement.
 
@@ -1069,7 +1243,7 @@ const yAdj = sqrt(w) * (y - mu) // = W^{1/2}(y - μ)
 
 **Impact:** The entire logistic regression implementation reuses the same OLS normal-equations machinery (Matrix.inverse, Matrix.multiply). No separate optimizer, no gradient computation, no line search. Each IRLS iteration is essentially a call to the OLS solver with modified weights.
 
-### 18.2 Fisher z-Transform: Bounded r to Unbounded z
+### 19.2 Fisher z-Transform: Bounded r to Unbounded z
 
 **Why needed:** The sampling distribution of Pearson's r is skewed and has bounded support [-1, 1]. Standard normal-theory CI construction (estimate +/- z_crit * SE) assumes an approximately normal, unbounded sampling distribution. Applying this directly to r produces CIs that can exceed [-1, 1], especially for large |r| or small n.
 
@@ -1095,7 +1269,7 @@ return [Math.tanh(z - zCrit * se), Math.tanh(z + zCrit * se)]
 
 **Impact:** Correct, bounded CIs for any sample size n >= 4 (n >= 4 ensures n - 3 >= 1, so SE is finite). The implementation is 6 lines of code with no iteration or special cases.
 
-### 18.3 Hat Matrix Diagonal for Cook's Distance
+### 19.3 Hat Matrix Diagonal for Cook's Distance
 
 **Why needed:** Cook's distance measures the influence of each observation on the regression — how much all fitted values change when observation i is deleted. The naive computation requires refitting the model n times (once for each leave-one-out deletion), which is O(n * p³).
 
@@ -1125,7 +1299,7 @@ const cooksD = residuals.map((r, i) => {
 
 **Impact:** Cook's D for all n observations from a single matrix computation — no refitting required. Cost is O(n * p²) for the hat matrix, which is dominated by the original OLS fit cost.
 
-### 18.4 Concentrated Log-Likelihood for AIC/BIC
+### 19.4 Concentrated Log-Likelihood for AIC/BIC
 
 **Why needed:** AIC and BIC require the maximized log-likelihood. For general models, this requires iterative optimization. For the normal linear model, the MLE of σ² has a closed-form expression in terms of RSS, which can be substituted back into the log-likelihood to eliminate σ² — "concentrating" it out.
 
@@ -1153,6 +1327,23 @@ const bic = -2 * logLik + Math.log(n) * (p + 1)
 
 **Impact:** Exact AIC and BIC from a single formula evaluation, no optimization. The penalty term counts p + 1 parameters (p regression coefficients plus the error variance σ²).
 
+### 19.5 Poisson Deviance as Generalized KL Divergence
+
+**Why needed:** The Poisson deviance D = 2·Σ[y·log(y/μ) − (y − μ)] appears in three places: convergence checking, pseudo-R² computation, and the APA-formatted output. Understanding its information-theoretic meaning clarifies why it is the right quantity for all three uses.
+
+**The trick:** The Poisson deviance is related to the Kullback-Leibler divergence between the observed distribution (y) and the fitted distribution (μ). For the Poisson family, the saturated model has μ_i = y_i (one parameter per observation, fitting the data perfectly), so the deviance measures the distance from the saturated model to the fitted model:
+
+```
+D = 2·Σ[y_i·log(y_i/μ_i) − (y_i − μ_i)]
+  = 2·Σ[y_i·log(y_i/μ_i)] − 2·Σ[(y_i − μ_i)]
+```
+
+The first term is a scaled KL divergence (specifically, 2·n·KL when y and μ are treated as unnormalized distributions). The second term accounts for the fact that the Poisson is not a location family — the total count Σy_i need not equal Σμ_i in general, though for models with an intercept they are equal by the score equation, making the second term vanish.
+
+The 0·log(0) = 0 convention handles zero counts naturally: an observation with y_i = 0 contributes only −(0 − μ_i) = μ_i to the deviance (penalizing the model for predicting a non-zero count where none was observed), with no logarithmic term.
+
+**Impact:** The deviance provides a principled measure of model fit that is additive across observations, asymptotically chi-squared under the null, and directly comparable between nested models via the likelihood ratio test. Its KL interpretation also explains why deviance-based convergence (Section 12.3) is more natural than coefficient-based convergence for GLMs — it measures information loss, not parameter change.
+
 ---
 
 ## Appendix A: Implementation Completeness
@@ -1170,12 +1361,13 @@ const bic = -2 * logLik + Math.log(n) * (p + 1)
 | Multiple linear regression | regression.ts | 131–147 | Routes through OLS |
 | Polynomial regression | regression.ts | 154–170 | Routes through OLS |
 | Logistic regression (IRLS) | regression.ts | 181–304 | Fisher scoring, Wald z-test |
+| Poisson regression (IRLS) | regression.ts | 459–635 | Fisher scoring, Wald z-test, step-halving |
 | Regression diagnostics | regression.ts | 316–378 | Leverage, Cook's D, VIF |
 | PCA via SVD | pca.ts | 21–70 | 1/sqrt(n-1) scaling, matches prcomp() |
 | Varimax rotation | pca.ts | 82–137 | Kaiser (1958) pairwise algorithm |
 | Scree data extraction | pca.ts | 149–156 | Convenience for visualization |
 
-**Total:** 819 lines of implementation across 3 files.
+**Total:** ~1075 lines of implementation across 3 files.
 
 ---
 
@@ -1192,3 +1384,5 @@ const bic = -2 * logLik + Math.log(n) * (p + 1)
 5. **PCA missing values:** The current implementation requires complete data — no missing value imputation. Variables or observations with missing values must be handled before calling `runPCA()`.
 
 6. **Varimax only:** Only varimax rotation is implemented. Other rotations (promax, oblimin, geomin) are available in the full factor analysis module (`src/stats/factor-analysis.ts`) but not exposed through the PCA interface.
+
+7. **Poisson overdispersion:** The current implementation assumes equidispersion (variance = mean). For overdispersed count data (variance >> mean), quasi-Poisson or negative binomial regression would be more appropriate. The Pearson chi-squared / df_residual can be checked as a rough overdispersion diagnostic, but is not automatically computed.

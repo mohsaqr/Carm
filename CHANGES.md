@@ -1,3 +1,8 @@
+### 2026-02-27 — Update technical reports for LMM extensions + Poisson regression
+
+- `validation/MIXED-MODEL-TECHNICAL-REPORT.md`: Major update (926 → 1456 lines). Added 4 new sections: ML Estimation, Random Slopes via Log-Cholesky, Nakagawa R², Model Comparison (LRT). Updated Woodbury section for generalized q random effects. Updated API reference, implementation completeness table, known limitations. Added 3 engineering decisions and 2 math tricks entries.
+- `validation/CORRELATION-REGRESSION-TECHNICAL-REPORT.md`: Added Poisson regression section (1195 → 1388 lines). New Section 12 with 9 subsections covering IRLS algorithm, step-halving, deviance, log-likelihood, inference, AIC/BIC, numerical guards. Updated API reference, references, implementation table, limitations. Added engineering decision and math trick entries.
+
 ### 2026-02-27 — LMM improvements (ML, random slopes, Nakagawa R², LRT) + Poisson regression
 
 - `src/core/types.ts`: Extended `LMMResult` with `method`, `r2Marginal`, `r2Conditional`, `randomCorrelations`, `nParams`

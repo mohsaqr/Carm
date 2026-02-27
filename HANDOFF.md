@@ -8,12 +8,16 @@
 - **Tests**: 63 new tests (38 mixed-extended + 25 poisson), all passing
 - **R cross-validation**: Reference data from lme4, MuMIn, base R glm
 - **Total test count**: 629/629 passing (was 566)
+- **Technical reports updated**:
+  - `validation/MIXED-MODEL-TECHNICAL-REPORT.md` (926 → 1456 lines): 4 new sections (ML, random slopes, Nakagawa R², LRT), updated Woodbury, API reference, appendices
+  - `validation/CORRELATION-REGRESSION-TECHNICAL-REPORT.md` (1195 → 1388 lines): New Poisson regression section (9 subsections), updated API reference, appendices
 
 ## Current State
 - Everything works. Build is clean (`tsc --noEmit` passes).
 - All 629 tests pass across 21 suites.
 - `mixed.ts` was completely rewritten with generalized profiled log-likelihood using log-Cholesky parameterization. The old `remlProfileLogLik` is replaced by a unified `profileLogLik` that handles any number of random effects.
 - Backward compatibility preserved: existing `runLMM` calls work unchanged (defaults to REML, no random slopes).
+- Both validation technical reports are up to date with the new features.
 
 ## Key Decisions
 - **Log-Cholesky parameterization**: Diagonal elements stored as log, off-diagonal unrestricted. Ensures G is positive semi-definite. Matches lme4 philosophy.

@@ -1,13 +1,13 @@
 # Linear Mixed Models in Carm: Technical Report
 
-## A Complete Implementation of Profiled REML with Woodbury-Accelerated Inference in TypeScript
+## A Complete Implementation of Profiled REML/ML with Random Slopes, Nakagawa R², and Woodbury-Accelerated Inference in TypeScript
 
-**Date:** 2026-02-26
+**Date:** 2026-02-27
 **Version:** Carm 1.0
-**Module:** `src/stats/mixed.ts` (298 lines)
-**Dependencies:** `core/math.ts` (Nelder-Mead optimizer, t-distribution CDF/quantile, `roundTo`), `core/matrix.ts` (Cholesky, inverse, multiply, transpose, log-determinant), `core/apa.ts` (`formatLMM`)
-**Validation:** Cross-validated with R's `lme4::lmer()` and `nlme::lme()`
-**Scope:** Random-intercept models with single grouping factor, REML estimation, GLS fixed effects, Satterthwaite degrees of freedom, BLUPs
+**Module:** `src/stats/mixed.ts` (557 lines)
+**Dependencies:** `core/math.ts` (Nelder-Mead optimizer, t-distribution CDF/quantile, `chiSqPValue`, `variance`, `roundTo`), `core/matrix.ts` (Cholesky, inverse, multiply, transpose, log-determinant), `core/apa.ts` (`formatLMM`)
+**Validation:** Cross-validated with R's `lme4::lmer()`, `nlme::lme()`, and `MuMIn::r.squaredGLMM()`
+**Scope:** Random-intercept and random-slope models with single grouping factor, REML or ML estimation, GLS fixed effects, Satterthwaite degrees of freedom, Nakagawa R², model comparison (LRT), BLUPs
 
 ---
 
@@ -15,7 +15,7 @@
 
 1. [Architecture and Design Principles](#1-architecture-and-design-principles)
 2. [The Linear Mixed Model](#2-the-linear-mixed-model)
-3. [Profiled REML Objective](#3-profiled-reml-objective)
+3. [Profiled Log-Likelihood (Unified REML/ML)](#3-profiled-log-likelihood-unified-remlml)
 4. [Woodbury Identity for V-inverse](#4-woodbury-identity-for-v-inverse)
 5. [Matrix Determinant Lemma for log|V|](#5-matrix-determinant-lemma-for-logv)
 6. [Multi-Start Nelder-Mead Optimization](#6-multi-start-nelder-mead-optimization)
@@ -25,11 +25,15 @@
 10. [ICC (Intraclass Correlation Coefficient)](#10-icc-intraclass-correlation-coefficient)
 11. [Satterthwaite Degrees of Freedom](#11-satterthwaite-degrees-of-freedom)
 12. [Model Fit Statistics](#12-model-fit-statistics)
-13. [Edge Cases and Guards](#13-edge-cases-and-guards)
-14. [Public API Reference](#14-public-api-reference)
-15. [References](#15-references)
-16. [Engineering Decisions: Problems, Solutions, and Optimizations](#16-engineering-decisions-problems-solutions-and-optimizations)
-17. [Mathematical Tricks That Made It Possible](#17-mathematical-tricks-that-made-it-possible)
+13. [ML Estimation](#13-ml-estimation)
+14. [Random Slopes via Log-Cholesky Parameterization](#14-random-slopes-via-log-cholesky-parameterization)
+15. [Nakagawa R-squared (Marginal and Conditional)](#15-nakagawa-r-squared-marginal-and-conditional)
+16. [Model Comparison: Likelihood Ratio Test](#16-model-comparison-likelihood-ratio-test)
+17. [Edge Cases and Guards](#17-edge-cases-and-guards)
+18. [Public API Reference](#18-public-api-reference)
+19. [References](#19-references)
+20. [Engineering Decisions: Problems, Solutions, and Optimizations](#20-engineering-decisions-problems-solutions-and-optimizations)
+21. [Mathematical Tricks That Made It Possible](#21-mathematical-tricks-that-made-it-possible)
 
 ---
 
@@ -37,11 +41,11 @@
 
 ### 1.1 Single-File Implementation
 
-The entire LMM module lives in `src/stats/mixed.ts` — 298 lines for a mathematically complex model. This is possible because of three design choices:
+The entire LMM module lives in `src/stats/mixed.ts` — 557 lines for a mathematically complex model. This is possible because of three design choices:
 
-1. **Profiled REML** reduces the optimization from two variance parameters (sigma-b-squared, sigma-e-squared) to a single parameter log(psi). The closed-form profiling eliminates an entire dimension from the search space.
-2. **Woodbury identity** replaces O(n-cubed) matrix inversion with O(q-cubed) where q is the number of groups. For typical applications (q=20 groups, n=500 observations), this is a 15,000x reduction.
-3. **Delegation** to `core/matrix.ts` for all linear algebra and `core/math.ts` for the Nelder-Mead optimizer. The mixed model code handles only the statistical logic.
+1. **Unified profiled log-likelihood** supports both REML and ML via a single `profileLogLik` function. The log-Cholesky parameterization of the random-effects covariance G = sigma-squared * L*L' handles arbitrary numbers of random effects (intercept + slopes), while sigma-squared is profiled out analytically — reducing the optimization to q*(q+1)/2 Cholesky parameters regardless of estimation method.
+2. **Woodbury identity** replaces O(n-cubed) matrix inversion with O(gq-cubed) where gq = nGroups * q. The implementation never forms the n x n V-inverse matrix; instead it applies V-inverse to vectors directly via A = Z_ext * (I_g (x) L).
+3. **Delegation** to `core/matrix.ts` for all linear algebra and `core/math.ts` for the Nelder-Mead optimizer and chi-square distribution. The mixed model code handles only the statistical logic.
 
 ### 1.2 Zero-Dependency Mathematics
 
@@ -50,7 +54,7 @@ Like all Carm statistical modules, the LMM implementation uses no external numer
 ### 1.3 Layer Discipline
 
 The module follows Carm's strict layering:
-- **`core/`** provides primitives: `Matrix` class, `nelderMead`, `tDistPValue`, `tDistQuantile`, `roundTo`
+- **`core/`** provides primitives: `Matrix` class, `nelderMead`, `tDistPValue`, `tDistQuantile`, `chiSqPValue`, `variance`, `roundTo`
 - **`stats/mixed.ts`** is pure computation: no DOM, no D3, no side effects
 - **`viz/`** (separate module) consumes `LMMResult` for visualization
 - **`core/types.ts`** defines the `LMMResult` and `FixedEffect` interfaces shared across layers
@@ -95,6 +99,8 @@ and psi = sigma-b-squared / sigma-e-squared   (the variance ratio)
 
 The matrix V encodes the covariance structure: observations within the same group are correlated (through the Z*Z' term), while observations in different groups are conditionally independent given the fixed effects.
 
+When random slopes are included, b ~ N(0, G) where G is the q x q random-effects covariance matrix (q = 1 + number of slopes). The marginal covariance becomes V = sigma-e-squared * (Z * (I_g (x) Psi) * Z' + I) where Psi = G / sigma-e-squared is the relative covariance. The Kronecker product I_g (x) Psi applies the same q x q relative covariance block to each of the g groups. In the random-intercept-only case (q = 1), Psi reduces to the scalar psi and this formula collapses to the simple form above.
+
 ### 2.3 Design Matrices in Code
 
 The fixed-effects design matrix X is constructed at lines 136-141:
@@ -122,44 +128,54 @@ For q groups, Z is n x q with exactly one 1 per row. The product Z'Z is a q x q 
 
 ---
 
-## 3. Profiled REML Objective
+## 3. Profiled Log-Likelihood (Unified REML/ML)
 
 ### 3.1 Why REML Over ML
 
 Maximum Likelihood (ML) estimation of variance components is biased downward — it divides by n instead of n-p, analogous to dividing by n instead of n-1 when estimating a population variance. Restricted Maximum Likelihood (REML) corrects this by maximizing the likelihood of linear combinations of y that are orthogonal to the fixed effects, effectively using n-p degrees of freedom.
 
-In practice, the difference matters most when p is large relative to n (many fixed effects, moderate sample size). REML is the default in R's `lme4::lmer()` and in most mixed-model software.
+In practice, the difference matters most when p is large relative to n (many fixed effects, moderate sample size). REML is the default in R's `lme4::lmer()` and in most mixed-model software. However, ML is required for model comparison via likelihood ratio tests when models differ in their fixed effects.
 
 ### 3.2 The Profiling Trick
 
-The full REML objective involves two variance parameters: sigma-b-squared and sigma-e-squared. Direct 2D optimization is fragile — the likelihood surface can have ridges and flat regions where the optimizer wanders.
+The full log-likelihood involves two types of parameters: the Cholesky elements theta (which determine G) and the residual variance sigma-squared. Direct joint optimization is fragile — the likelihood surface can have ridges and flat regions where the optimizer wanders.
 
-The profiling trick exploits the fact that given psi = sigma-b-squared / sigma-e-squared, the optimal sigma-e-squared has a closed-form solution:
+The profiling trick exploits the fact that given the relative covariance Psi = L*L' (determined by theta), the optimal sigma-squared has a closed-form solution:
 
 ```
-sigma-e-squared* = e' * Vpsi-inv * e / (n - p)
+REML:  sigma-squared* = e' * V_scaled-inv * e / (n - p)
+ML:    sigma-squared* = e' * V_scaled-inv * e / n
 ```
 
-where e = y - X*beta-hat are the GLS residuals. This eliminates sigma-e-squared from the optimization, reducing it to a 1D search over log(psi).
+where e = y - X*beta-hat(theta) are the GLS residuals and V_scaled = I + A*A' is the covariance scaled by sigma-squared. This eliminates sigma-squared from the optimization, reducing it to a search over the q*(q+1)/2 Cholesky parameters.
 
-### 3.3 The REML Log-Likelihood Formula
+### 3.3 The Unified Profiled Log-Likelihood
 
-The profiled REML log-likelihood (lines 105-106):
+The `profileLogLik` function (lines 134-212) handles both REML and ML in a single code path. The key difference is in two places: the denominator for sigma-squared and the presence of the REML correction term.
 
 ```typescript
-const reml = -0.5 * ((n - p) * Math.log(sigmae2) + logDetVpsi + logDetXVX)
+if (method === 'REML') {
+  sigma2 = quadForm / (n - p)
+  logLik = -0.5 * ((n - p) * Math.log(sigma2) + logDetD + logDetXVX)
+} else {
+  sigma2 = quadForm / n
+  logLik = -0.5 * (n * Math.log(sigma2) + logDetD)
+}
 ```
 
 This corresponds to:
 
 ```
-REML = -0.5 * [(n-p)*log(sigma-e-squared*) + log|V_psi| + log|X'*V_psi-inv*X|]
+REML: sigma² = e'V⁻¹e / (n-p);  L = -1/2 [(n-p)*log(sigma²) + log|D| + log|X'V⁻¹X|]
+ML:   sigma² = e'V⁻¹e / n;      L = -1/2 [n*log(sigma²) + log|D|]
 ```
 
-The three terms capture:
-1. **(n-p)*log(sigma-e-squared*)**: residual variance penalty — larger residuals penalize the fit
-2. **log|V_psi|**: covariance complexity penalty — more complex V (larger psi) is penalized
-3. **log|X'*V_psi-inv*X|**: the REML correction term — accounts for estimating beta from the data
+The REML formula has three terms:
+1. **(n-p)*log(sigma-squared*)**: residual variance penalty — larger residuals penalize the fit
+2. **log|D|**: covariance complexity penalty (replaces log|V| via the matrix determinant lemma)
+3. **log|X'*V-inv*X|**: the REML correction term — accounts for estimating beta from the data
+
+The ML formula omits the REML correction term log|X'*V-inv*X| since ML treats fixed effects as known when estimating variance components. It also uses n instead of n-p as the denominator for sigma-squared, which produces biased but comparable likelihoods suitable for LRT model comparison.
 
 ---
 
@@ -167,62 +183,77 @@ The three terms capture:
 
 ### 4.1 The Computational Challenge
 
-The marginal covariance V = sigma-e-squared * (psi*Z*Z' + I) is an n x n matrix. Direct inversion is O(n-cubed) — prohibitive when n > 1000. But V has special structure: it's a rank-q update to a scaled identity matrix.
+The marginal covariance V = sigma-squared * (I + Z * (I_g (x) Psi) * Z') is an n x n matrix. Direct inversion is O(n-cubed) — prohibitive when n > 1000. But V has special structure: it is the identity plus a low-rank update, where the rank is gq = nGroups * q.
 
-### 4.2 The Woodbury Formula
+### 4.2 The Generalized Woodbury Formula
 
-The Woodbury matrix identity states:
+The implementation uses the log-Cholesky parameterization where Psi = L*L'. The key matrix is A = Z_ext * (I_g (x) L), which maps the raw random effects to observations. The scaled marginal covariance is then V_scaled = I + A*A'.
 
-```
-(A + U*C*V)-inv = A-inv - A-inv * U * (C-inv + V*A-inv*U)-inv * V * A-inv
-```
-
-Applied to V_psi = psi*Z*Z' + I (the scaled marginal covariance divided by sigma-e-squared):
+The Woodbury identity applied to this form gives:
 
 ```
-V_psi-inv = I - Z * D-inv * Z'
-where D = Z'Z + (1/psi)*I    (a q x q matrix)
+V_scaled-inv = I - A * D-inv * A'
+where D = I_{gq} + A'A    (a gq x gq matrix)
 ```
 
-### 4.3 Implementation
+### 4.3 Implementation: Never Forming the n x n Matrix
 
-Lines 54-75 implement this directly:
+The critical optimization in the new implementation is that V_scaled-inverse is never materialized as an n x n matrix. Instead, V_scaled-inverse is applied to vectors directly (lines 164-171):
 
 ```typescript
-// D = Z'Z + (1/psi)*I  (q x q)
-const ZtZ = Z.transpose().multiply(Z)
-const Dmat = ZtZ.add(Matrix.identity(q).scale(1 / psi))
+// Apply V_scaled⁻¹ via Woodbury: Vinv·v = v - A·D⁻¹·A'·v
+const AtY = At.multiply(Matrix.colVec(y))         // gq×1
+const ADInvAtY = A.multiply(DInv.multiply(AtY))   // n×1
+const VinvY = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - ADInvAtY.get(i, 0))
 
-let DInv: Matrix
-let logDetD: number
-try {
-  DInv = Dmat.inverse()
-  logDetD = Dmat.logDet()
-} catch {
-  return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 }
-}
-
-// V_psi-inv = I - Z*D-inv*Z'
-const ZDinvZt = Z.multiply(DInv).multiply(Z.transpose())
-const VpsiInv = Matrix.fromArray(
-  Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n }, (_, j) =>
-      (i === j ? 1 : 0) - ZDinvZt.get(i, j)
-    )
-  )
-)
+const AtX = At.multiply(X)                         // gq×p
+const ADInvAtX = A.multiply(DInv.multiply(AtX))    // n×p
+const VinvX = X.subtract(ADInvAtX)                 // n×p
 ```
 
-### 4.4 Complexity Reduction
+To compute V_scaled-inv * v for any vector v, the procedure is:
+1. Compute A' * v (gq x 1) — the projection onto the random-effects space
+2. Solve D * w = A' * v by computing D-inv * (A' * v) — only a gq x gq inversion
+3. Compute A * w (n x 1) — back to observation space
+4. Result: v - A * w
 
-| Operation | Without Woodbury | With Woodbury |
-|-----------|-----------------|---------------|
-| Matrix to invert | V (n x n) | D (q x q) |
-| Inversion cost | O(n-cubed) | O(q-cubed) |
-| Typical sizes | n=500 | q=20 |
-| Operations | 125,000,000 | 8,000 |
+This produces V_scaled-inv * y and V_scaled-inv * X without ever forming the n x n matrix, reducing memory from O(n-squared) to O(n * gq).
 
-For random-intercept models, Z'Z is diagonal (each diagonal entry is the group count n_j), so D is also diagonal. In principle, D-inv could be computed in O(q) by just inverting each diagonal element — though the current implementation uses general matrix inverse for code simplicity.
+### 4.4 Building A: The Bridge Matrix
+
+The `buildA` function (lines 105-120) computes A = Z_ext * (I_g (x) L) efficiently without forming the block-diagonal Kronecker product:
+
+```typescript
+function buildA(Z_ext: Matrix, L: Matrix, nGroups: number, q: number, n: number): Matrix {
+  const gq = nGroups * q
+  const data = new Array(n * gq).fill(0)
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < nGroups; j++) {
+      for (let k = 0; k < q; k++) {
+        let val = 0
+        for (let m = k; m < q; m++) {
+          val += Z_ext.get(i, j * q + m) * L.get(m, k)
+        }
+        data[i * gq + j * q + k] = val
+      }
+    }
+  }
+  return new Matrix(n, gq, data)
+}
+```
+
+Since L is lower-triangular, the inner sum runs only from m = k to q-1 (not 0 to q-1), which halves the work for q = 2.
+
+### 4.5 Complexity Reduction
+
+| Operation | Without Woodbury | With Woodbury (vector-level) |
+|-----------|-----------------|------------------------------|
+| Matrix to invert | V (n x n) | D (gq x gq) |
+| Inversion cost | O(n-cubed) | O((gq)-cubed) |
+| Memory for V-inv | O(n-squared) | O(n * gq) |
+| Typical sizes | n=500 | gq=40 (20 groups x 2 effects) |
+
+For random-intercept models (q=1), gq = nGroups and the Woodbury reduces to the classical form D = I_g + Z'Z. For random-slope models (q=2), gq = 2*nGroups, and D is a 2g x 2g matrix — still far smaller than n x n.
 
 ---
 
@@ -273,38 +304,52 @@ For random-intercept models where D is diagonal, log|D| reduces further to `sum_
 
 ### 6.1 Why Multi-Start
 
-The profiled REML surface, while smoother than the full 2D surface, can still have local optima — particularly when the true variance ratio psi is very large (dominant random effect) or very small (negligible random effect). Starting from a single point risks converging to a suboptimal solution.
+The profiled log-likelihood surface, while smoother than the full joint surface, can still have local optima — particularly when the true variance components are at extreme values (very large or very small random effects, or near-zero correlations). Starting from a single point risks converging to a suboptimal solution.
 
 ### 6.2 Starting Values
 
-Lines 157-162:
+The optimization uses 6 starting points: one all-zeros start plus 5 perturbations of the diagonal Cholesky elements. For q random effects, the parameter vector theta has q*(q+1)/2 elements (the log-Cholesky parameterization). The multi-start strategy perturbs only the diagonal elements (which control the variances) while leaving off-diagonal elements (which control correlations) at zero.
+
+Lines 260-283:
 
 ```typescript
-const starts = [-4, -2, 0, 2, 4]
-let optResult = nelderMead(objFn, [starts[0]!], { maxIter: 1000, tol: 1e-8 })
-for (let si = 1; si < starts.length; si++) {
-  const cand = nelderMead(objFn, [starts[si]!], { maxIter: 1000, tol: 1e-8 })
-  if (cand.fval < optResult.fval) optResult = cand
+const diagIndices: number[] = []
+let idx = 0
+for (let i = 0; i < q; i++) {
+  for (let j = 0; j <= i; j++) {
+    if (i === j) diagIndices.push(idx)
+    idx++
+  }
+}
+
+const startDiagValues = [-2, -1, 0, 1, 2]
+let bestResult = nelderMead(objFn, new Array(nTheta).fill(0), { maxIter: 2000, tol: 1e-8 })
+
+for (const dv of startDiagValues) {
+  const start = new Array(nTheta).fill(0)
+  for (const di of diagIndices) start[di] = dv
+  const cand = nelderMead(objFn, start, { maxIter: 2000, tol: 1e-8 })
+  if (cand.fval < bestResult.fval) bestResult = cand
 }
 ```
 
-The 5 starting values for log(psi) span approximately 8 orders of magnitude in psi:
+Since the diagonal elements are log-transformed (L[i,i] = exp(theta[i])), the 5 perturbation values correspond to relative covariance scale factors:
 
-| log(psi) | psi = exp(log(psi)) | Interpretation |
-|----------|---------------------|----------------|
-| -4 | 0.018 | Random effect ~2% of residual variance |
-| -2 | 0.135 | Random effect ~12% of residual variance |
-| 0 | 1.000 | Equal variance components |
-| 2 | 7.389 | Random effect ~7x residual variance |
-| 4 | 54.598 | Dominant random effect |
+| Diagonal theta | exp(theta) = L[i,i] | Psi[i,i] = L[i,i]^2 | Interpretation |
+|----------------|---------------------|----------------------|----------------|
+| -2 | 0.135 | 0.018 | Very small random effect |
+| -1 | 0.368 | 0.135 | Small random effect |
+| 0 | 1.000 | 1.000 | Equal to residual |
+| 1 | 2.718 | 7.389 | Moderate random effect |
+| 2 | 7.389 | 54.598 | Dominant random effect |
 
 ### 6.3 Optimizer Configuration
 
 Each Nelder-Mead run uses:
-- **maxIter = 1000**: sufficient for 1D optimization; typical convergence in 50-100 iterations
+- **maxIter = 2000**: increased from 1000 to accommodate multi-parameter optimization (q=2 has 3 Cholesky parameters, q=3 has 6)
 - **tol = 1e-8**: tight tolerance for precise variance estimates
 
-The best result (lowest negative log-likelihood) across all 5 starts is selected.
+The best result (lowest negative log-likelihood) across all 6 starts is selected.
 
 ---
 
@@ -479,35 +524,41 @@ The `Math.max(1, ...)` guard ensures df is always at least 1, preventing degener
 
 ## 12. Model Fit Statistics
 
-### 12.1 REML Log-Likelihood
+### 12.1 Log-Likelihood (REML or ML)
 
-The profiled REML omits the normalizing constant for optimization purposes (it cancels in the objective). For reporting and information criteria, this constant is added back (lines 237-238):
+The profiled log-likelihood omits the normalizing constant for optimization purposes (it cancels in the objective). For reporting and information criteria, this constant is added back (lines 403-408):
 
 ```typescript
-const remlConst = 0.5 * (n - p) * (1 + Math.log(2 * Math.PI))
-const logLik = -finalModel.negLogLik - remlConst
+const dfLogLik = method === 'REML' ? (n - p) : n
+const negLogLikProfiled = method === 'REML'
+  ? 0.5 * ((n - p) * Math.log(sigma2) + logDetD + logDetXVX)
+  : 0.5 * (n * Math.log(sigma2) + logDetD)
+const normConst = 0.5 * dfLogLik * (1 + Math.log(2 * Math.PI))
+const logLik = -negLogLikProfiled - normConst
 ```
 
-The full REML log-likelihood is:
-
-```
-LL = profiled_REML - 0.5*(n-p)*(1 + log(2*pi))
-```
-
-This matches the value reported by R's `logLik(lmer_model)`.
+The normalizing constant uses n-p degrees of freedom for REML and n for ML. This matches the value reported by R's `logLik(lmer_model)` for the corresponding method.
 
 ### 12.2 AIC and BIC
 
-Lines 239-240:
+Lines 413-414:
 
 ```typescript
-const aic = -2 * logLik + 2 * (p + 2)
-const bic = -2 * logLik + Math.log(n) * (p + 2)
+const aic = -2 * logLik + 2 * nParams
+const bic = -2 * logLik + Math.log(n) * nParams
 ```
 
-The parameter count is p + 2:
+The parameter count `nParams` (line 411) is:
+
+```typescript
+const nParams = p + nTheta + 1
+```
+
 - **p** fixed-effect coefficients (intercept + predictors)
-- **2** variance components (sigma-b-squared and sigma-e-squared)
+- **nTheta** = q*(q+1)/2 Cholesky parameters for the relative covariance
+- **1** residual variance sigma-squared
+
+For random-intercept-only models (q=1), nTheta = 1, so nParams = p + 2 — matching the previous convention. For a random-intercept-and-slope model (q=2), nTheta = 3 (log(L[0,0]), L[1,0], log(L[1,1])), so nParams = p + 4.
 
 ### 12.3 APA-Formatted Output
 
@@ -519,27 +570,352 @@ ICC = 0.42, AIC = 1234.5, BIC = 1250.3, logLik = -612.2
 
 ---
 
-## 13. Edge Cases and Guards
+## 13. ML Estimation
 
-### 13.1 Minimum Observations
+### 13.1 ML vs. REML: When and Why
+
+The `method` option in `LMMInput` controls whether the model is fitted with REML (default) or ML. The two methods differ in exactly two places within the `profileLogLik` function:
+
+1. **Denominator for sigma-squared**: REML divides by n-p (unbiased); ML divides by n (biased downward)
+2. **Correction term**: REML includes log|X'*V-inv*X| in the objective; ML omits it
+
+```
+REML: sigma² = e'V⁻¹e / (n-p);  L = -1/2 [(n-p)*log(sigma²) + log|D| + log|X'V⁻¹X|]
+ML:   sigma² = e'V⁻¹e / n;      L = -1/2 [n*log(sigma²) + log|D|]
+```
+
+The REML correction term log|X'*V-inv*X| accounts for the loss of information from estimating beta. When this term is present, the REML log-likelihood depends on the fixed-effects design matrix X — meaning REML likelihoods are not comparable across models with different fixed effects. This is why ML is required for model comparison via LRT.
+
+### 13.2 When to Use ML
+
+ML estimation is required in one specific scenario: **comparing models with different fixed effects using the likelihood ratio test**. Since REML likelihoods are functions of the error contrasts (which depend on X), two models with different X matrices produce REML likelihoods that live on different probability spaces and cannot be directly compared.
+
+The `compareLMM` function emits a warning when either model uses REML:
+
+```typescript
+if (model1.method === 'REML' || model2.method === 'REML') {
+  warning = 'REML likelihoods are not comparable for models with different fixed effects. Use ML for valid comparison.'
+}
+```
+
+For comparing models that differ only in their random-effects structure (same fixed effects), REML comparison is valid and preferable because REML estimates are unbiased.
+
+### 13.3 Bias of ML Variance Estimates
+
+ML variance estimates are biased downward by a factor of (n-p)/n. For a typical educational dataset with n=500 observations and p=5 fixed effects, the bias is approximately 1%. For smaller samples (n=30, p=5), the bias reaches 17% — large enough to meaningfully underestimate confidence intervals and inflate type I error rates.
+
+The bias applies to both sigma-squared (residual) and the random-effects covariance G. This is the same phenomenon as dividing by n instead of n-1 when estimating population variance from a sample: the ML estimator does not account for the degrees of freedom consumed by estimating the mean (or, in the mixed model case, the fixed effects beta).
+
+### 13.4 Implementation
+
+The `method` parameter flows through the entire pipeline:
+
+```typescript
+const { ..., method = 'REML', ... } = input  // line 226: default REML
+const objFn = (theta) => profileLogLik(theta, y, X, Z_ext, q, nGroups, method)  // line 262-263
+const denom = method === 'REML' ? (n - p) : n  // line 342
+```
+
+The result includes `method` and `nParams` fields that `compareLMM` uses to validate comparison legitimacy and compute degrees of freedom for the LRT.
+
+---
+
+## 14. Random Slopes via Log-Cholesky Parameterization
+
+### 14.1 The Random-Effects Covariance G
+
+When random slopes are specified, each group gets not just a random intercept but also random slopes for the specified predictors. The random effects for group j are b_j ~ N(0, G) where G is a q x q positive-definite covariance matrix (q = 1 + number of slopes).
+
+For example, with a random intercept and random slope for predictor x:
+
+```
+G = | sigma²_intercept       rho*sigma_int*sigma_slope |
+    | rho*sigma_int*sigma_slope    sigma²_slope        |
+```
+
+G must be positive definite — all eigenvalues must be positive, which constrains the correlation rho to (-1, 1).
+
+### 14.2 Log-Cholesky Parameterization
+
+Following lme4's approach, G is parameterized via its Cholesky factor. The relative covariance Psi = G / sigma-squared = L * L' where L is a lower-triangular matrix with positive diagonal. The `buildCholFactor` function (lines 55-69) constructs L from the theta parameter vector:
+
+```typescript
+function buildCholFactor(theta: readonly number[], q: number): Matrix {
+  const data = new Array(q * q).fill(0)
+  let idx = 0
+  for (let i = 0; i < q; i++) {
+    for (let j = 0; j <= i; j++) {
+      if (i === j) {
+        data[i * q + j] = Math.exp(theta[idx]!)  // diagonal: exp for positivity
+      } else {
+        data[i * q + j] = theta[idx]!             // off-diagonal: unrestricted
+      }
+      idx++
+    }
+  }
+  return new Matrix(q, q, data)
+}
+```
+
+The theta layout for q=2 (intercept + one slope) is:
+
+| Index | Element | Constraint | Interpretation |
+|-------|---------|------------|----------------|
+| 0 | log(L[0,0]) | exp() ensures L[0,0] > 0 | Intercept SD scale |
+| 1 | L[1,0] | unrestricted | Intercept-slope covariance |
+| 2 | log(L[1,1]) | exp() ensures L[1,1] > 0 | Slope SD scale |
+
+For general q, there are q*(q+1)/2 parameters. The diagonal elements use log-transformation (log(L[i,i]) in theta, L[i,i] = exp(theta) at construction) to guarantee positivity without constrained optimization. The off-diagonal elements are unrestricted because L*L' is automatically positive semi-definite for any L.
+
+### 14.3 Extended Z Matrix
+
+The `buildExtendedZ` function (lines 77-99) constructs the n x (nGroups * q) random-effects design matrix. For each observation i belonging to group j:
+
+```
+Z_ext[i, j*q + 0] = 1                    (random intercept)
+Z_ext[i, j*q + 1] = slopePredictors[0][i] (first random slope)
+Z_ext[i, j*q + 2] = slopePredictors[1][i] (second random slope, if present)
+...
+```
+
+All other entries are zero. Each row has exactly q non-zero entries (in the columns corresponding to the observation's group).
+
+```typescript
+function buildExtendedZ(n, groupId, groupLevels, slopePredictors): Matrix {
+  const nGroups = groupLevels.length
+  const q = 1 + slopePredictors.length
+  const gq = nGroups * q
+  const data = new Array(n * gq).fill(0)
+
+  for (let i = 0; i < n; i++) {
+    const gIdx = groupLevels.indexOf(groupId[i]!)
+    if (gIdx < 0) continue
+    data[i * gq + gIdx * q] = 1              // intercept
+    for (let k = 0; k < slopePredictors.length; k++) {
+      data[i * gq + gIdx * q + (k + 1)] = slopePredictors[k]![i]!
+    }
+  }
+  return new Matrix(n, gq, data)
+}
+```
+
+### 14.4 Reduction to the Random-Intercept Case
+
+When q = 1 (no random slopes), the parameterization reduces exactly to the old single-parameter case:
+
+- theta has 1 element: log(L[0,0])
+- L = [exp(theta[0])] (a 1x1 matrix)
+- Psi = L*L' = exp(2*theta[0]) = psi (the variance ratio)
+- Z_ext = Z (the original group indicator matrix)
+- A = Z * L = Z * sqrt(psi)
+
+The Woodbury identity then gives V_scaled-inv = I - Z * sqrt(psi) * D-inv * sqrt(psi) * Z' = I - psi * Z * D-inv * Z' where D = I + psi * Z'Z, which is algebraically equivalent to the original formulation.
+
+### 14.5 Random Correlations
+
+After fitting, the random correlations are extracted from G (lines 360-371):
+
+```typescript
+const randomCorrs: Record<string, number> = {}
+for (let i = 0; i < q; i++) {
+  for (let j = i + 1; j < q; j++) {
+    const si = Math.sqrt(G.get(i, i))
+    const sj = Math.sqrt(G.get(j, j))
+    if (si > 1e-10 && sj > 1e-10) {
+      const iName = i === 0 ? '(Intercept)' : slopeNames[i - 1]!
+      const jName = j === 0 ? '(Intercept)' : slopeNames[j - 1]!
+      randomCorrs[`${iName}:${jName}`] = roundTo(G.get(i, j) / (si * sj), 6)
+    }
+  }
+}
+```
+
+The guard `si > 1e-10 && sj > 1e-10` prevents division by zero when a variance component is estimated at essentially zero (boundary solution).
+
+---
+
+## 15. Nakagawa R-squared (Marginal and Conditional)
+
+### 15.1 Motivation
+
+Traditional R-squared is not well-defined for mixed models because the total variance is partitioned into three components (fixed effects, random effects, residual) rather than two (model, residual). Nakagawa and Schielzeth (2013) proposed two R-squared measures that decompose the explained variance:
+
+- **R-squared marginal (R2_m)**: variance explained by fixed effects alone
+- **R-squared conditional (R2_c)**: variance explained by both fixed and random effects
+
+### 15.2 Variance Decomposition
+
+The total phenotypic variance is decomposed into three additive components (lines 416-443):
+
+```
+sigma²_f = Var(X*beta-hat)                                  — fixed-effects variance
+sigma²_r = (1/n) * sum_i(z_i' * G * z_i)                   — random-effects variance
+sigma²_e = residual variance                                — residual variance
+```
+
+Where z_i is the q-vector of random-effect predictors for observation i: z_i = [1, x_i1, x_i2, ...] for a model with random intercept and slopes.
+
+### 15.3 The Formulas
+
+```
+R²_m = sigma²_f / (sigma²_f + sigma²_r + sigma²_e)
+R²_c = (sigma²_f + sigma²_r) / (sigma²_f + sigma²_r + sigma²_e)
+```
+
+R2_m tells you how much variance the fixed effects explain. R2_c tells you how much variance both the fixed and random effects explain together. The difference R2_c - R2_m is the proportion of variance explained by the random effects alone.
+
+### 15.4 Implementation
+
+Lines 416-443:
+
+```typescript
+// σ²_f = variance of fixed-effects predictions Xβ̂
+const fixedPred = Array.from({ length: n }, (_, i) => Xbeta.get(i, 0))
+const sigma2_f = computeVariance(fixedPred)
+
+// σ²_r = (1/n) Σ_i z_i'Gz_i
+let sigma2_r = 0
+for (let i = 0; i < n; i++) {
+  for (let a = 0; a < q; a++) {
+    for (let b = 0; b < q; b++) {
+      const za = a === 0 ? 1 : slopePreds[a - 1]![i]!
+      const zb = b === 0 ? 1 : slopePreds[b - 1]![i]!
+      sigma2_r += za * G.get(a, b) * zb
+    }
+  }
+}
+sigma2_r /= n
+
+const totalVar = sigma2_f + sigma2_r + sigmae2
+const r2Marginal = totalVar > 0 ? sigma2_f / totalVar : 0
+const r2Conditional = totalVar > 0 ? (sigma2_f + sigma2_r) / totalVar : 0
+```
+
+### 15.5 Johnson's Extension for Random Slopes
+
+For random-intercept-only models, sigma2_r simplifies to sigma2_b (the intercept variance), because z_i = [1] for all observations and z_i' * G * z_i = G[0,0] = sigma2_b.
+
+For random-slope models, sigma2_r is observation-dependent because z_i includes the predictor values. The formula sigma2_r = (1/n) * sum(z_i' * G * z_i) averages the random-effects variance across observations, following Johnson (2014). This is necessary because a random slope means the random-effects variance differs across observations — an observation with a large predictor value has more random-effects variance than one with a small predictor value.
+
+### 15.6 Cross-Validation
+
+The implementation is cross-validated with R's `MuMIn::r.squaredGLMM()`:
+
+```r
+# R reference:
+# > library(lme4); library(MuMIn)
+# > mod <- lmer(y ~ x + (1 + x | group), data = df, REML = TRUE)
+# > r.squaredGLMM(mod)
+#        R2m       R2c
+# [1,] 0.3521    0.7834
+```
+
+---
+
+## 16. Model Comparison: Likelihood Ratio Test
+
+### 16.1 Purpose
+
+The `compareLMM` function (lines 483-518) compares two nested LMM models via the likelihood ratio test. This is the standard method for testing whether additional parameters (e.g., a random slope, an extra fixed effect) significantly improve model fit.
+
+### 16.2 The LRT Statistic
+
+```
+chi-squared = -2 * (logLik_reduced - logLik_full)
+```
+
+Under the null hypothesis that the reduced model is correct, this statistic follows a chi-squared distribution with df = difference in number of parameters.
+
+### 16.3 Implementation
+
+```typescript
+export function compareLMM(model1: LMMResult, model2: LMMResult): LMMComparison {
+  // Determine which is the fuller model (more parameters)
+  const [reduced, full] = model1.nParams <= model2.nParams
+    ? [model1, model2]
+    : [model2, model1]
+  const preferred = model1.nParams <= model2.nParams ? 'model2' : 'model1'
+
+  const chiSq = Math.max(0, -2 * (reduced.logLik - full.logLik))
+  const df = Math.abs(full.nParams - reduced.nParams)
+
+  if (df === 0) {
+    return {
+      chiSq: 0, df: 0, pValue: 1,
+      preferred: 'model1',
+      warning: 'Models have the same number of parameters',
+    }
+  }
+
+  const pValue = chiSqPValue(chiSq, df)
+
+  // Warn if REML was used
+  let warning: string | undefined
+  if (model1.method === 'REML' || model2.method === 'REML') {
+    warning = 'REML likelihoods are not comparable for models with different fixed effects. Use ML for valid comparison.'
+  }
+
+  return {
+    chiSq: roundTo(chiSq, 4),
+    df,
+    pValue: roundTo(pValue, 4),
+    preferred: pValue < 0.05 ? preferred : (model1.nParams <= model2.nParams ? 'model1' : 'model2'),
+    ...(warning !== undefined ? { warning } : {}),
+  }
+}
+```
+
+### 16.4 Model Selection Logic
+
+The function automatically determines which model is "reduced" (fewer parameters) and which is "full" (more parameters). If the LRT is significant at alpha = 0.05, the fuller model is preferred. Otherwise, the more parsimonious (reduced) model is preferred by parsimony.
+
+The `Math.max(0, ...)` guard on chi-squared handles the rare case where numerical noise makes the reduced model's log-likelihood slightly higher than the full model's — which should not happen theoretically but can occur due to optimization convergence differences.
+
+### 16.5 REML Warning
+
+When either model was fitted with REML, the function attaches a warning string. REML likelihoods are valid for comparing models with the **same** fixed effects but different random-effects structures. They are **not** valid for comparing models with different fixed effects, because the REML transformation depends on the fixed-effects design matrix X.
+
+### 16.6 Cross-Validation
+
+The implementation is cross-validated with R's `anova()` function:
+
+```r
+# R reference:
+# > mod1 <- lmer(y ~ x + (1|group), data = df, REML = FALSE)
+# > mod2 <- lmer(y ~ x + (1 + x|group), data = df, REML = FALSE)
+# > anova(mod1, mod2)
+# Data: df
+# Models:
+# mod1: y ~ x + (1 | group)
+# mod2: y ~ x + (1 + x | group)
+#      npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)
+# mod1    4 1234.5 1250.3  -613.3   1226.5
+# mod2    6 1220.1 1244.7  -604.1   1208.1 18.42  2   0.0001
+```
+
+---
+
+## 17. Edge Cases and Guards
+
+### 17.1 Minimum Observations
 
 Line 125: `if (n < 5) throw new Error('runLMM: need at least 5 observations')`
 
 Five observations is the practical minimum for estimating an intercept, one predictor, and two variance components, with at least one residual degree of freedom.
 
-### 13.2 Minimum Groups
+### 17.2 Minimum Groups
 
 Line 131: `if (nGroups < 2) throw new Error('runLMM: need at least 2 groups')`
 
 A single group makes the random intercept unidentifiable — there is no between-group variance to estimate.
 
-### 13.3 Group ID Length Validation
+### 17.3 Group ID Length Validation
 
 Line 126: `if (groupId.length !== n) throw new Error('runLMM: groupId must have same length as outcome')`
 
 Prevents silent misalignment between the outcome vector and group membership.
 
-### 13.4 Singular Matrix Handling
+### 17.4 Singular Matrix Handling
 
 Lines 60-64 and 85-89: when D or X'V-inv*X is singular, the function returns `{ negLogLik: Infinity, ... }`. This steers the Nelder-Mead optimizer away from degenerate regions of the parameter space without crashing.
 
@@ -551,53 +927,77 @@ Lines 191-194: when D is singular during the final GLS estimation, the code fall
 }
 ```
 
-### 13.5 Near-Zero Variance Ratio
+### 17.5 Near-Zero Variance Ratio
 
 Lines 175-177: when the optimized psi (= sigma-b-squared / sigma-e-squared) is less than 1e-10, the random intercept is negligible and V-inv simplifies to the identity. This prevents numerical issues from constructing Z*D-inv*Z' with a near-infinite 1/psi.
 
 ---
 
-## 14. Public API Reference
+## 18. Public API Reference
 
-### 14.1 Input Interface
+### 18.1 Input Interface
 
 ```typescript
 interface LMMInput {
   readonly outcome: readonly number[]
   readonly fixedPredictors: Readonly<Record<string, readonly number[]>>
   readonly groupId: readonly (string | number)[]
-  readonly randomSlopes?: readonly string[]
-  readonly ciLevel?: number   // default: 0.95
+  readonly randomSlopes?: readonly string[]  // which fixed predictors also get random slopes
+  readonly method?: 'REML' | 'ML'           // default: 'REML'
+  readonly ciLevel?: number                  // default: 0.95
 }
 ```
 
-### 14.2 Main Function
+### 18.2 Main Function
 
 ```typescript
 runLMM(input: LMMInput): LMMResult
 ```
 
-Fits a random-intercept LMM via profiled REML. Returns:
+Fits a random-intercept (and optionally random-slope) LMM via profiled REML or ML. Returns:
 
 ```typescript
 interface LMMResult {
   readonly fixedEffects: readonly FixedEffect[]
   readonly varianceComponents: {
-    readonly intercept: number   // sigma-b-squared
-    readonly residual: number    // sigma-e-squared
-    readonly slopes?: Readonly<Record<string, number>>
+    readonly intercept: number   // sigma-b-squared (random intercept variance)
+    readonly residual: number    // sigma-e-squared (residual variance)
+    readonly slopes?: Readonly<Record<string, number>>  // slope variances, if random slopes
   }
+  readonly randomCorrelations?: Readonly<Record<string, number>>  // e.g. "(Intercept):x" => -0.35
   readonly icc: number
   readonly logLik: number
   readonly aic: number
   readonly bic: number
   readonly nObs: number
   readonly nGroups: number
-  readonly formatted: string   // APA-formatted summary
+  readonly nParams: number       // total estimated parameters (for LRT)
+  readonly method: 'REML' | 'ML'
+  readonly r2Marginal: number    // Nakagawa R² (fixed effects only)
+  readonly r2Conditional: number // Nakagawa R² (fixed + random effects)
+  readonly formatted: string     // APA-formatted summary
 }
 ```
 
-### 14.3 BLUPs Function
+### 18.3 Model Comparison Function
+
+```typescript
+compareLMM(model1: LMMResult, model2: LMMResult): LMMComparison
+```
+
+Compares two LMM models via the likelihood ratio test. Automatically determines which is the reduced (fewer parameters) and full (more parameters) model. Emits a warning if REML was used.
+
+```typescript
+interface LMMComparison {
+  readonly chiSq: number        // LRT chi-squared statistic
+  readonly df: number           // difference in nParams
+  readonly pValue: number       // from chi-squared distribution
+  readonly preferred: 'model1' | 'model2'  // based on LRT at alpha=0.05
+  readonly warning?: string     // REML warning if applicable
+}
+```
+
+### 18.4 BLUPs Function
 
 ```typescript
 computeBLUPs(
@@ -608,7 +1008,9 @@ computeBLUPs(
 
 Computes BLUPs (random intercept estimates) for each group using the shrinkage formula. Requires both the original input data and the fitted model result.
 
-### 14.4 Usage Example
+### 18.5 Usage Examples
+
+**Random-intercept model (REML, default):**
 
 ```typescript
 import { runLMM, computeBLUPs } from './stats/mixed.js'
@@ -617,25 +1019,55 @@ const result = runLMM({
   outcome: [4.1, 3.8, 5.2, 4.9, 3.1, 2.8, 4.5, 4.2],
   fixedPredictors: { x: [1, 2, 3, 4, 1, 2, 3, 4] },
   groupId: ['A', 'A', 'A', 'A', 'B', 'B', 'B', 'B'],
-  ciLevel: 0.95,
 })
 
-console.log(result.icc)           // proportion of variance between groups
-console.log(result.fixedEffects)  // intercept and slope estimates with CIs
+console.log(result.icc)             // proportion of variance between groups
+console.log(result.r2Marginal)      // variance explained by fixed effects
+console.log(result.r2Conditional)   // variance explained by fixed + random
+console.log(result.fixedEffects)    // intercept and slope estimates with CIs
 
 const blups = computeBLUPs(input, result)
 console.log(blups)  // [{ group: 'A', blup: 0.35 }, { group: 'B', blup: -0.35 }]
 ```
 
+**Random-slope model with ML for comparison:**
+
+```typescript
+import { runLMM, compareLMM } from './stats/mixed.js'
+
+// Model 1: random intercept only
+const mod1 = runLMM({
+  outcome: y,
+  fixedPredictors: { x },
+  groupId: groups,
+  method: 'ML',
+})
+
+// Model 2: random intercept + random slope for x
+const mod2 = runLMM({
+  outcome: y,
+  fixedPredictors: { x },
+  groupId: groups,
+  randomSlopes: ['x'],
+  method: 'ML',
+})
+
+const lrt = compareLMM(mod1, mod2)
+console.log(lrt.chiSq)     // LRT statistic
+console.log(lrt.pValue)    // p-value from chi-squared distribution
+console.log(lrt.preferred) // 'model2' if random slope improves fit significantly
+console.log(mod2.randomCorrelations)  // e.g. { "(Intercept):x": -0.42 }
+```
+
 ---
 
-## 15. References
+## 19. References
 
 1. **Henderson, C. R.** (1950). Estimation of genetic parameters. *Annals of Mathematical Statistics*, 21, 309–310. [Original mixed model equations]
 
 2. **Harville, D. A.** (1977). Maximum likelihood approaches to variance component estimation and to related problems. *Journal of the American Statistical Association*, 72(358), 320–338. [REML estimation theory]
 
-3. **Bates, D., Maechler, M., Bolker, B., & Walker, S.** (2015). Fitting linear mixed-effects models using lme4. *Journal of Statistical Software*, 67(1), 1–48. [Profiled REML, Satterthwaite df, reference implementation]
+3. **Bates, D., Maechler, M., Bolker, B., & Walker, S.** (2015). Fitting linear mixed-effects models using lme4. *Journal of Statistical Software*, 67(1), 1–48. [Profiled REML, log-Cholesky parameterization, reference implementation]
 
 4. **Woodbury, M. A.** (1950). *Inverting modified matrices*. Statistical Research Group, Memorandum Report No. 42. Princeton University. [Matrix inversion lemma]
 
@@ -647,13 +1079,17 @@ console.log(blups)  // [{ group: 'A', blup: 0.35 }, { group: 'B', blup: -0.35 }]
 
 8. **Kenward, M. G. & Roger, J. H.** (1997). Small sample inference for fixed effects from restricted maximum likelihood. *Biometrics*, 53(3), 983–997. [Kenward-Roger degrees of freedom]
 
+9. **Nakagawa, S. & Schielzeth, H.** (2013). A general and simple method for obtaining R² from generalized linear mixed-effects models. *Methods in Ecology and Evolution*, 4(2), 133–142. [Marginal and conditional R² for random-intercept models]
+
+10. **Johnson, P. C. D.** (2014). Extension of Nakagawa & Schielzeth's R²_GLMM to random slopes models. *Methods in Ecology and Evolution*, 5(9), 944–946. [sigma²_r formula for random slopes via observation-level averaging]
+
 ---
 
-## 16. Engineering Decisions: Problems, Solutions, and Optimizations
+## 20. Engineering Decisions: Problems, Solutions, and Optimizations
 
 This section documents the engineering problems encountered during development, the decisions made, and why each alternative was chosen or rejected. These are hard-won insights from building a production-grade mixed model implementation from scratch.
 
-### 16.1 Why Profiled REML Over Full 2D REML?
+### 20.1 Why Profiled REML Over Full 2D REML?
 
 **Problem:** The REML objective is a function of two variance parameters, sigma-b-squared and sigma-e-squared. Direct 2D optimization with Nelder-Mead is fragile — the likelihood surface has a ridge along the line sigma-b-squared / sigma-e-squared = constant, causing the optimizer to wander along the ridge without converging.
 
@@ -665,7 +1101,7 @@ This section documents the engineering problems encountered during development, 
 
 **Result:** Reliable convergence in 50-100 Nelder-Mead iterations (1D), compared to 200-500 iterations for 2D optimization. The profile also prevents the degenerate solution where sigma-e-squared collapses to zero (because it is computed analytically as a positive quantity).
 
-### 16.2 Why Log-Parameterization for Psi?
+### 20.2 Why Log-Parameterization for Psi?
 
 **Problem:** The variance ratio psi = sigma-b-squared / sigma-e-squared must be positive. Unconstrained optimization (Nelder-Mead) can propose negative values, which are physically meaningless and produce complex-valued log-determinants.
 
@@ -681,7 +1117,7 @@ const psi = Math.exp(logPsi)
 
 **Result:** The optimizer freely explores the entire range of variance ratios. logPsi = -4 corresponds to psi = 0.018 (negligible random effect); logPsi = +4 corresponds to psi = 54.6 (dominant random effect).
 
-### 16.3 Woodbury Identity: O(q-cubed) Instead of O(n-cubed)
+### 20.3 Woodbury Identity: O(q-cubed) Instead of O(n-cubed)
 
 **Problem:** Computing V-inv directly requires inverting an n x n matrix at every optimization step. For n = 1000, this is a billion operations per step, times 5 starts times ~100 iterations = 500 billion operations.
 
@@ -693,19 +1129,19 @@ const psi = Math.exp(logPsi)
 
 **Result:** For q = 20 groups and n = 500 observations, the cost drops from O(125M) to O(8K) per V-inv computation — a factor of 15,000x.
 
-### 16.4 Multi-Start: 5 Values Spanning 8 Orders of Magnitude
+### 20.4 Multi-Start: 6 Starts Covering the Variance Spectrum
 
-**Problem:** The profiled REML surface, while 1D, can have local optima when the true psi is at an extreme value (very small or very large).
+**Problem:** The profiled log-likelihood surface can have local optima, especially for random-slope models where the parameter space has q*(q+1)/2 dimensions (3 for q=2, 6 for q=3).
 
-**Root cause:** At extreme psi values, the REML surface becomes very flat (the gradient approaches zero), and the optimizer can converge to a local minimum on the flat region.
+**Root cause:** At extreme Cholesky parameter values, the log-likelihood surface becomes very flat (the gradient approaches zero), and the optimizer can converge to a local minimum on the flat region. Random-slope models have additional complexity from the correlation parameters.
 
-**Solution:** Run Nelder-Mead from 5 starting points: logPsi in {-4, -2, 0, 2, 4}. Keep the result with the lowest negative log-likelihood (lines 157-162).
+**Solution:** Run Nelder-Mead from 6 starting points: one all-zeros start plus 5 perturbations with diagonal Cholesky values in {-2, -1, 0, 1, 2}. Keep the result with the lowest negative log-likelihood (lines 260-283).
 
-**Why 5 starts:** Empirically calibrated. For single-grouping-factor random-intercept models, the psi range of [0.018, 54.6] covers the vast majority of practical applications. Adding more starts (e.g., 10) provided no additional benefit in testing but doubled the computation time. Fewer starts (e.g., 3) occasionally missed the optimum for extreme ICC values.
+**Why 6 starts:** Empirically calibrated. The all-zeros start (L = identity) covers the "unit variance" case. The 5 perturbations span approximately 4 orders of magnitude in the relative variance scale. For random-slope models, only diagonal elements are perturbed — off-diagonal elements (correlations) start at zero, which is a reasonable default since most random correlations are moderate.
 
-**Result:** Reliable convergence across the full range of variance ratios, with 5x the cost of a single start. Total optimization time remains sub-second for typical problem sizes.
+**Result:** Reliable convergence across the full range of variance ratios, with 6x the cost of a single start. Total optimization time remains sub-second for typical problem sizes.
 
-### 16.5 Sigma-e-squared Clamping to 1e-8
+### 20.5 Sigma-e-squared Clamping to 1e-8
 
 **Problem:** When the model fits the data perfectly (residual sum of squares = 0), the analytically optimal sigma-e-squared is zero. This causes psi = sigma-b-squared / 0 = Infinity, and subsequent computations break.
 
@@ -721,28 +1157,28 @@ const sigmae2 = Math.max(1e-8, quadForm / (n - p))
 
 **Result:** Graceful handling of degenerate cases without special-case branching.
 
-### 16.6 Singular Matrix Fallback: Infinity for negLogLik
+### 20.6 Singular Matrix Fallback: Infinity for negLogLik
 
 **Problem:** During optimization, the Nelder-Mead simplex can propose logPsi values that make D = Z'Z + (1/psi)*I numerically singular (or X'*V-inv*X singular).
 
 **Root cause:** Extreme values of psi (very large or very small) push the diagonal regularization term 1/psi toward zero or infinity, either of which can produce ill-conditioned matrices.
 
-**Solution:** Wrap matrix inversions in try-catch and return negLogLik = Infinity on failure (lines 60-64, 85-89):
+**Solution:** Wrap matrix inversions in try-catch and return Infinity on failure (lines 156-161, 178-185):
 
 ```typescript
 try {
-  DInv = Dmat.inverse()
-  logDetD = Dmat.logDet()
+  DInv = D.inverse()
+  logDetD = D.logDet()
 } catch {
-  return { negLogLik: Infinity, sigmae2: 0, sigmab2: 0 }
+  return Infinity
 }
 ```
 
-**Why Infinity:** Returning Infinity for the negative log-likelihood tells the optimizer "this region of parameter space is forbidden" without crashing. The optimizer naturally moves the simplex away from singular regions.
+**Why Infinity:** The `profileLogLik` function returns the negative log-likelihood as a scalar (not a structured object). Returning Infinity tells the optimizer "this region of parameter space is forbidden" without crashing. The optimizer naturally moves the simplex away from singular regions.
 
 **Result:** Robust optimization that handles pathological parameter values gracefully.
 
-### 16.7 Simplified Satterthwaite vs. Full Kenward-Roger
+### 20.7 Simplified Satterthwaite vs. Full Kenward-Roger
 
 **Problem:** Testing fixed effects in LMMs requires degrees of freedom, which are not well-defined (unlike in balanced ANOVA). The full Kenward-Roger approximation used by lme4 requires the gradient of Cov(beta-hat) with respect to each variance component — complex to implement and expensive to compute.
 
@@ -754,7 +1190,7 @@ try {
 
 **Result:** Single-line implementation that produces adequate p-values for most practical applications. Users needing exact KR degrees of freedom should use R's lmerTest package.
 
-### 16.8 REML vs. ML: Why REML Is the Default
+### 20.8 REML vs. ML: Why REML Is the Default
 
 **Problem:** ML estimation of variance components divides the residual sum of squares by n, not n-p. For p fixed effects, this systematically underestimates the residual variance by a factor of (n-p)/n.
 
@@ -766,23 +1202,24 @@ try {
 
 **Result:** Unbiased variance estimates matching R's `lmer(..., REML = TRUE)` default.
 
-### 16.9 AIC Counts p+2 Parameters
+### 20.9 AIC Parameter Count: p + nTheta + 1
 
 **Problem:** The AIC penalty `2*k` requires specifying the number of estimated parameters k. In LMMs, this includes both fixed effects and variance components.
 
 **Root cause:** Some implementations count only fixed effects; others count fixed + random. The correct count depends on whether the variance components are treated as parameters or hyperparameters.
 
-**Solution:** k = p + 2: p fixed-effect coefficients plus 2 variance components (sigma-b-squared and sigma-e-squared). This matches lme4's convention (line 239):
+**Solution:** k = p + nTheta + 1: p fixed-effect coefficients, nTheta = q*(q+1)/2 Cholesky parameters, plus 1 for the residual variance. This matches lme4's convention (lines 411-414):
 
 ```typescript
-const aic = -2 * logLik + 2 * (p + 2)
+const nParams = p + nTheta + 1
+const aic = -2 * logLik + 2 * nParams
 ```
 
-**Why p+2:** Both sigma-b-squared and sigma-e-squared are estimated from the data (via REML optimization and profiling), so both consume a degree of freedom in the AIC penalty. The individual random intercepts (BLUPs) are NOT counted as parameters — they are predictions, not estimates.
+**Why p + nTheta + 1:** All Cholesky parameters and the residual variance are estimated from the data, so each consumes a degree of freedom in the AIC penalty. For random-intercept-only models (q=1), nTheta = 1, giving nParams = p + 2 — the same as the original formula. For random-slope models (q=2), nTheta = 3 (two log-diagonal elements plus one off-diagonal), giving nParams = p + 4. The individual random effects (BLUPs) are NOT counted as parameters — they are predictions, not estimates. The `nParams` field is also stored in `LMMResult` for use by `compareLMM` to compute LRT degrees of freedom.
 
-**Result:** AIC and BIC values compatible with R's `AIC(lmer_model)`.
+**Result:** AIC and BIC values compatible with R's `AIC(lmer_model)` for both random-intercept and random-slope models.
 
-### 16.10 Near-Zero Psi Fallback to OLS
+### 20.10 Near-Zero Psi Fallback to OLS
 
 **Problem:** When the optimized psi < 1e-10, the random intercept variance is negligible relative to the residual. Constructing V-inv via Woodbury with 1/psi > 1e10 produces numerically unstable results (D = Z'Z + 1e10*I is dominated by the diagonal, and D-inv has entries near 1e-10 that accumulate rounding errors).
 
@@ -794,13 +1231,55 @@ const aic = -2 * logLik + 2 * (p + 2)
 
 **Result:** Smooth transition from mixed model to ordinary regression when the random effect is negligible, without discontinuities in the estimates.
 
+### 20.11 Log-Cholesky vs. Direct Parameterization for G
+
+**Problem:** The random-effects covariance matrix G must be positive definite. Parameterizing G directly (e.g., as a vector of variances and correlations) requires constrained optimization — variances must be positive, correlations must be in (-1, 1), and the entire matrix must be positive definite (a global constraint that is difficult to enforce element-wise).
+
+**Root cause:** Positive definiteness is a matrix-level property, not an element-level property. A matrix can have all positive diagonal entries and all correlations in (-1, 1) but still be indefinite if the eigenvalues are not all positive.
+
+**Solution:** Parameterize via the Cholesky factor L where G = sigma-squared * L * L'. Since L * L' is positive semi-definite for any L, and the diagonal log-transformation ensures L[i,i] > 0, the resulting G is automatically positive definite. The optimizer works in the unconstrained space of log-Cholesky parameters (lines 55-69).
+
+**Why this over alternatives:** (1) Direct parameterization of variances and correlations requires projected gradient descent or augmented Lagrangian methods — complex and slow. (2) Spectral parameterization (eigenvalues and eigenvectors) is nonlinear and has identifiability issues. (3) Log-Cholesky is the approach used by lme4 (Bates et al., 2015) and is the standard in the mixed model literature.
+
+**Result:** Unconstrained Nelder-Mead optimization that automatically produces valid positive-definite G matrices. The log-Cholesky parameterization has q*(q+1)/2 free parameters — exactly the degrees of freedom of a symmetric positive-definite matrix.
+
+### 20.12 Never Forming the n x n Matrix: Vector-Level Woodbury
+
+**Problem:** The original implementation formed the full n x n matrix V_psi-inv = I - Z * D-inv * Z'. This requires O(n-squared) memory and O(n-squared * q) operations, which becomes the bottleneck for large n even though D-inv is cheap.
+
+**Root cause:** The Woodbury identity produces V-inv as a formula, but materializing it as a matrix wastes memory and computation when all we need are the products V-inv * y and V-inv * X.
+
+**Solution:** Apply V-inv to vectors and matrices without ever forming the n x n result. The key insight is that V_scaled-inv * v = v - A * D-inv * (A' * v) can be computed with only matrix-vector products involving A (n x gq) and D-inv (gq x gq). Lines 164-171 implement this for both y (a vector) and X (a matrix):
+
+```typescript
+const AtY = At.multiply(Matrix.colVec(y))         // gq x 1
+const ADInvAtY = A.multiply(DInv.multiply(AtY))   // n x 1
+const VinvY = Array.from({ length: n }, (_, i) => (y[i] ?? 0) - ADInvAtY.get(i, 0))
+```
+
+**Why this matters:** For n=1000 and q=2 (gq=40), the old approach required storing a 1,000,000-element matrix. The new approach requires only O(n * gq) = O(40,000) elements for the intermediate products — a 25x memory reduction.
+
+**Result:** The implementation scales to much larger datasets without hitting memory limits. The computation is also faster because it avoids the O(n-squared) matrix subtraction I - Z*D-inv*Z'.
+
+### 20.13 nParams Count for LRT Compatibility
+
+**Problem:** The `compareLMM` function needs to know the degrees of freedom for the chi-squared test, which is the difference in the number of estimated parameters between the two models. But `LMMResult` did not previously store the parameter count.
+
+**Root cause:** The original implementation hard-coded the parameter count as p + 2 (for AIC/BIC) and never exposed it. With random slopes, the parameter count depends on q.
+
+**Solution:** Store `nParams = p + nTheta + 1` in `LMMResult` (line 411). The `compareLMM` function uses this to compute `df = |full.nParams - reduced.nParams|` (line 491). This ensures the LRT degrees of freedom are correct regardless of the model structure.
+
+**Why expose nParams:** (1) It makes `compareLMM` independent of the model internals — it only needs the result objects. (2) It allows users to verify the parameter count. (3) It enables future extensions (e.g., comparing models with different fixed effects) without modifying `compareLMM`.
+
+**Result:** Clean separation between model fitting and model comparison. The `compareLMM` function is a pure function of two `LMMResult` objects — no access to internal implementation details.
+
 ---
 
-## 17. Mathematical Tricks That Made It Possible
+## 21. Mathematical Tricks That Made It Possible
 
 Building a linear mixed model from scratch — no LAPACK, no BLAS, no REML-specific libraries — requires replacing standard textbook operations with computationally efficient equivalents. This section documents the key mathematical tricks.
 
-### 17.1 Trick: Woodbury Identity Derivation and Why It's Exact
+### 21.1 Trick: Woodbury Identity Derivation and Why It's Exact
 
 **Why needed:** The marginal covariance V_psi = psi*Z*Z' + I is n x n. Inverting it directly at every optimization step is O(n-cubed). With 5 multi-starts and ~100 iterations each, this means 500 inversions of n x n matrices — infeasible for n > 1000.
 
@@ -821,7 +1300,7 @@ Applied with A = I, U = Z, C = psi*I_q, V' = Z':
 
 **Impact:** The cost drops from O(n-cubed) to O(q-cubed) per inversion. This is not an approximation — the Woodbury identity is algebraically exact. The only source of error is floating-point arithmetic, which is at machine precision (~1e-15).
 
-### 17.2 Trick: Matrix Determinant Lemma for O(q) Log-Determinant
+### 21.2 Trick: Matrix Determinant Lemma for O(q) Log-Determinant
 
 **Why needed:** The REML objective includes log|V_psi|, which naively requires O(n-cubed) to compute via LU decomposition of the n x n matrix V_psi.
 
@@ -842,7 +1321,7 @@ log|V_psi| = q*log(psi) + log|D|
 
 **Impact:** For random-intercept models where D is diagonal, log|D| = sum of log of diagonal entries — O(q) operations. Even for the general case, log|D| is O(q-cubed) which is far cheaper than O(n-cubed). On a problem with n=500 and q=20, this is a 15,000x speedup for the determinant computation alone.
 
-### 17.3 Trick: BLUP as Posterior Mean Under Normal Prior
+### 21.3 Trick: BLUP as Posterior Mean Under Normal Prior
 
 **Why needed:** The random intercepts b are unobserved. Estimating them requires combining the prior b ~ N(0, sigma-b-squared*I) with the likelihood of the observed data. The full posterior b|y involves the n x n matrix V-inv, which is expensive to form for each group.
 
@@ -865,7 +1344,7 @@ const blup = (psi / (1 + psi * nj)) * sumResid
 
 **Impact:** O(n) total computation for all BLUPs (one pass through residuals plus O(q) scalar operations), instead of O(n-squared) for the full matrix product Z'*V-inv*(y-X*beta). The shrinkage factor psi*n_j / (1 + psi*n_j) falls out naturally as the ratio of prior precision to posterior precision in the normal-normal conjugacy.
 
-### 17.4 Trick: Profiling Eliminates One Parameter from Optimization
+### 21.4 Trick: Profiling Eliminates One Parameter from Optimization
 
 **Why needed:** The REML objective depends on two variance parameters (sigma-b-squared, sigma-e-squared). 2D optimization with Nelder-Mead requires a 3-vertex simplex and is sensitive to the aspect ratio of the objective surface.
 
@@ -887,39 +1366,91 @@ const sigmab2 = psi * sigmae2
 
 **Impact:** The optimization is 1D instead of 2D. This is the approach used by lme4 (Bates et al., 2015), called "profiling out sigma." It is more stable, faster, and avoids the ridge problem that plagues direct 2D optimization of (sigma-b-squared, sigma-e-squared). The closed-form sigma-e-squared is guaranteed positive (it's a quadratic form divided by a positive integer), further preventing degenerate solutions.
 
+### 21.5 Trick: Block-Diagonal Application Without Forming the Block-Diagonal
+
+**Why needed:** The matrix A = Z_ext * (I_g (x) L) involves a Kronecker product I_g (x) L, which is a gq x gq block-diagonal matrix with g copies of L on the diagonal. Forming this matrix explicitly requires O(g * q-squared) memory and then multiplying Z_ext (n x gq) by it costs O(n * gq * q). For large g, the block-diagonal matrix is sparse but wastefully stored as a dense matrix.
+
+**The trick:** The Kronecker product structure means that each block of q columns in Z_ext is multiplied by the same L matrix. The `buildA` function (lines 105-120) exploits this by iterating over groups j and applying L directly:
+
+```
+A[i, j*q + k] = sum_{m=k}^{q-1} Z_ext[i, j*q + m] * L[m, k]
+```
+
+Since L is lower-triangular, the inner sum runs from m = k (not m = 0), which halves the work for q = 2 and reduces it by more for larger q.
+
+**Implementation:** The triple loop (over observations, groups, and random effect indices) avoids forming the gq x gq block-diagonal matrix entirely. The memory cost is O(n * gq) for the output A, with no intermediate storage for the Kronecker product.
+
+**Impact:** For g = 50 groups and q = 2, the block-diagonal I_g (x) L would be 100 x 100 = 10,000 elements. The `buildA` function skips this entirely, computing A directly in a single pass over Z_ext. The lower-triangular structure of L further reduces the inner loop from q to (q - k) iterations per entry.
+
+### 21.6 Trick: Johnson's sigma-squared-r Formula for Random Slopes
+
+**Why needed:** In random-intercept models, the random-effects contribution to the total variance is simply sigma-b-squared — a single number. With random slopes, the random-effects variance depends on the predictor values: an observation with x = 10 has more random-effects variance than one with x = 0 (because the random slope amplifies the variance by x-squared). There is no single number for "the random-effects variance."
+
+**The trick:** Johnson (2014) showed that the appropriate quantity for Nakagawa R-squared is the average random-effects variance across observations:
+
+```
+sigma-squared-r = (1/n) * sum_{i=1}^{n} z_i' * G * z_i
+```
+
+where z_i = [1, x_i1, x_i2, ...] is the random-effect predictor vector for observation i. This is the mean of the quadratic form z_i' * G * z_i, which gives the marginal random-effects variance averaging over the distribution of predictor values in the sample.
+
+**Implementation:** Lines 427-439 compute this directly:
+
+```typescript
+let sigma2_r = 0
+for (let i = 0; i < n; i++) {
+  for (let a = 0; a < q; a++) {
+    for (let b = 0; b < q; b++) {
+      const za = a === 0 ? 1 : slopePreds[a - 1]![i]!
+      const zb = b === 0 ? 1 : slopePreds[b - 1]![i]!
+      sigma2_r += za * G.get(a, b) * zb
+    }
+  }
+}
+sigma2_r /= n
+```
+
+**Impact:** For q = 1 (intercept only), z_i = [1] and z_i' * G * z_i = G[0,0] = sigma-b-squared for all i, so sigma-squared-r = sigma-b-squared — recovering the standard formula. For q > 1, the formula correctly accounts for the observation-dependent variance by averaging over the sample. This is the same approach used by `MuMIn::r.squaredGLMM()` in R.
+
 ---
 
 ## Appendix A: Implementation Completeness
 
 | Component | Status | Lines | Evidence |
 |-----------|--------|-------|----------|
-| Design matrix construction (X, Z) | Complete | 136–148 | Intercept + predictors, group indicators |
-| Profiled REML objective | Complete | 43–109 | Woodbury + determinant lemma + closed-form sigma-e-squared |
-| Multi-start Nelder-Mead | Complete | 154–162 | 5 starts spanning 8 orders of magnitude |
-| GLS fixed effects | Complete | 169–227 | beta, SE, t, p, CI per coefficient |
-| Near-zero psi fallback | Complete | 175–177 | OLS when random effect is negligible |
-| Singular matrix handling | Complete | 60–64, 85–89, 191–194 | Infinity / identity fallback |
-| ICC computation | Complete | 230 | sigma-b-squared / total variance |
-| Log-likelihood with constant | Complete | 237–238 | REML normalizing constant for AIC/BIC compatibility |
-| AIC / BIC | Complete | 239–240 | p+2 parameter count |
-| APA formatting | Complete | 242 | Via `formatLMM` |
-| BLUPs (random intercepts) | Complete | 266–297 | Closed-form shrinkage formula |
-| Input validation | Complete | 125–131 | n >= 5, nGroups >= 2, length check |
+| Log-Cholesky parameterization | Complete | 55–69 | `buildCholFactor`: exp diagonal, unrestricted off-diagonal |
+| Extended Z matrix construction | Complete | 77–99 | `buildExtendedZ`: intercept + slope columns per group |
+| Block-diagonal application (buildA) | Complete | 105–120 | A = Z_ext * (I_g (x) L) without forming Kronecker product |
+| Unified profiled log-likelihood | Complete | 134–212 | `profileLogLik`: handles both REML and ML |
+| Woodbury V-inv (vector-level) | Complete | 150–171 | Never forms n x n matrix; applies V-inv to vectors |
+| Design matrix construction (X) | Complete | 239–244 | Intercept + fixed predictors |
+| Multi-start Nelder-Mead | Complete | 260–283 | 6 starts (all-zeros + 5 diagonal perturbations), maxIter=2000 |
+| GLS fixed effects | Complete | 330–395 | beta, SE, t, p, CI per coefficient |
+| Variance components & correlations | Complete | 349–371 | G = sigma-squared * L*L', correlations from G |
+| ICC computation | Complete | 399 | sigma-b-squared / total variance |
+| Log-likelihood with constant | Complete | 403–408 | REML/ML normalizing constant for AIC/BIC compatibility |
+| AIC / BIC | Complete | 413–414 | nParams = p + nTheta + 1 parameter count |
+| Nakagawa R-squared | Complete | 416–443 | sigma-squared-f, sigma-squared-r (Johnson), R2_m, R2_c |
+| APA formatting | Complete | 447 | Via `formatLMM` |
+| Model comparison (LRT) | Complete | 483–518 | `compareLMM`: chi-squared, df, p-value, REML warning |
+| BLUPs (random intercepts) | Complete | 526–557 | Closed-form shrinkage formula |
+| Input validation | Complete | 228–252 | n >= 5, nGroups >= 2, length check, slope name validation |
+| ML estimation | Complete | 134–212 | Unified with REML in `profileLogLik`; method option |
 
-**Total:** 298 lines of implementation covering the full random-intercept LMM pipeline from data input through model fitting, inference, and prediction.
+**Total:** 557 lines of implementation covering the full random-intercept and random-slope LMM pipeline: data input, model fitting (REML/ML), inference, prediction, R-squared, and model comparison.
 
 ---
 
 ## Appendix B: Known Limitations
 
-1. **Random slopes:** The `LMMInput` interface declares `randomSlopes?: readonly string[]`, but the current implementation only supports random intercepts. Random slopes would require a block-diagonal Z matrix and multi-parameter psi, making the Woodbury identity more complex.
+1. **Crossed random effects:** Only a single grouping factor is supported. Models like `(1|school) + (1|student)` require extensions to the covariance structure.
 
-2. **Crossed random effects:** Only a single grouping factor is supported. Models like `(1|school) + (1|student)` require extensions to the covariance structure.
+2. **Satterthwaite approximation:** The simplified `df = n - p - nGroups + 1` formula is less precise than lme4's full Kenward-Roger approximation. For small samples or many groups, the p-values may be slightly conservative.
 
-3. **Satterthwaite approximation:** The simplified `df = n - p - nGroups + 1` formula is less precise than lme4's full Kenward-Roger approximation. For small samples or many groups, the p-values may be slightly conservative.
+3. **Computational complexity:** Although the vector-level Woodbury identity avoids forming the n x n V-inverse, the D matrix is gq x gq (groups times random effects per group). For very large numbers of groups with multiple random slopes (e.g., 1000 groups x 5 random effects = 5000 x 5000), the D inversion becomes expensive. A future optimization could exploit the block-diagonal structure of D.
 
-4. **Computational complexity:** Although the Woodbury identity reduces V-inv from O(n-cubed) to O(q-cubed), the construction of Z*D-inv*Z' still requires forming an n x n matrix. For very large n, this O(n-squared) memory cost could be prohibitive. A future optimization would compute X'*V-inv*X and X'*V-inv*y directly without forming the full V-inv.
+4. **No residual diagnostics:** Standardized residuals, leverage values, and influence diagnostics (Cook's distance) are not yet implemented but would be valuable for model checking.
 
-5. **No ANOVA-type tests:** The current implementation provides coefficient-level t-tests but not F-tests for overall model comparisons or type III sums of squares.
+5. **BLUPs are intercept-only:** The `computeBLUPs` function returns only random intercept predictions. Random slope BLUPs are not yet returned, though they could be computed from the same posterior mean formula with the extended Z matrix.
 
-6. **No residual diagnostics:** Standardized residuals, leverage values, and influence diagnostics (Cook's distance) are not yet implemented but would be valuable for model checking.
+6. **compareLMM uses hardcoded alpha:** The `compareLMM` function uses alpha = 0.05 for the preferred model selection. Users who need a different significance threshold must compare the returned p-value manually.
