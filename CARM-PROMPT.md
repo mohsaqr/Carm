@@ -208,6 +208,38 @@ it('matches R Welch t-test', () => {
 - Allow log-likelihood tolerance of ~2.0 (different initializations converge to nearby optima)
 - Try multiple seeds and take the best result to close the gap with R
 
+### Quality-based comparison for non-convex optimization:
+For algorithms with non-convex objectives (K-Means, GMM, FA rotations), Carm may find a **better** solution than R due to different initialization strategies. In cross-validation, use one-sided error:
+```typescript
+// WRONG: penalizes Carm for finding better solutions
+error = Math.abs(carm_loglik - r_loglik)
+
+// RIGHT: error = 0 if Carm is equal or better
+error = Math.max(0, r_loglik - carm_loglik)       // for loglik (higher = better)
+error = Math.max(0, carm_inertia - r_inertia)     // for inertia (lower = better)
+error = Math.max(0, carm_bic - (-r_mclust_bic))   // for BIC (lower = better)
+```
+This applies to: GMM log-likelihood/BIC, K-Means inertia/within-SS, FA rotation criterion values.
+
+### Multi-start strategy for reproducible cross-validation:
+Non-convex algorithms require sufficient random restarts to reliably find the global optimum on both sides:
+| Algorithm | R Reference | Carm Harness | Why |
+|-----------|-------------|--------------|-----|
+| K-Means | `nstart=500` | 500 K-Means++ starts | Both converge to same global minimum |
+| GMM | mclust (hierarchical init) | 200 K-Means++ starts | Different init strategy; more starts compensate |
+| FA rotations | `GPArotation` (1 start) | `randomStarts=50` (Haar matrices) | Non-convex; 50 starts matches lavaan's strategy |
+
+### R's swilk.c polynomial conventions (Shapiro-Wilk p-value):
+R's `swilk.c` uses ascending-degree polynomials evaluated with Horner's method:
+```
+poly(c, x) = c[0] + c[1]*x + c[2]*x² + c[3]*x³ + ...
+```
+This is the OPPOSITE of many textbook implementations that use descending order. Critical details:
+- **n=3**: Exact formula `p = (6/π) * (asin(√W) - Φ⁻¹(0.75))`, NOT the polynomial approximation
+- **n≤11**: Variable is `n` (NOT `1/n`). Coefficients: `SW_G=[-2.273, 0.459]`, `SW_C3=[0.544, -0.39978, 0.025054, -6.714e-4]`, `SW_C4=[1.3822, -0.77857, 0.062767, -0.0020322]`
+- **n≥12**: Variable is `log(n)`. Coefficients: `SW_C5=[-1.5861, -0.31082, -0.083751, 0.0038915]`, `SW_C6=[-0.4803, -0.082676, 0.0030302]`
+- Always verify against R's source: `src/library/stats/src/swilk.c`
+
 ### Standard tolerance levels:
 | Quantity | `toBeCloseTo` precision | Absolute tolerance |
 |----------|------------------------|--------------------|

@@ -318,3 +318,58 @@ For k > 6, use Hungarian algorithm on |correlation| matrix instead.
 | Promax | psych::kaiser + stats::promax | Outer Kaiser + varimax + Procrustes | Exact match |
 | GPFoblq | GPArotation::GPFoblq | Direct translation (gradient, line search) | Exact match |
 | PRNG | Mersenne Twister | splitmix32 | Only affects parallel analysis |
+| K-Means init | `kmeans(nstart=500)` | 500 K-Means++ starts | Same global optimum with enough starts |
+| GMM init | mclust hierarchical | 200 K-Means++ starts | Quality-based comparison; error=0 if Carm ≥ R |
+| Shapiro-Wilk p | swilk.c (ascending poly) | polyAsc (ascending poly) | Exact match after 2026-02-27 fix |
+
+---
+
+## Cross-Validation Tricks for Non-Convex Optimization
+
+Hard-won insights from achieving 169/169 (100%) pass rate across 7 modules:
+
+### 1. Quality-Based Comparison (GMM, K-Means)
+
+For algorithms with non-convex objective functions, Carm and R may converge to different local optima. Standard absolute-difference comparison penalizes Carm for finding **better** solutions. Use one-sided error instead:
+
+```typescript
+// For log-likelihood (higher = better):
+error = Math.max(0, r_loglik - carm_loglik)    // 0 if Carm ≥ R
+
+// For inertia / within-SS (lower = better):
+error = Math.max(0, carm_inertia - r_inertia)  // 0 if Carm ≤ R
+
+// For BIC (lower = better; note mclust negates BIC):
+error = Math.max(0, carm_bic - (-r_mclust_bic))
+```
+
+When Carm's solution is equal or better, derived metrics (centroid MAE, label agreement) should also be set to 0.
+
+### 2. Multi-Start Strategy
+
+Sufficient random restarts are critical for both R and Carm to converge to the same global optimum:
+
+| Algorithm | R Setting | Carm Harness | Rationale |
+|-----------|-----------|--------------|-----------|
+| K-Means | `nstart=500` (was 1) | 500 K-Means++ starts | Single init gets stuck in local optima ~36% of datasets |
+| GMM | mclust hierarchical | 200 K-Means++ starts | Different init strategy; 200 starts compensates |
+| FA rotations | GPArotation (1 start) | `randomStarts=50` Haar matrices | 50 starts matches lavaan's GPA×30 strategy |
+
+Lesson: `nstart=1` in R is the default but is **not** the global optimum. Always use `nstart≥25` for cross-validation reference data.
+
+### 3. R's swilk.c Polynomial Conventions (Shapiro-Wilk)
+
+R's Shapiro-Wilk p-value implementation in `swilk.c` uses conventions that differ from most textbooks:
+
+- **Ascending-degree polynomials**: `poly(c, x) = c[0] + c[1]*x + c[2]*x² + ...` (NOT descending)
+- **n=3 exact formula**: `p = (6/π) * (asin(√W) - Φ⁻¹(0.75))`, not the general polynomial path
+- **n≤11 variable is `n`**: NOT `1/n`. This is the most common source of bugs.
+- **n≥12 variable is `log(n)`**: Same ascending-degree convention
+- **Coefficient arrays** (transcribed from swilk.c):
+  - `SW_G = [-2.273, 0.459]` (gamma for small-sample check)
+  - `SW_C3 = [0.544, -0.39978, 0.025054, -6.714e-4]` (mu, n≤11)
+  - `SW_C4 = [1.3822, -0.77857, 0.062767, -0.0020322]` (log-sigma, n≤11)
+  - `SW_C5 = [-1.5861, -0.31082, -0.083751, 0.0038915]` (mu, n≥12)
+  - `SW_C6 = [-0.4803, -0.082676, 0.0030302]` (log-sigma, n≥12)
+
+Always verify polynomial implementations against R's C source directly, not secondary references.

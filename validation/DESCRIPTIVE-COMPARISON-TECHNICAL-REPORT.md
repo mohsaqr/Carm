@@ -152,23 +152,52 @@ const W = sst > 0 ? Math.min(1, (w1 * w1) / sst) : 1
 
 **Guards**: W is clamped to [0, 1] via `Math.min(1, ...)`. When SST = 0 (all values identical, zero variance), W = 1 is returned — constant data is trivially normal.
 
-### 2.4 P-Value: Royston (1995) Approximation
+### 2.4 P-Value: R's swilk.c Implementation
 
-The p-value uses a two-path approximation based on sample size:
+The p-value implementation follows R's `src/library/stats/src/swilk.c` exactly — not a textbook approximation. This distinction matters because R uses **ascending-degree** polynomials (`c[0] + c[1]*x + c[2]*x² + ...`) while many references describe descending-degree, and the small-sample path uses `n` as the variable, not `1/n`.
 
-**Path 1 (n ≤ 11):** Transform `y = log(1 - W)`, apply gamma check, compute `z = (−log(γ − y) − μ) / σ` where μ and σ are polynomial functions of `1/n`:
+The evaluator function:
 ```typescript
-const mu = polynomialEval([-1.2725, 1.0521, -0.0895], 1 / n)
-const sigma = Math.exp(polynomialEval([-0.0006714, 0.025054, -0.6714, 0.7240], 1 / n))
+function polyAsc(c: readonly number[], x: number): number {
+  let r = c[c.length - 1]!
+  for (let i = c.length - 2; i >= 0; i--) r = r * x + c[i]!
+  return r
+}
 ```
 
-**Path 2 (n > 11):** Transform `y = log(1 - W)`, compute `z = (y − μ) / σ` where μ and σ are polynomial functions of `log(n)`:
+R's coefficient arrays (from swilk.c):
 ```typescript
-const mu = polynomialEval([0.0038915, -0.083751, -0.31082, -1.5861], Math.log(n))
-const sigma = Math.exp(polynomialEval([0.0030302, -0.082676, -0.4803], Math.log(n)))
+const SW_G  = [-2.273, 0.459] as const
+const SW_C3 = [0.544, -0.39978, 0.025054, -6.714e-4] as const
+const SW_C4 = [1.3822, -0.77857, 0.062767, -0.0020322] as const
+const SW_C5 = [-1.5861, -0.31082, -0.083751, 0.0038915] as const
+const SW_C6 = [-0.4803, -0.082676, 0.0030302] as const
+```
+
+**Path 0 (n = 3):** Exact formula, not polynomial:
+```typescript
+const pw = (6 / Math.PI) * (Math.asin(Math.sqrt(W)) - normalQuantile(0.75))
+```
+
+**Path 1 (n = 4–11):** Transform `y = log(1 - W)`, apply gamma check with `γ = polyAsc(SW_G, n)`, compute:
+```typescript
+const y = -Math.log(gamma - y0)
+const mu = polyAsc(SW_C3, n)       // variable is n, NOT 1/n
+const sigma = Math.exp(polyAsc(SW_C4, n))
+const z = (y - mu) / sigma
+```
+
+**Path 2 (n ≥ 12):** Transform `y = log(1 - W)`, compute:
+```typescript
+const xx = Math.log(n)
+const mu = polyAsc(SW_C5, xx)
+const sigma = Math.exp(polyAsc(SW_C6, xx))
+const z = (y0 - mu) / sigma
 ```
 
 The p-value is then `1 - Φ(z)` — the upper tail of the standard normal, clamped to [0, 1].
+
+**Historical bug (fixed 2026-02-27):** The original implementation used descending-degree `polynomialEval()` with `1/n` as variable for n≤11 and different coefficient arrays. This produced correct results for n≥12 (where the polynomial structure is less sensitive) but incorrect p-values for small samples. For example, at n=5 the gamma value was −2.18 instead of the correct +0.022, causing the p-value path to fail silently. The fix was to transcribe R's `swilk.c` coefficient arrays exactly and use the ascending-degree evaluator with the correct variable (`n` for small samples, `log(n)` for large).
 
 ---
 
