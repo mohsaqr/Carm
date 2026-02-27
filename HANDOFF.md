@@ -1,58 +1,69 @@
 # Session Handoff — 2026-02-27
 
 ## Completed (This Session)
-- **Clustering cross-validation fix**: 5/18 → 18/18 metrics
-  - R K-Means `nstart=1` → `nstart=500`, Carm K-Means 10→500 starts
-  - GMM comparison: absolute diff → quality-based (`max(0, r-carm)`)
-- **Shapiro-Wilk p-value fix**: 97.7% → 100% pass rate
-  - Rewrote `shapiroWilkPValue()` with R's actual swilk.c coefficients
-  - Added n=3 exact formula, fixed n≤11 polynomial (was using 1/n instead of n)
-- **Build fix**: esbuild direct invocation when tsup fails on Node.js v25
-- **Documentation update**: Added cross-validation tricks to 5 documentation files
-  - `CARM-PROMPT.md`: Quality-based comparison, multi-start strategy, swilk.c conventions
-  - `validation/CROSSVAL-RESULTS.md`: Updated 123/167 → 169/169 (100%)
-  - `validation/DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md`: Rewrote §2.4 with correct polyAsc code
-  - `validation/GMM-TECHNICAL-REPORT.md`: Extended §20.2 with quality-based resolution
-  - `validation/VALIDATION-STRATEGY.md`: New "Cross-Validation Tricks" section
+- **Build system replaced**: tsup → esbuild+tsc (`build.mjs`)
+  - `npm run build` now works on Node.js v25 (tsup/consola CJS interop was broken)
+  - ESM + CJS bundles with code splitting, plus `tsc --emitDeclarationOnly` for `.d.ts` + declaration maps
+  - All 12 expected output files generated: `{index,core/index,stats/index,viz/index}.{js,cjs,d.ts}`
+- **Vitest upgraded**: 3.2.4 → 4.0.18
+  - Fixes picomatch `scan is not a function` crash on Node.js v25 (CJS interop breakage in tinyglobby)
+  - All 496 tests pass across 17 suites
+- **Stats improvements committed**:
+  - `core/math.ts`: `normalSurvival`, `erfc`, `pKendallExact` (Best & Gipps 1974), `pSpearmanExact` (AS89 + Edgeworth), `ptukeyApprox` (Copenhaver & Holland 1988)
+  - `stats/correlation.ts`: exact p-values for Kendall's tau and Spearman's rho
+  - `stats/pca.ts`: PCA computation enhancements
+  - `stats/post-hoc.ts`: Tukey HSD using proper studentized range distribution
+  - `stats/regression.ts`: regression diagnostics improvements
+- **Aistatia integration verified**: symlink is live, `tsc --noEmit` + `vite build` both clean
 
 ## Current State
 
-**ALL 169/169 METRICS PASSING (100%) — PERFECT ACROSS ALL 7 MODULES**
+**ALL 496 UNIT TESTS PASSING (17/17 suites)**
 
-| Harness       | Pass | Total | Rate   | Status |
-|---------------|------|-------|--------|--------|
-| PCA           | 14   | 14    | 100.0% | PERFECT |
-| FA Extended   | 19   | 19    | 100.0% | PERFECT |
-| ANOVA         | 26   | 26    | 100.0% | PERFECT |
-| T-test        | 41   | 41    | 100.0% | PERFECT |
-| Correlation   | 14   | 14    | 100.0% | PERFECT |
-| Regression    | 36   | 36    | 100.0% | PERFECT |
-| Clustering    | 18   | 18    | 100.0% | PERFECT |
-| **Total**     | **169** | **169** | **100.0%** | **ALL PERFECT** |
+| Suite                          | Tests | Status  |
+|--------------------------------|-------|---------|
+| core/math                      | 41    | PASS    |
+| core/matrix                    | 18    | PASS    |
+| stats/analyze                  | 28    | PASS    |
+| stats/clustering               | 58    | PASS    |
+| stats/clustering-engagement    | 16    | PASS    |
+| stats/clustering-xval          | 44    | PASS    |
+| stats/comparison               | 25    | PASS    |
+| stats/correlation              | 21    | PASS    |
+| stats/dbscan                   | 22    | PASS    |
+| stats/descriptive              | 29    | PASS    |
+| stats/hac                      | 29    | PASS    |
+| stats/mixed                    | 20    | PASS    |
+| stats/pca                      | 14    | PASS    |
+| stats/preprocess               | 18    | PASS    |
+| stats/regression               | 24    | PASS    |
+| large_sample                   | 47    | PASS    |
+| stress                         | 42    | PASS    |
+| **Total**                      | **496** | **ALL PASS** |
 
-- All 7 harnesses complete with HTML reports in `validation/reports/`
-- Reference data in `validation/data/*.json`
-- Build: use `npx esbuild` (tsup broken on Node.js v25)
-  ```bash
-  npx esbuild src/index.ts src/core/index.ts src/stats/index.ts src/viz/index.ts \
-    --bundle --format=esm --outdir=dist --splitting --external:d3 --sourcemap --outbase=src
-  npx esbuild src/index.ts src/core/index.ts src/stats/index.ts src/viz/index.ts \
-    --bundle --format=cjs --outdir=dist --outbase=src --external:d3 --sourcemap --out-extension:.js=.cjs
-  ```
+**169/169 R cross-validation metrics also passing (7 harnesses)**
+
+- Build: `npm run build` (runs `node build.mjs`)
+- Tests: `npm test` (vitest 4.0.18)
+- Aistatia: `file:../JStats` symlink, builds clean
 
 ## Key Decisions
-- Quality-based GMM comparison: for non-convex optimization, error=0 if Carm finds equal or better loglik
-- R nstart=500 for K-Means: ensures global optimum convergence
-- Used R's swilk.c source code directly for Shapiro-Wilk polynomial coefficients
-- esbuild as build tool fallback (tsup/cac broken on Node.js v25)
+- Replaced tsup with `build.mjs` (esbuild + tsc) rather than patching node_modules — permanent fix
+- Kept tsup in devDependencies and `tsup.config.ts` for reference if upstream fixes land
+- Upgraded vitest to v4 (major version bump) — no test API changes needed, all tests pass as-is
+- Quality-based GMM comparison for cross-validation (non-convex optimization)
 
 ## Open Issues
-- `npm run build` (tsup) fails on Node.js v25 — need to update tsup/cac or downgrade Node
-- No DTS generation with esbuild (`.d.ts` files are stale from last tsup build)
+- None blocking. All build, test, and integration pipelines are green.
+- LTA cross-validation still pending (depmixS4 is non-deterministic)
+- LMM Satterthwaite df approximation is crude
 
 ## Context
 - Branch: `main`
 - Node.js v25.5.0 (only version available)
 - R 4.5.1 with Saqrlab, dunn.test, rstatix, lme4, mclust, lavaan, ppcor, car
-- Run harnesses: `npx tsx validation/ts-harness/<name>-report.ts`
+- Build: `npm run build` → `node build.mjs` (esbuild ESM+CJS + tsc DTS)
+- Tests: `npm test` → vitest 4.0.18
+- Validation harnesses: `npx tsx validation/ts-harness/<name>-report.ts`
 - R references: `Rscript validation/r-reference/<name>-ref.R`
+- Aistatia: `../aistatia`, depends on carm via `file:../JStats` symlink
