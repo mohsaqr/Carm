@@ -358,6 +358,8 @@ function solveLinear(A, b) {
   return Array.from({ length: b.length }, (_, i) => x.get(i, 0));
 }
 
-export { Matrix, solveLinear };
-//# sourceMappingURL=chunk-S5HCH6CR.js.map
+export {
+  Matrix,
+  solveLinear
+};
 //# sourceMappingURL=chunk-S5HCH6CR.js.map
