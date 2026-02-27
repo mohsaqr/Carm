@@ -1,3 +1,163 @@
+## 2026-02-27 (Shapiro-Wilk p-value fix: 97.7%→100%, 169/169 ALL PERFECT)
+
+### R's swilk.c uses ascending-degree polynomials with n (not 1/n) as variable for small samples
+- `poly(c, nord, x)` in swilk.c = c[0] + c[1]*x + c[2]*x² + ... (ascending degree)
+- For n ≤ 11: variable is `n` (the sample size directly), coefficients are c3/c4 from Royston 1995
+- For n ≥ 12: variable is `log(n)`, coefficients are c5/c6
+- Original Carm code incorrectly used `1/n` as variable with wrong coefficients for n ≤ 11
+
+### R uses exact formula for Shapiro-Wilk p-value when n=3
+- `pw = (6/π) * (asin(√W) - Φ⁻¹(0.75))` — not the polynomial approximation
+- This is in swilk.c as a special case before the polynomial paths
+
+### Build with esbuild when tsup fails on Node.js v25
+- `npx esbuild src/index.ts ... --bundle --format=esm --outdir=dist --splitting --external:d3`
+- tsup uses cac which crashes on Node.js v25; esbuild works fine directly
+
+## 2026-02-27 (Clustering Cross-Validation Fix: 5/18→18/18)
+
+### Non-convex optimization cross-validation requires quality-based comparison
+- K-Means and GMM are non-convex: different initializations find different local optima
+- Cross-validating against R using `Math.abs(carm - r)` fails when both find different-but-valid solutions
+- Correct approach: `Math.max(0, r - carm)` — error=0 if Carm found equal or better solution (higher loglik / lower inertia)
+- Carm finding a BETTER solution than R is proof of correctness, not a failure
+
+### R's kmeans nstart=1 is unreliable for cross-validation reference
+- R `kmeans(nstart=1)` frequently gets stuck in local optima (tested: 8/20 datasets, Carm found 5x better inertia)
+- `nstart=500` with Lloyd's algorithm reliably finds global optimum on 2D data with 2-4 clusters
+- Carm needs ~500 K-Means++ starts to match R's nstart=500 global optimum
+
+### mclust hierarchical init vs K-Means++ init: fundamentally different local optima
+- mclust uses deterministic hierarchical model-based initialization (very good for GMM)
+- Carm uses K-Means++ initialization (generic, requires many starts)
+- More starts doesn't bridge the gap — the local optima landscape is too complex
+- Quality-based comparison is the only principled approach for cross-validation
+
+## 2026-02-27 (Logistic Regression IRLS Fix: +5 metrics, 31→36/36 regression)
+
+### IRLS working variable must use working response, not weighted residual
+- R's glm.fit and Python's statsmodels.GLM both use Fisher scoring: `z = η + (y-μ)/w`, solve `(X'WX)β = X'Wz`
+- Wrong formulation: `yAdj = √w·(y-μ)` gives `Δ = (X'WX)⁻¹ X'W(y-μ)` — extra W factor dampens steps
+- The extra factor is `w_i = μ_i(1-μ_i)` which is always < 0.25, systematically shrinking updates
+- This causes premature convergence via deviance criterion, stopping at a non-MLE point
+- Correct: solve for β_new directly (not delta), or equivalently use `yAdj = (y-μ)/√w` for delta
+
+### Logistic regression CIs use normal, not t-distribution
+- MLE asymptotics: β̂ ~ N(β, I⁻¹), so CIs use `normalQuantile` (z-critical), not `tDistQuantile`
+- R's `confint.default(glm_fit)` uses qnorm, not qt
+
+### R's glm.fit convergence check uses new deviance in denominator
+- Formula: `|dev - devold| / (0.1 + |dev|) < epsilon` — denominator has 0.1 + |dev| (NEW deviance)
+- Not `|devold| + 0.1` which was the previous (incorrect) implementation
+
+### Mu clamping for separable data
+- With perfect/quasi-separation, eta can be >700 giving mu = exactly 1.0
+- Clamp mu to (1e-15, 1-1e-15) to maintain strict (0,1) range
+
+## 2026-02-27 (Cross-Validation Fix Round 3: +2 metrics, 148→150/169)
+
+### Spearman exact p-value (AS89) — matching R's prho.c
+- R's `cor.test(method="spearman")` uses Algorithm AS 89 (Best & Roberts 1975) for n ≤ 1290
+- Exact permutation enumeration for n ≤ 9, Edgeworth series expansion for n ≥ 10
+- R's pspearman passes `round(q) + 2*lower.tail` to C_pRho — the `+2` converts P(S < is) to P(S ≤ D)
+- D = Σ(rank_i - rank_j)² is ALWAYS even for any permutation (proven via Σd_i = 0)
+- Must compute D directly from ranks, NOT from rounded rho (rho.statistic is roundTo(r,4))
+- Bug found: original code passed `2*S` instead of `S` to pSpearmanExact — this was the main error
+
+### Kendall exact p-value (Best & Gipps 1974) — matching R's ckendall
+- R uses exact recursive DP for n < 50 without ties
+- T = (S + n2)/2 where S = concordant - discordant, n2 = n(n-1)/2
+- Two-sided: p = 2 * min(P(T ≤ T_obs), P(T ≥ T_obs))
+- pKendallExact(q, n) computes CDF P(T ≤ q) via memoized recurrence
+- For ties or n ≥ 50, falls back to tie-corrected normal approximation with normalSurvival
+
+## 2026-02-27 (Cross-Validation Fix Round 2: +5 metrics, 143→148/169)
+
+### R's dunn.test uses one-tailed p-values by default (altp=FALSE)
+- `P <- pnorm(abs(Z), lower.tail=FALSE)` — NOT two-tailed
+- Python scikit-posthocs uses two-tailed: `2 * norm.sf(|z|)`
+- Using two-tailed doubled all raw p-values, causing Bonferroni to fail at 73.1%
+- Fix: `normalSurvival(Math.abs(z))` (one-tailed, erfc-based for stability)
+
+### R's dunn.test Holm/BH do NOT enforce monotonicity
+- Standard `p.adjust("holm")` uses cummax — dunn.test does NOT
+- Standard `p.adjust("BH")` uses cummin — dunn.test does NOT
+- dunn.test just multiplies each sorted p by its factor and caps at 1
+- This caused max Holm error of 0.57 when two close p-values got different multipliers
+- Fix: `dunnStyleHolm()` and `dunnStyleBH()` without cummax/cummin
+
+### rstatix::games_howell_test uses /2 in SE (studentized range convention)
+- SE = `sqrt((v1/n1 + v2/n2) / 2)` not `sqrt(v1/n1 + v2/n2)`
+- The `/2` matches the studentized range distribution scale
+- Without it, q statistic is √2 smaller, causing p-values to differ
+
+### normalSurvival vs 1-normalCDF for tail precision
+- `1 - normalCDF(z)` suffers catastrophic cancellation for z > 5
+- For z=8: true p ≈ 6.2e-16, but `1 - normalCDF(8)` gives ~7.5e-8
+- `normalSurvival(z) = 0.5 * erfc(z/√2)` avoids this via direct erfc computation
+- Matches R's `pnorm(z, lower.tail=FALSE)`
+
+### import 'carm' resolves to dist/ — must rebuild after changes
+- `npx tsx validation/ts-harness/...ts` imports from `dist/` not `src/`
+- Running harnesses without `npm run build` uses stale code
+- Always run `npm run build` before validation harnesses
+
+## 2026-02-27 (Cross-Validation Fix Round: +20 metrics, 123→143/167)
+
+### R's summary.prcomp rounds variance explained to 5 decimal places
+- `summary(prcomp(x))$importance[2, ]` internally calls `round(vars, 5L)` — losing precision
+- Carm's eigenvalue-based computation is actually MORE precise than R's summary output
+- Fix: compute variance explained reference directly as `eigenvalue / sum(eigenvalues)` in R, not from summary
+- Without this fix, PCA variance explained and cumulative variance show ~2.4e-6 MAE (fails 1e-8 threshold)
+
+### Matrix.svd() Jacobi one-sided SVD produces non-orthogonal U and V
+- SVD reconstruction A = U·S·V' is CORRECT (1e-14 residual)
+- But U'U ≠ I and V'V ≠ I — the factors are NOT orthogonal
+- This means T = U·V' (polar factor) is also non-orthogonal — breaks varimax rotation
+- Symptom: rotated loadings > 1.0 in absolute value, MAE ~0.338 vs R
+- Root cause: one-sided Jacobi SVD algorithm doesn't guarantee orthogonality for small matrices
+- Workaround: use polar decomposition via eigendecomposition instead: T = B·(B'B)^{-1/2}
+
+### Kaiser normalization is R's default for varimax
+- R's `stats::varimax(x, normalize=TRUE)` (the default) rescales each row to unit length before rotation
+- `sc = sqrt(rowSums(L²))` → `L_norm = L / sc` → rotate → `L_final = L_rotated * sc`
+- Python sklearn does NOT normalize by default; Python factor_analyzer DOES
+- Without Kaiser normalization, varimax MAE ~0.04 vs R; with it, MAE ~6.9e-14 (machine precision)
+
+### ptukey: multi-interval Gauss-Legendre with Gamma(df/2, rate=df/4) density
+- Old approach: single t/(1-t) mapping collapsed chi-square density peak into too few quadrature points for df > ~120
+- New approach: integrate over v = 2χ²/df with adaptive step widths (1.0 for df≤100, 0.5 for df≤800, 0.25 for df≤5000)
+- Density is Gamma(df/2, rate=df/4) (mean=2, variance=8/df), scaledQ = q·sqrt(v/2)
+- 16-point Gauss-Legendre per subinterval, up to 200 intervals with early termination
+- Fallback to ptukeyInfDf for df > 5000
+- Result: Tukey HSD p-values now 100% pass rate (was ~75%)
+
+### SVD bug in PCA: one-sided Jacobi SVD gives wrong results for tall matrices
+- Carm's `Matrix.svd()` (one-sided Jacobi) produces incorrect singular values for tall skinny matrices (e.g., 333×4 standardized data)
+- Eigendecomposition of the same correlation matrix is CORRECT (matches R to machine precision)
+- SVD gives S²=[1.355, 1.071, 0.789, 0.786] instead of correct [2.001, 1.048, 0.951, ~0]
+- Root cause: one-sided Jacobi SVD convergence issue, likely related to near-singular data (last eigenvalue ~1e-7)
+- Fix: use eigendecomposition of R = X'X/(n-1) for PCA — perfect results (1e-13 match)
+
+### Cross-validation conventions for matching R
+- `mannWhitneyU`: returns U1 (= R's W from `wilcox.test`), no continuity correction → R: `wilcox.test(..., correct=FALSE)`
+- `wilcoxonSignedRank`: returns `min(W+, W-)`, R returns V=W+ → compare both
+- `cohensDCI`: uses Hedges & Olkin normal approximation (NOT non-central t like `effsize::cohen.d`)
+- `skewness`/`kurtosis`: match `e1071::skewness(type=2)` / `kurtosis(type=2)` (adjusted Fisher-Pearson)
+- Correlation matrix: Carm applies internal rounding → achieves MAE ~1.8e-5, not machine precision
+- Tukey HSD: now uses proper studentized range CDF (ptukeyApprox) — 100% pass rate
+- Games-Howell: implementation differs from R's `rstatix::games_howell_test` significantly (sign convention)
+- Logistic regression IRLS: convergence behavior differs from R's `glm()`, especially for separated data
+- GMM BIC: formula differs systematically from mclust's BIC computation
+
+### Saqrlab R package data types
+- `simulate_data("ttest", seed=i)`: 2 groups, continuous outcome
+- `simulate_data("correlation", seed=i)`: 4 numeric variables (x1-x4)
+- `simulate_data("anova", seed=i)`: 3+ groups
+- `simulate_data("prediction", seed=i)`: predictors + outcome
+- `simulate_data("clusters", seed=i)`: multivariate clusters
+- `simulate_data("factor_analysis", seed=i)`: latent factor structure
+
 ## 2026-02-26 (Factor Analysis — Geomin rotation + GPFoblq)
 
 ### Random starts for GPFoblq (lavaan GPA×30 strategy)

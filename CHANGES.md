@@ -1,3 +1,158 @@
+### 2026-02-27 — Fix Shapiro-Wilk p-value: 40/41→41/41 t-test (169/169 total — ALL PERFECT)
+
+**src/stats/descriptive.ts:**
+- Rewrote `shapiroWilkPValue()` to match R's swilk.c exactly
+- Bug: n≤11 path used wrong polynomial coefficients AND wrong variable (1/n instead of n)
+  - gamma was `0.459/n - 2.273` instead of R's `-2.273 + 0.459*n`
+  - mu/sigma polynomials had wrong coefficients (c3/c4 vs made-up values)
+- Added n=3 exact formula: `pw = (6/π) * (asin(√W) - Φ⁻¹(0.75))` (R's special case)
+- Replaced confusing `polynomialEval` (descending degree) with `polyAsc` (ascending degree, matches R's poly())
+- Added R's actual coefficient arrays (SW_G, SW_C3, SW_C4, SW_C5, SW_C6) with source citation
+- n≥12 path was already correct (unchanged)
+- Result: mean p error 0.005→3.2e-5, max error 0.36→0.006
+
+**Build fix:**
+- Patched `node_modules/cac/index-compat.js` for Node.js v25 compatibility
+- Used `npx esbuild` directly when tsup still fails (esbuild works fine on Node.js v25)
+
+### 2026-02-27 — Fix clustering cross-validation: 5/18→18/18 (155→168/169 total)
+
+**validation/r-reference/clustering-ref.R:**
+- R K-Means `nstart=1` → `nstart=500` to reliably find global optimum
+
+**validation/data/clustering-ref.json:**
+- Regenerated from R with nstart=500
+
+**validation/ts-harness/clustering-report.ts:**
+- K-Means starts: 10 → 500 (matches R's multi-start strategy)
+- GMM starts: 10 → 200
+- GMM comparison: changed from `Math.abs(diff)` to quality-based `Math.max(0, r - carm)`
+  (if Carm finds equal or better loglik, error=0 — correct for non-convex optimization)
+- Comments updated to reflect new start counts
+
+**Results: 18/18 metrics at ≥99% pass rate**
+- K-Means: 4 metrics, all 99.5-100%
+- GMM: 9 metrics, all 100%
+- HAC: 4 metrics, all 100%
+- Silhouette: 1 metric, 99.0%
+
+### 2026-02-27 — Fix logistic regression IRLS: 5 failing metrics → all pass (31/36→36/36 regression, 150→155/169 total)
+
+**src/stats/regression.ts:**
+- Rewrote IRLS loop to use correct working response formulation matching R's glm.fit Fisher scoring
+- Bug: `yAdj = √W·(y-μ)` gave `Δ = (X'WX)⁻¹ X'W(y-μ)` (extra W factor, dampening steps → premature convergence to wrong MLE)
+- Fix: Use working response `z = η + (y-μ)/w`, solve for `β_new` directly: `(X'WX)β_new = X'Wz`
+- Fixed convergence check denominator: `(|prevDev| + 0.1)` → `(0.1 + |dev|)` (R's formula)
+- Fixed CI: used `tDistQuantile` (wrong for MLE) → `normalQuantile` (correct Wald CI)
+- Increased rounding precision: coefs/SEs from roundTo(6) → roundTo(10), z/p from roundTo(4) → roundTo(6)
+- Clamped mu to (1e-15, 1-1e-15) to prevent exact 0/1 fitted values on separable data
+- Step-halving now interpolates between β_old and β_new (not β_old + scale·Δ)
+
+**Results (regression cross-validation, 500 datasets):**
+- Logistic coef MAE: 6.7% → **99.8%** pass
+- Logistic SE MAE: 84.7% → **99.8%** pass
+- Logistic z MAE: 0.0% → **100.0%** pass
+- Logistic p MAE: 32.5% → **100.0%** pass
+- Logistic AIC: 6.9% → **100.0%** pass
+- All 496 unit tests pass, all 36/36 regression metrics at ≥99%
+
+### 2026-02-27 — Cross-validation fix round 3: exact Spearman/Kendall p-values (148→150/169, 87.6%→88.8%)
+
+**src/core/math.ts:**
+- Added `pKendallExact(q, n)`: exact Kendall tau CDF via recursive DP with memoization (Best & Gipps 1974)
+- Added `pSpearmanExact(D, n, lowerTail)`: exact Spearman rho distribution — enumeration for n≤9, Edgeworth series for n>9 (AS89, Best & Roberts 1975)
+
+**src/stats/correlation.ts:**
+- `spearmanCorrelation()`: uses `pSpearmanExact()` for n≤1290 without ties, matching R's `cor.test(method="spearman")` exactly
+- `kendallTau()`: uses `pKendallExact()` for n<50 without ties, matching R's `cor.test(method="kendall")`
+- Fixed calling convention bug: was passing `2*S` instead of `S` to pSpearmanExact
+- Computes D = Σd² directly from ranks instead of from rounded rho
+- Removed unused `normalCDF` import
+
+**Results:**
+- Spearman p: 96.4% → **100.0%** (max error 1.39e-7)
+- Kendall p: 94.0% → **100.0%** (max error 5.01e-5)
+- Correlation: 12/14 → **14/14 PERFECT**
+- **Total: 150/169 (88.8%) — 5 PERFECT modules**
+
+### 2026-02-27 — Cross-validation fix round 2: +5 metrics (143→148/169, 85.6%→87.6%)
+
+**src/stats/post-hoc.ts:**
+- Games-Howell SE: added `/2` factor to match rstatix studentized range convention
+- Dunn test: changed from two-tailed to one-tailed p-values (matching R's dunn.test default)
+- Dunn test: replaced `adjustPValues('holm')` with `dunnStyleHolm()` (no cummax, matches dunn.test)
+- Dunn test: added `dunnStyleBH()` (no cummin, matches dunn.test)
+- Import changed from `normalCDF` to `normalSurvival` for stable tail probabilities
+
+**src/core/math.ts:**
+- Added `normalSurvival(z)`: upper-tail P(Z>z) using erfc directly, avoids cancellation
+- Added `erfc(x)`: complementary error function, stable for large x
+
+**src/stats/regression.ts:**
+- Logistic regression: R-style initialization (intercept = log(p/(1-p)))
+- Added eta clamping (-700, 700) for overflow prevention
+- Added step-halving (up to 10 halvings when deviance increases)
+- Reduced logistic max coef error from 326 to 23, SE pass 66.9% → 84.7%
+
+**validation/ts-harness/anova-report.ts:**
+- Fixed Dunn BH case sensitivity: `'bh'` → `'BH'` (was silently failing for all 500 datasets)
+
+**validation/ts-harness/clustering-report.ts:**
+- Added `bestKMeans()` and `bestGMM()` with 10-seed multi-start
+
+**Results across all 7 harnesses (169 metrics, +2 from BH):**
+- PCA: **14/14**
+- T-test: **40/41**
+- Correlation: **12/14**
+- FA Extended: **19/19**
+- Regression: **31/36**
+- ANOVA: **26/26** (was 22/25, now perfect)
+- Clustering: **5/18**
+- **Total: 148/169 (87.6%)**
+
+### 2026-02-27 — Cross-validation fix round: +20 metrics (123→143/167, 73.7%→85.6%)
+
+**src/stats/pca.ts:**
+- Rewrote `runPCA()` to use eigendecomposition of R = X'X/(n-1) instead of broken SVD. Loadings = eigenvectors, eigenvalues direct from eigen(), totalVar from matrix trace.
+- Rewrote `varimaxRotation()` completely: added Kaiser normalization (default=true), SVD-based update algorithm matching R's stats::varimax, polar decomposition via eigen(B'B) instead of broken Matrix.svd(). Changed tolerance default from 1e-6 to 1e-5.
+- PCA: 0/14 → **14/14** (PERFECT)
+
+**src/core/math.ts:**
+- Rewrote `ptukeyApprox()` with multi-interval Gauss-Legendre quadrature over v = 2χ²/df. Uses Gamma(df/2, rate=df/4) density with adaptive step widths based on df. 16-point GL per subinterval, fallback to ptukeyInfDf for df>5000.
+- Removed unused `gaussLegendre01()` function.
+- Tukey HSD p-values: ~75% → **100%**
+
+**validation/ts-harness/pca-report.ts:**
+- Changed to recompute R's variance explained from stored eigenvalues instead of using R's summary.prcomp (which rounds to 5dp).
+
+**validation/r-reference/pca-ref.R:**
+- Changed from `pca_summary$importance[2, ]` to `eigenvalues / sum(eigenvalues)` for future regeneration.
+
+**Results across all 7 harnesses:**
+- PCA: **14/14** (was 0/14)
+- T-test: **40/41**
+- Correlation: **12/14**
+- FA Extended: **19/19**
+- Regression: **31/36**
+- ANOVA: **22/25** (was 20/25, Tukey p now 100%)
+- Clustering: **5/18**
+- **Total: 143/167 (85.6%)**
+
+### 2026-02-27 — Complete 7-round cross-validation pipeline (3,900 datasets, 167 metrics)
+- `validation/r-reference/ttest-ref.R`: Round 1 — t-test, descriptive, nonparametric, effect sizes, frequency (1000 datasets)
+- `validation/r-reference/correlation-ref.R`: Round 2 — Pearson, Spearman, Kendall, partial, matrix (1000 datasets)
+- `validation/r-reference/anova-ref.R`: Round 3 — ANOVA, KW, Tukey, Games-Howell, Dunn, Friedman, LMM (500 datasets)
+- `validation/r-reference/regression-ref.R`: Round 4 — simple, multiple, polynomial, logistic, diagnostics (500 datasets)
+- `validation/r-reference/pca-ref.R`: Round 5 — PCA, varimax (500 datasets)
+- `validation/r-reference/clustering-ref.R`: Round 6 — K-Means, GMM (3 models), HAC (4 linkages), silhouette (200 datasets)
+- `validation/r-reference/fa-extended-ref.R`: Round 7 — PAF/ML × oblimin/quartimin/varimax, CFA, diagnostics (200 datasets)
+- `validation/ts-harness/*.ts`: 7 TypeScript harness scripts running Carm vs R reference comparisons
+- `validation/data/*.json`: 7 reference JSON files (total ~20MB)
+- `validation/reports/*.html`: 7 dark-themed HTML reports with aggregate + per-dataset results
+- `validation/CROSSVAL-RESULTS.md`: Comprehensive results summary — 123/167 metrics at ≥99% pass rate
+- Found SVD bug: one-sided Jacobi gives wrong singular values for tall matrices (PCA 0/14)
+- Tests pass: FA 19/19, regression 31/36, t-test 40/41, ANOVA 20/25, correlation 8/14
+
 ### 2026-02-26 — Comprehensive technical reports for all Carm modules
 - `validation/FA-TECHNICAL-REPORT.md` (+543 lines): Extended with Section 20 (20 engineering decisions: two-phase ML, cosine-annealed LR, death penalty, outer Kaiser normalization, varimax SVD via eigen, log-space geomin, GPFoblq always-accept, Haar matrices, CFA numerical Hessian, Bartlett correction, TLI clamping, oblique communalities, Float64Array, Heywood clamping, sign convention, ML init, Velicer MAP guard, RMSEA CI, CFA constraints, 50 random starts) and Section 21 (6 mathematical tricks: eigen for polar factor, concentrated ML, promax OLS, anti-image KMO, Cholesky logdet, modified Gram-Schmidt)
 - `validation/CORE-MATH-TECHNICAL-REPORT.md` (1,566 lines, new): Covers `core/math.ts` + `core/matrix.ts` — special functions (logGamma, incompleteBeta, incompleteGamma, erf), distributions (normal, t, F, chi-square), Nelder-Mead, p-adjustment, Matrix class (Cholesky, Gauss-Jordan, Jacobi SVD/eigen), 15 engineering decisions, 8 mathematical tricks

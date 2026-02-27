@@ -190,30 +190,53 @@ export function shapiroWilk(x: readonly number[]): { statistic: number; pValue: 
   return { statistic: roundTo(W, 4), pValue: roundTo(pValue, 4) }
 }
 
-function polynomialEval(coeffs: number[], x: number): number {
-  // Horner's method, coeffs in decreasing degree order
-  return coeffs.reduce((acc, c) => acc * x + c, 0)
+/**
+ * Ascending-degree polynomial: c[0] + c[1]*x + c[2]*x² + ...  (Horner's method)
+ * Matches R's poly() in swilk.c: zero-order coefficient first.
+ */
+function polyAsc(c: readonly number[], x: number): number {
+  let r = c[c.length - 1]!
+  for (let i = c.length - 2; i >= 0; i--) r = r * x + c[i]!
+  return r
 }
 
+// R swilk.c coefficient arrays (Royston 1995, Applied Statistics 44(4):547-551)
+// Ascending degree: c[0] + c[1]*x + c[2]*x² + c[3]*x³
+const SW_G  = [-2.273, 0.459] as const                             // gamma (n ≤ 11), var = n
+const SW_C3 = [0.544, -0.39978, 0.025054, -6.714e-4] as const     // mu (n ≤ 11), var = n
+const SW_C4 = [1.3822, -0.77857, 0.062767, -0.0020322] as const   // log(sigma) (n ≤ 11), var = n
+const SW_C5 = [-1.5861, -0.31082, -0.083751, 0.0038915] as const  // mu (n ≥ 12), var = log(n)
+const SW_C6 = [-0.4803, -0.082676, 0.0030302] as const            // log(sigma) (n ≥ 12), var = log(n)
+
 function shapiroWilkPValue(W: number, n: number): number {
-  // Royston (1995) p-value approximation
-  let y = Math.log(1 - W)
+  // n = 3: exact p-value (R's swilk.c special case)
+  if (n === 3) {
+    const pi6 = 6 / Math.PI
+    const stqr = normalQuantile(0.75) // ≈ 0.6744898
+    const pw = pi6 * (Math.asin(Math.sqrt(W)) - stqr)
+    return Math.max(0, Math.min(1, pw))
+  }
+
+  const y0 = Math.log(1 - W)
   let z: number
 
   if (n <= 11) {
-    const gamma = polynomialEval([0.459, -2.273], 1 / n)
-    if (y >= gamma) return 5e-7
-    y = -Math.log(gamma - y)
-    const mu = polynomialEval([-1.2725, 1.0521, -0.0895], 1 / n)
-    const sigma = Math.exp(polynomialEval([-0.0006714, 0.025054, -0.6714, 0.7240], 1 / n))
+    // Royston (1995) small-sample approximation, variable = n
+    const gamma = polyAsc(SW_G, n)
+    if (y0 >= gamma) return 0 // effectively zero (R returns 1e-99)
+    const y = -Math.log(gamma - y0)
+    const mu = polyAsc(SW_C3, n)
+    const sigma = Math.exp(polyAsc(SW_C4, n))
     z = (y - mu) / sigma
   } else {
-    const mu = polynomialEval([0.0038915, -0.083751, -0.31082, -1.5861], Math.log(n))
-    const sigma = Math.exp(polynomialEval([0.0030302, -0.082676, -0.4803], Math.log(n)))
-    z = (y - mu) / sigma
+    // Royston (1995) large-sample approximation, variable = log(n)
+    const xx = Math.log(n)
+    const mu = polyAsc(SW_C5, xx)
+    const sigma = Math.exp(polyAsc(SW_C6, xx))
+    z = (y0 - mu) / sigma
   }
 
-  // Two-sided: want upper tail (large W = normal)
+  // Upper tail: large W → normal → large p
   return Math.max(0, Math.min(1, 1 - normalCDF(z)))
 }
 
