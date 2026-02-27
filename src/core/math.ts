@@ -42,6 +42,59 @@ export function gamma(z: number): number {
   return Math.exp(logGamma(z))
 }
 
+/**
+ * Digamma function ψ(x) = d/dx ln Γ(x).
+ * Asymptotic series for x ≥ 8, recurrence ψ(x) = ψ(x+1) - 1/x for small x.
+ * Reference: Abramowitz & Stegun §6.3.18
+ */
+export function digamma(x: number): number {
+  if (x <= 0 && x === Math.floor(x)) return NaN  // poles at non-positive integers
+  // Reflection formula for x < 0: ψ(x) = ψ(1-x) - π/tan(πx)
+  if (x < 0) return digamma(1 - x) - Math.PI / Math.tan(Math.PI * x)
+  // Recurrence to shift x ≥ 8
+  let result = 0
+  let z = x
+  while (z < 8) {
+    result -= 1 / z
+    z += 1
+  }
+  // Asymptotic series: ψ(z) ≈ ln(z) - 1/(2z) - Σ B_{2k}/(2k·z^{2k})
+  // Bernoulli numbers: B2=1/6, B4=-1/30, B6=1/42, B8=-1/30, B10=5/66, B12=-691/2730
+  const z2 = 1 / (z * z)
+  result += Math.log(z) - 0.5 / z
+    - z2 * (1 / 12 - z2 * (1 / 120 - z2 * (1 / 252 - z2 * (1 / 240 - z2 * (5 / 660 - z2 * 691 / 32760)))))
+  return result
+}
+
+/**
+ * Trigamma function ψ'(x) = d²/dx² ln Γ(x).
+ * Asymptotic series for x ≥ 8, recurrence ψ'(x) = ψ'(x+1) + 1/x² for small x.
+ * Reference: Abramowitz & Stegun §6.4.12
+ *
+ * Asymptotic: ψ'(z) = 1/z + 1/(2z²) + 1/(6z³) - 1/(30z⁵) + 1/(42z⁷) - 1/(30z⁹) + ...
+ *           = 1/z + 1/(2z²) + (1/z³)·[1/6 - (1/z²)·(1/30 - (1/z²)·(1/42 - ...))]
+ */
+export function trigamma(x: number): number {
+  if (x <= 0 && x === Math.floor(x)) return NaN
+  if (x < 0) {
+    const piX = Math.PI * x
+    const sinPiX = Math.sin(piX)
+    return -(Math.PI * Math.PI) / (sinPiX * sinPiX) + trigamma(1 - x)
+  }
+  let result = 0
+  let z = x
+  while (z < 8) {
+    result += 1 / (z * z)
+    z += 1
+  }
+  const iz = 1 / z
+  const iz2 = iz * iz
+  // ψ'(z) = 1/z + 1/(2z²) + 1/(6z³) - 1/(30z⁵) + 1/(42z⁷) - 1/(30z⁹) + 5/(66z¹¹) - 691/(2730z¹³)
+  result += iz + iz2 / 2
+    + iz2 * iz * (1 / 6 - iz2 * (1 / 30 - iz2 * (1 / 42 - iz2 * (1 / 30 - iz2 * (5 / 66 - iz2 * 691 / 2730)))))
+  return result
+}
+
 /** Log of Beta function: log B(a, b) = logΓ(a) + logΓ(b) - logΓ(a+b). */
 export function logBeta(a: number, b: number): number {
   return logGamma(a) + logGamma(b) - logGamma(a + b)

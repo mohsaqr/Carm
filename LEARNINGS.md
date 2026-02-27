@@ -1,3 +1,70 @@
+## 2026-02-27 (Numerical Equivalence Testing — 14 Methods vs R)
+
+### R's binom.test two-sided p-value uses exact enumeration, not 2*min(pLess, pGreater)
+- R computes log P(X=j) for ALL j in 0..n, then sums probabilities where P(X=j) ≤ P(X=k_observed) + tolerance
+- Simple `2 * min(pLess, pGreater)` gives wrong p for asymmetric distributions (e.g., k=0, n=10, p0=0.3: R=0.0388, simple=0.0565)
+- Implemented `binomialTwoSidedP()` with log-space PMF and tolerance 1e-7 for floating-point comparison
+
+### McNemar's Yates correction uses |b-c|-1, not |b-c|-0.5
+- R's `mcnemar.test(correct=TRUE)`: χ² = (|b-c| - 1)² / (b+c)
+- Many textbooks and online sources cite |b-c| - 0.5, but R uses 1
+- Verified: b=30, c=12 → R gives χ² = 6.881 with correction=TRUE
+
+### car::Anova(type=3) uses the model's existing contrast coding, not effects coding
+- Contrary to common belief, `car::Anova(type=3)` does NOT force effects coding
+- It uses whatever contrasts the model was fit with — default `contr.treatment` (dummy coding)
+- Type III SS = drop each term from full model, keeping all other terms (including interaction when testing main effects)
+- With treatment coding, Type II and Type III main effect SS differ even for balanced designs
+- Only interaction SS and residual SS are equal between Type II and Type III with treatment coding
+
+### Clopper-Pearson CI crashes when k=n (all successes)
+- `incompleteBeta(1-p0, n-k, k+1)` → `logBeta(0, k+1)` → `logGamma(0)` throws
+- Boundary cases: k=n → pLessOrEqual=1; k=0 → pGreaterOrEqual=1
+- Also: k=n with pGreaterOrEqual uses `Math.pow(p0, n)` directly
+
+### Factor levels must be sorted alphabetically to match R's default
+- R's `factor()` with default levels sorts alphabetically
+- Our twoWayANOVA was using insertion order from `new Set(factorA)`, which gave different dummy coding
+- Fix: `[...new Set(factorA)].sort()` before building design matrix
+
+## 2026-02-27 (14 New Statistical Methods)
+
+### digamma/trigamma asymptotic series for NB θ estimation
+- Asymptotic expansion for x ≥ 8 with recurrence shift for x < 8
+- digamma: ψ(z) ≈ ln(z) - 1/(2z) - Σ B_{2k}/(2k·z^{2k}), 6 Bernoulli terms
+- trigamma: ψ'(z) = 1/z + 1/(2z²) + 1/(6z³) - 1/(30z⁵) + ... (nested Horner form)
+- Sufficient precision (~1e-12 relative error) for negative binomial profile likelihood Newton steps
+
+### Welch's ANOVA formula
+- Weighted F: F_w = Σ w_j(mean_j - mean_tilde)² / ((k-1) * C), where w_j = n_j/s²_j
+- C correction factor: 1 + 2(k-2)/(k²-1) * Σ (1/df_j)(1 - w_j/Σw_j)²
+- Denominator df = (k²-1) / (3 * Σ (1/df_j)(1 - w_j/Σw_j)²)
+- Matches R's `oneway.test(var.equal=FALSE)` exactly
+
+### Two-Way ANOVA Type II vs Type III
+- Type II: treatment (dummy) coding. Test A by comparing model with B+AB vs B+AB+A.
+- Type III: effects (sum-to-zero) coding. Each factor tested by dropping from full model.
+- On balanced designs: Type II = Type III (verified). On unbalanced: they differ.
+- R's `car::Anova(type=2)` and `car::Anova(type=3)` match exactly for balanced data.
+
+### Clopper-Pearson exact CI via bisection on incompleteBeta
+- Lower: find p such that I_p(k, n-k+1) = 1 - α/2 (lower bound)
+- Upper: find p such that I_p(k+1, n-k) = α/2 (upper bound)
+- Special cases: k=0 → lower=0, k=n → upper=1
+- 100 bisection iterations gives ~1e-10 precision
+
+### Negative binomial θ Newton convergence
+- Profile log-likelihood score: Σ[ψ(y_i+θ) - ψ(θ) + ln(θ) + 1 - ln(θ+μ_i) - (y_i+θ)/(θ+μ_i)]
+- Info (Hessian): Σ[ψ'(y_i+θ) - ψ'(θ) + 1/θ - 2/(θ+μ_i) + (y_i+θ)/(θ+μ_i)²]
+- Method-of-moments init: θ = μ²/(Var-μ), fallback to 10 if Var ≤ μ
+- 25 outer iterations sufficient; inner IRLS converges in ~5 iterations
+
+### Ordinal logistic Fisher scoring
+- Expected Fisher information I_{ab} = Σ_i Σ_m (1/p_im) * ∂p_im/∂θ_a * ∂p_im/∂θ_b
+- This is more stable than observed information (no ∂²p terms)
+- Threshold ordering must be enforced after each Newton step
+- Empirical cumulative logit initialization is crucial for convergence
+
 ## 2026-02-27 (LMM Extensions + Poisson Regression)
 
 ### Log-Cholesky parameterization for LMM random slopes

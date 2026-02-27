@@ -230,6 +230,41 @@ Example test comment:
 // Cohen's d (effsize::cohen.d): -3.162
 ```
 
+## Numerical Equivalence Testing (MANDATORY)
+Every new statistical implementation MUST have a dedicated numerical equivalence test against R. This is non-negotiable — no implementation is considered complete without it.
+
+### Process
+1. Write an R script that runs the equivalent analysis on synthetic test data and outputs all key quantities (statistic, df, p-value, effect size, CI, coefficients, etc.) to a JSON file in `tests/fixtures/`.
+2. Write a Vitest test that loads the JSON fixture and compares each value from the Carm implementation against R's output using `toBeCloseTo()` with appropriate tolerance.
+3. The R script and its invocation must be documented in a comment block at the top of the test file.
+4. Cover at minimum: the main test statistic, degrees of freedom, p-value, effect size, and confidence intervals. For regression models: all coefficients, SEs, AIC/BIC, log-likelihood.
+
+### Tolerances
+- Deterministic algorithms (OLS, chi-square, t-test): `1e-6` or tighter
+- Iterative algorithms (IRLS, EM, Newton): `1e-4` (may need `1e-2` for convergence-sensitive quantities)
+- P-values near 0 or 1: use absolute tolerance `1e-4`
+- Random/stochastic methods (bootstrap): compare distribution properties, not exact values
+
+### Fixture Format
+```json
+{
+  "method": "welchANOVA",
+  "r_code": "oneway.test(y ~ group, data = df, var.equal = FALSE)",
+  "data": { "groups": [[1,2,3], [4,5,6], [7,8,9]] },
+  "expected": {
+    "statistic": 9.9391,
+    "df_num": 2,
+    "df_den": 9.8506,
+    "pValue": 0.004338
+  }
+}
+```
+
+### When to Run
+- After implementing any new statistical function
+- After modifying the internals of an existing statistical function
+- Before marking any stats task as complete
+
 ## Visualization Testing Protocol
 - You CANNOT see rendered plots. Never assume a plot looks correct.
 - After creating or modifying any visualization:

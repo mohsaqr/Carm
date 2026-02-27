@@ -237,6 +237,82 @@ export function formatPoisson(deviance: number, nullDeviance: number, aic: numbe
   return `Deviance = ${formatStat(deviance, 1)}, Null deviance = ${formatStat(nullDeviance, 1)}, AIC = ${formatStat(aic, 1)}`
 }
 
+/**
+ * APA string for negative binomial regression.
+ * e.g. "Deviance = 12.3, θ = 4.56, AIC = 78.9"
+ */
+export function formatNegBin(deviance: number, theta: number, aic: number): string {
+  return `Deviance = ${formatStat(deviance, 1)}, θ = ${formatStat(theta, 2)}, AIC = ${formatStat(aic, 1)}`
+}
+
+/**
+ * APA string for two-way ANOVA factor row.
+ * e.g. "Factor A: F(2, 54) = 4.21, p = .018, η² = 0.14"
+ */
+export function formatTwoWayANOVA(
+  source: string,
+  F: number,
+  df1: number,
+  df2: number,
+  pValue: number,
+  etaSq: number
+): string {
+  return `${source}: F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, η² = ${formatStat(etaSq)}`
+}
+
+/**
+ * APA string for ANCOVA factor row.
+ * e.g. "Factor: F(2, 53) = 5.10, p = .009, η² = 0.16"
+ */
+export function formatANCOVA(
+  source: string,
+  F: number,
+  df1: number,
+  df2: number,
+  pValue: number,
+  etaSq: number
+): string {
+  return `${source}: F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, η² = ${formatStat(etaSq)}`
+}
+
+/**
+ * APA string for binomial test.
+ * e.g. "p̂ = 0.60, p = .327, 95% CI [0.36, 0.81], g = 0.10"
+ */
+export function formatBinomial(
+  pHat: number,
+  pValue: number,
+  ci: readonly [number, number],
+  g: number,
+  ciLevel = 0.95
+): string {
+  const ciPct = Math.round(ciLevel * 100)
+  return `p̂ = ${formatStat(pHat, 3)}, ${formatP(pValue)}, ${ciPct}% CI ${formatCI(ci, 3)}, g = ${formatStat(g, 3)}`
+}
+
+/**
+ * APA string for proportions z-test.
+ * e.g. "z = 2.31, p = .021, h = 0.45, 95% CI [0.02, 0.18]"
+ */
+export function formatProportions(
+  z: number,
+  pValue: number,
+  h: number,
+  ci: readonly [number, number],
+  ciLevel = 0.95
+): string {
+  const ciPct = Math.round(ciLevel * 100)
+  return `z = ${formatStat(z)}, ${formatP(pValue)}, h = ${formatStat(h)}, ${ciPct}% CI ${formatCI(ci, 3)}`
+}
+
+/**
+ * APA string for Cochran's Q test.
+ * e.g. "Q(2) = 8.40, p = .015"
+ */
+export function formatCochranQ(Q: number, df: number, pValue: number): string {
+  return `Q(${formatDF(df)}) = ${formatStat(Q)}, ${formatP(pValue)}`
+}
+
 /** Generic effect size interpretation helper. */
 export function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation {
   const abs = Math.abs(value)

@@ -1,3 +1,50 @@
+### 2026-02-27 — Numerical equivalence tests for all 14 new methods (R cross-validation)
+
+Infrastructure:
+- `tests/fixtures/new-methods-ref.R`: R script generating reference values for all 14 methods using Welch, car, boot, MASS, ordinal packages
+- `tests/fixtures/new-methods-ref.json`: R reference fixture with full-precision values for 24 test cases
+- `tests/stats/numerical-equivalence.test.ts`: 24 Vitest tests comparing Carm vs R across all 14 methods
+
+Bug fixes found during equivalence testing:
+- `src/stats/frequency.ts`: Fixed binomialTest boundary crash when k=n (logGamma(0)); added exact two-sided p-value via `binomialTwoSidedP()` matching R's binom.test algorithm; fixed McNemar's Yates correction from |b-c|-0.5 to |b-c|-1 matching R
+- `src/stats/comparison.ts`: Sorted factor levels alphabetically to match R's default; changed Type III SS to use treatment coding with model-comparison (matching car::Anova); removed unused `buildEffects` function
+- `tests/stats/comparison.test.ts`: Updated balanced design test to only compare interaction SS between Type II and Type III
+
+Results: 784/784 tests passing across 23 suites. All 14 methods R-equivalent.
+
+### 2026-02-27 — Implement 14 new statistical methods (Tier 1 + Tier 2)
+
+Infrastructure:
+- `src/core/prng.ts` (NEW): Extracted shared splitmix32 PRNG class from clustering.ts and factor-analysis.ts
+- `src/core/math.ts`: Added `digamma()` and `trigamma()` (asymptotic series + recurrence)
+- `src/core/types.ts`: Added `TwoWayANOVAResult`, `ANCOVAResult`, `OrdinalRegressionResult`, `BootstrapCIResult`, `ANOVATableRow`
+- `src/core/apa.ts`: Added 6 APA formatters: `formatNegBin`, `formatTwoWayANOVA`, `formatANCOVA`, `formatBinomial`, `formatProportions`, `formatCochranQ`
+
+Comparison methods (src/stats/comparison.ts):
+- `welchANOVA()`: Welch (1951) heteroscedastic one-way ANOVA with Welch-Satterthwaite df
+- `moodsMedianTest()`: Non-parametric median test via 2×k chi-square
+- `cochranQ()`: Cochran's Q for k related binary samples
+- `twoWayANOVA()`: Two-way factorial ANOVA with Type II (default) and Type III SS
+- `ancova()`: ANCOVA with adjusted means at grand mean of covariate
+
+Frequency methods (src/stats/frequency.ts):
+- `cramersVWithCI()`: Cramér's V with multinomial bootstrap CI
+- `mcnemarsTest()`: McNemar's test for paired 2×2 tables with optional Yates correction
+- `binomialTest()`: Exact binomial test with Clopper-Pearson CI
+- `proportionsZTest()`: 1-sample and 2-sample proportions z-test with Cohen's h
+
+Regression methods (src/stats/regression.ts):
+- `computeRSS()`: RSS helper for model comparison (used by two-way ANOVA + ANCOVA)
+- `quasiPoissonRegression()`: Quasi-Poisson with dispersion parameter
+- `negativeBinomialRegression()`: NB2 via IRLS with Newton θ estimation (digamma/trigamma)
+- `ordinalLogisticRegression()`: Proportional odds model via Fisher scoring
+
+Other:
+- `src/stats/correlation.ts`: Added `pointBiserialCorrelation()` (delegates to Pearson, relabels)
+- `src/stats/bootstrap.ts` (NEW): `bootstrapCI()` (percentile + BCa) and `bootstrapCITwoSample()`
+
+Tests: 131 new tests (629→760), all passing. 22 test suites.
+
 ### 2026-02-27 — Update technical reports for LMM extensions + Poisson regression
 
 - `validation/MIXED-MODEL-TECHNICAL-REPORT.md`: Major update (926 → 1456 lines). Added 4 new sections: ML Estimation, Random Slopes via Log-Cholesky, Nakagawa R², Model Comparison (LRT). Updated Woodbury section for generalized q random effects. Updated API reference, implementation completeness table, known limitations. Added 3 engineering decisions and 2 math tricks entries.

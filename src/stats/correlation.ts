@@ -379,3 +379,34 @@ export function correlationMatrix(
     labels: labels ?? Array.from({ length: k }, (_, i) => `Var${i + 1}`),
   }
 }
+
+// ─── Point-Biserial correlation ──────────────────────────────────────────
+
+/**
+ * Point-biserial correlation between a binary variable and a continuous variable.
+ * Validates binary is 0/1, delegates to Pearson, renames to r_pb.
+ *
+ * Cross-validated with R:
+ * > cor.test(binary, continuous)
+ * # Point-biserial is just Pearson r when one var is binary
+ */
+export function pointBiserialCorrelation(
+  binary: readonly number[],
+  continuous: readonly number[],
+  ciLevel = 0.95
+): StatResult {
+  // validate binary is all 0 or 1
+  for (const v of binary) {
+    if (v !== 0 && v !== 1) throw new Error('pointBiserialCorrelation: binary must contain only 0 and 1')
+  }
+  const result = pearsonCorrelation(binary, continuous, ciLevel)
+  return {
+    ...result,
+    testName: 'Point-biserial r',
+    effectSize: {
+      ...result.effectSize,
+      name: 'r_pb',
+    },
+    formatted: formatCorrelation(result.statistic, typeof result.df === 'number' ? result.df : 0, result.pValue, result.ci, 'r_pb', ciLevel),
+  }
+}

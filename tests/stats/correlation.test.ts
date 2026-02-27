@@ -6,7 +6,7 @@
  * > cor.test(x, y, method='kendall')
  */
 import { describe, it, expect } from 'vitest'
-import { pearsonCorrelation, spearmanCorrelation, kendallTau, correlationMatrix } from '../../src/stats/correlation.js'
+import { pearsonCorrelation, spearmanCorrelation, kendallTau, correlationMatrix, pointBiserialCorrelation } from '../../src/stats/correlation.js'
 import gt from '../fixtures/ground_truth.json'
 
 const { x, y } = gt.pearson
@@ -135,5 +135,45 @@ describe('correlationMatrix', () => {
     const cm = correlationMatrix(data, ['A', 'B', 'C'])
     expect(cm.labels[0]).toBe('A')
     expect(cm.labels[1]).toBe('B')
+  })
+})
+
+// ─── Point-Biserial correlation ──────────────────────────────────────────
+
+describe('pointBiserialCorrelation', () => {
+  // Cross-validated with R:
+  // > binary <- c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1)
+  // > continuous <- c(3.1, 2.5, 4.0, 3.8, 2.9, 5.2, 6.1, 5.8, 6.5, 5.0)
+  // > cor.test(binary, continuous)
+  // t = 6.2297, df = 8, p-value = 0.000249
+  // cor = 0.9105
+  const binary = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+  const continuous = [3.1, 2.5, 4.0, 3.8, 2.9, 5.2, 6.1, 5.8, 6.5, 5.0]
+  const res = pointBiserialCorrelation(binary, continuous)
+
+  it('r_pb matches Pearson r (R ground truth, tol=0.01)', () => {
+    // Point-biserial r is identical to Pearson r when one variable is binary
+    expect(res.statistic).toBeCloseTo(0.9105, 2)
+  })
+  it('p-value (R ground truth, tol=0.01)', () => {
+    expect(res.pValue).toBeLessThan(0.001)
+  })
+  it('testName is Point-biserial r', () => {
+    expect(res.testName).toBe('Point-biserial r')
+  })
+  it('effectSize name is r_pb', () => {
+    expect(res.effectSize.name).toBe('r_pb')
+  })
+  it('formatted string includes r_pb', () => {
+    expect(res.formatted).toMatch(/r_pb/)
+  })
+  it('df = n - 2', () => {
+    expect(res.df).toBe(8)
+  })
+  it('throws on non-binary input', () => {
+    expect(() => pointBiserialCorrelation([0, 1, 2], [1, 2, 3])).toThrow(/binary/)
+  })
+  it('throws on float binary input', () => {
+    expect(() => pointBiserialCorrelation([0, 0.5, 1], [1, 2, 3])).toThrow(/binary/)
   })
 })

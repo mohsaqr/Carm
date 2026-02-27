@@ -22,12 +22,17 @@ import {
   formatRMANOVA,
   formatMannWhitney,
   formatKruskalWallis,
+  formatChiSq,
+  formatCochranQ,
+  formatTwoWayANOVA,
+  formatANCOVA,
   formatP,
   interpretEtaSq,
 } from '../core/apa.js'
 import { Matrix } from '../core/matrix.js'
 import { cohensD, cohensDPaired, omegaSquared, etaSquaredKW, rankBiserial } from './effect-size.js'
-import type { StatResult, GroupData, RMANOVAResult, EffectInterpretation } from '../core/types.js'
+import { computeRSS } from './regression.js'
+import type { StatResult, GroupData, RMANOVAResult, TwoWayANOVAResult, ANOVATableRow, ANCOVAResult, EffectInterpretation } from '../core/types.js'
 
 // ─── Independent samples t-test ───────────────────────────────────────────
 
@@ -875,5 +880,527 @@ export function repeatedMeasuresANOVA(
     epsilonHF,
     ...(correction !== 'none' ? { correctedDf: [df1, df2] as const } : {}),
     correction,
+  }
+}
+
+// ─── Welch's ANOVA ──────────────────────────────────────────────────────
+
+/**
+ * Welch's one-way ANOVA for heteroscedastic groups.
+ * Uses weighted F with Welch-Satterthwaite denominator df.
+ * Reference: Welch (1951) "On the comparison of several mean values"
+ *
+ * Formula (matching R's oneway.test with var.equal=FALSE):
+ *   w_j = n_j / s²_j
+ *   mean_tilde = Σ(w_j * mean_j) / Σ(w_j)
+ *   F_w = Σ w_j*(mean_j - mean_tilde)² / ((k-1) * (1 + 2*(k-2)/(k²-1) * Λ))
+ *   Λ = Σ (1 - w_j/Σw)² / (n_j - 1)
+ *   df_den = (k² - 1) / (3 * Λ)
+ *
+ * Cross-validated with R:
+ * > oneway.test(value ~ group, data = df, var.equal = FALSE)
+ */
+export function welchANOVA(groups: readonly GroupData[]): StatResult {
+  if (groups.length < 2) throw new Error('welchANOVA: need at least 2 groups')
+  const k = groups.length
+
+  // Per-group statistics
+  const ns = groups.map(g => g.values.length)
+  const means = groups.map(g => _mean(g.values))
+  const vars = groups.map(g => _variance(g.values))
+
+  // Weights: w_j = n_j / s²_j
+  const weights = ns.map((n, j) => {
+    const v = vars[j]!
+    return v > 0 ? n / v : 0
+  })
+  const sumW = weights.reduce((s, w) => s + w, 0)
+  if (sumW === 0) throw new Error('welchANOVA: all groups have zero variance')
+
+  // Weighted grand mean
+  const meanTilde = weights.reduce((s, w, j) => s + w * means[j]!, 0) / sumW
+
+  // Numerator sum: Σ w_j * (mean_j - meanTilde)²
+  const numSum = weights.reduce((s, w, j) => s + w * (means[j]! - meanTilde) ** 2, 0)
+
+  // Lambda = Σ (1 - w_j / sumW)² / (n_j - 1)
+  let lambda = 0
+  for (let j = 0; j < k; j++) {
+    const dfj = ns[j]! - 1
+    if (dfj > 0) {
+      lambda += (1 - weights[j]! / sumW) ** 2 / dfj
+    }
+  }
+
+  // Welch's F: numerator / ((k-1) * denominator_correction)
+  const denomCorr = 1 + (2 * (k - 2) / (k * k - 1)) * lambda
+  const dfNum = k - 1
+  const Fw = numSum / (dfNum * denomCorr)
+
+  // Denominator df
+  const dfDen = (k * k - 1) / (3 * lambda)
+
+  const pValue = fDistPValue(Fw, dfNum, dfDen)
+
+  // Effect size: omega-squared (using standard SS decomposition)
+  const allValues = groups.flatMap(g => [...g.values])
+  const grandMean = _mean(allValues)
+  let ssBetween = 0
+  let ssTotal = 0
+  for (const g of groups) {
+    const gm = _mean(g.values)
+    ssBetween += g.values.length * (gm - grandMean) ** 2
+  }
+  for (const v of allValues) ssTotal += (v - grandMean) ** 2
+  const ssWithin = groups.reduce((s, g) => {
+    const gm = _mean(g.values)
+    return s + g.values.reduce((ss, v) => ss + (v - gm) ** 2, 0)
+  }, 0)
+  const msW = ssWithin / (allValues.length - k)
+  const omega = omegaSquared(ssBetween, ssTotal, dfNum, msW)
+
+  const formatted = formatANOVA(Fw, dfNum, dfDen, pValue, omega.value, 'ω²')
+
+  return {
+    testName: "Welch's ANOVA",
+    statistic: Fw,
+    df: [dfNum, dfDen],
+    pValue,
+    effectSize: omega,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n: allValues.length,
+    formatted,
+  }
+}
+
+// ─── Mood's Median Test ──────────────────────────────────────────────────
+
+/**
+ * Mood's median test: non-parametric test for equal medians across groups.
+ * Builds a 2×k contingency table (above vs at-or-below grand median)
+ * and applies a chi-square test.
+ *
+ * Cross-validated with R:
+ * > library(RVAideMemoire); mood.medtest(y ~ group, data = df)
+ */
+export function moodsMedianTest(groups: readonly GroupData[]): StatResult {
+  if (groups.length < 2) throw new Error('moodsMedianTest: need at least 2 groups')
+
+  const k = groups.length
+  const allValues = groups.flatMap(g => [...g.values])
+  const n = allValues.length
+  const grandMedian = _median(allValues)
+
+  // Build 2×k contingency table: row 0 = above, row 1 = at-or-below
+  const above: number[] = []
+  const atOrBelow: number[] = []
+  for (const g of groups) {
+    let a = 0, b = 0
+    for (const v of g.values) {
+      if (v > grandMedian) a++
+      else b++
+    }
+    above.push(a)
+    atOrBelow.push(b)
+  }
+
+  // Chi-square test on 2×k table
+  const rowTotals = [above.reduce((s, v) => s + v, 0), atOrBelow.reduce((s, v) => s + v, 0)]
+  const colTotals = groups.map(g => g.values.length)
+
+  let chiSq = 0
+  for (let j = 0; j < k; j++) {
+    const observed0 = above[j]!
+    const observed1 = atOrBelow[j]!
+    const expected0 = (rowTotals[0]! * colTotals[j]!) / n
+    const expected1 = (rowTotals[1]! * colTotals[j]!) / n
+    if (expected0 > 0) chiSq += (observed0 - expected0) ** 2 / expected0
+    if (expected1 > 0) chiSq += (observed1 - expected1) ** 2 / expected1
+  }
+
+  const df = k - 1
+  const pValue = chiSqPValue(chiSq, df)
+
+  // Effect size: Cramér's V = sqrt(χ² / (n * min(r-1, c-1)))
+  // For 2×k table: min(2-1, k-1) = 1
+  const cramerV = n > 0 ? Math.sqrt(chiSq / n) : 0
+
+  const formatted = formatChiSq(chiSq, df, pValue, cramerV, "V")
+
+  return {
+    testName: "Mood's Median Test",
+    statistic: chiSq,
+    df,
+    pValue,
+    effectSize: {
+      value: cramerV,
+      name: "Cramér's V",
+      interpretation: cramerV < 0.1 ? 'negligible' : cramerV < 0.3 ? 'small' : cramerV < 0.5 ? 'medium' : 'large',
+    },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted,
+  }
+}
+
+// ─── Cochran's Q Test ───────────────────────────────────────────────────
+
+/**
+ * Cochran's Q test for related samples with binary outcomes.
+ * Input: n×k binary matrix (subjects × conditions, each entry 0 or 1).
+ * Tests whether the proportion of successes differs across conditions.
+ *
+ * Q = k(k-1) * Σ(C_j - C̄)² / (k * ΣR_i - ΣR_i²)
+ * where C_j = column sums, R_i = row sums
+ *
+ * Cross-validated with R:
+ * > library(RVAideMemoire); cochran.qtest(y ~ cond | subject, data = df)
+ */
+export function cochranQ(data: readonly (readonly number[])[]): StatResult {
+  const nSubjects = data.length
+  if (nSubjects < 2) throw new Error('cochranQ: need at least 2 subjects')
+  const k = data[0]!.length
+  if (k < 2) throw new Error('cochranQ: need at least 2 conditions')
+
+  // Column sums (C_j) and row sums (R_i)
+  const colSums: number[] = new Array(k).fill(0) as number[]
+  const rowSums: number[] = []
+
+  for (let i = 0; i < nSubjects; i++) {
+    let rowSum = 0
+    for (let j = 0; j < k; j++) {
+      const v = data[i]![j]!
+      colSums[j]! += v
+      rowSum += v
+    }
+    rowSums.push(rowSum)
+  }
+
+  const meanC = colSums.reduce((s, v) => s + v, 0) / k
+  const sumCjMinusMeanSq = colSums.reduce((s, c) => s + (c - meanC) ** 2, 0)
+  const sumRi = rowSums.reduce((s, r) => s + r, 0)
+  const sumRiSq = rowSums.reduce((s, r) => s + r * r, 0)
+
+  const denominator = k * sumRi - sumRiSq
+  if (denominator === 0) {
+    // All rows have the same sum — no variability, Q = 0
+    const formatted = formatCochranQ(0, k - 1, 1)
+    return {
+      testName: "Cochran's Q",
+      statistic: 0,
+      df: k - 1,
+      pValue: 1,
+      effectSize: { value: 0, name: "W", interpretation: 'negligible' },
+      ci: [NaN, NaN],
+      ciLevel: 0.95,
+      n: nSubjects,
+      formatted,
+    }
+  }
+
+  const Q = k * (k - 1) * sumCjMinusMeanSq / denominator
+  const df = k - 1
+  const pValue = chiSqPValue(Q, df)
+
+  // Effect size: W = Q / (n * (k - 1)), analogous to Kendall's W
+  const W = Q / (nSubjects * (k - 1))
+
+  const formatted = formatCochranQ(Q, df, pValue)
+
+  return {
+    testName: "Cochran's Q",
+    statistic: Q,
+    df,
+    pValue,
+    effectSize: {
+      value: W,
+      name: 'W',
+      interpretation: W < 0.1 ? 'negligible' : W < 0.3 ? 'small' : W < 0.5 ? 'medium' : 'large',
+    },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n: nSubjects,
+    formatted,
+  }
+}
+
+// ─── Two-Way ANOVA ──────────────────────────────────────────────────────
+
+/**
+ * Helper: build dummy-coded columns for a factor (reference = first level).
+ * Treatment coding: each non-reference level gets a 0/1 indicator.
+ * Returns a matrix of n rows × (nLevels - 1) columns.
+ */
+function buildDummies(
+  factor: readonly (string | number)[],
+  levels: readonly (string | number)[]
+): number[][] {
+  const n = factor.length
+  const cols = levels.length - 1  // reference coding
+  return Array.from({ length: n }, (_, i) => {
+    const row: number[] = []
+    for (let d = 0; d < cols; d++) {
+      row.push(factor[i] === levels[d + 1] ? 1 : 0)
+    }
+    return row
+  })
+}
+
+/**
+ * Two-way factorial ANOVA.
+ * Computes Type II SS by default via model-comparison (RSS of reduced vs full).
+ *
+ * @param y         Continuous outcome variable
+ * @param factorA   First categorical factor (parallel to y)
+ * @param factorB   Second categorical factor (parallel to y)
+ * @param ssType    Type II (default) or Type III sums of squares
+ *
+ * Cross-validated with R:
+ * > summary(aov(y ~ A * B, data = df))          # Type I
+ * > library(car); Anova(lm(y ~ A * B), type=2)  # Type II
+ */
+export function twoWayANOVA(
+  y: readonly number[],
+  factorA: readonly (string | number)[],
+  factorB: readonly (string | number)[],
+  ssType: 2 | 3 = 2
+): TwoWayANOVAResult {
+  const n = y.length
+  if (n < 4) throw new Error('twoWayANOVA: need at least 4 observations')
+  if (factorA.length !== n || factorB.length !== n) {
+    throw new Error('twoWayANOVA: all arrays must have equal length')
+  }
+
+  const levelsA = [...new Set(factorA)].sort()
+  const levelsB = [...new Set(factorB)].sort()
+  if (levelsA.length < 2 || levelsB.length < 2) {
+    throw new Error('twoWayANOVA: each factor must have at least 2 levels')
+  }
+
+  // Build dummy columns for each factor
+  const dumA = buildDummies(factorA, levelsA)  // n × (a-1)
+  const dumB = buildDummies(factorB, levelsB)  // n × (b-1)
+
+  // Interaction: element-wise products of all dummy pairs
+  const dumAB: number[][] = Array.from({ length: n }, (_, i) => {
+    const row: number[] = []
+    for (let da = 0; da < levelsA.length - 1; da++) {
+      for (let db = 0; db < levelsB.length - 1; db++) {
+        row.push(dumA[i]![da]! * dumB[i]![db]!)
+      }
+    }
+    return row
+  })
+
+  // Full design matrix: intercept + A dummies + B dummies + A×B interaction
+  const buildMatrix = (includeA: boolean, includeB: boolean, includeAB: boolean): Matrix => {
+    const rows = Array.from({ length: n }, (_, i) => {
+      const row: number[] = [1]  // intercept
+      if (includeA) row.push(...dumA[i]!)
+      if (includeB) row.push(...dumB[i]!)
+      if (includeAB) row.push(...dumAB[i]!)
+      return row
+    })
+    return Matrix.fromArray(rows)
+  }
+
+  // RSS for each model
+  const XFull = buildMatrix(true, true, true)
+  const rssFull = computeRSS(XFull, y)
+
+  if (ssType === 2) {
+    // Type II: each main effect tested controlling for the other (not interaction).
+    // SS_A = RSS(B only) - RSS(A+B), SS_B = RSS(A only) - RSS(A+B)
+    // Interaction tested from full model: SS_AB = RSS(A+B) - RSS(full)
+    const rssBothMain = computeRSS(buildMatrix(true, true, false), y)
+    const rssNoA = computeRSS(buildMatrix(false, true, false), y)
+    const rssNoB = computeRSS(buildMatrix(true, false, false), y)
+    const ssA = rssNoA - rssBothMain
+    const ssB = rssNoB - rssBothMain
+    const ssAB = rssBothMain - rssFull
+
+    const dfA = levelsA.length - 1
+    const dfB = levelsB.length - 1
+    const dfAB = dfA * dfB
+    const dfResid = n - XFull.cols
+
+    const msResid = rssFull / dfResid
+    const ssTotal = y.reduce((s, v) => s + (v - _mean(y)) ** 2, 0)
+
+    const rows: ANOVATableRow[] = [
+      { source: 'A', ss: ssA, df: dfA, ms: ssA / dfA, F: msResid > 0 ? (ssA / dfA) / msResid : 0, pValue: fDistPValue((ssA / dfA) / Math.max(1e-15, msResid), dfA, dfResid), etaSq: ssTotal > 0 ? ssA / ssTotal : 0 },
+      { source: 'B', ss: ssB, df: dfB, ms: ssB / dfB, F: msResid > 0 ? (ssB / dfB) / msResid : 0, pValue: fDistPValue((ssB / dfB) / Math.max(1e-15, msResid), dfB, dfResid), etaSq: ssTotal > 0 ? ssB / ssTotal : 0 },
+      { source: 'A:B', ss: ssAB, df: dfAB, ms: ssAB / dfAB, F: msResid > 0 ? (ssAB / dfAB) / msResid : 0, pValue: fDistPValue((ssAB / dfAB) / Math.max(1e-15, msResid), dfAB, dfResid), etaSq: ssTotal > 0 ? ssAB / ssTotal : 0 },
+    ]
+
+    const formatted = rows.map(r => formatTwoWayANOVA(r.source, r.F, r.df, dfResid, r.pValue, r.etaSq)).join('; ')
+
+    return {
+      rows,
+      residual: { ss: rssFull, df: dfResid, ms: msResid },
+      total: { ss: ssTotal, df: n - 1 },
+      n,
+      formatted,
+    }
+  }
+
+  // Type III: each term tested by comparing full model to model without that term,
+  // keeping ALL other terms (including interaction when testing main effects).
+  // Uses treatment (dummy) coding to match R's car::Anova(type=3) default behavior.
+  // Note: with treatment coding, Type III SS_A tests whether non-reference levels of A
+  // differ from the reference level at the reference level of B.
+  const rssNoAFull = computeRSS(buildMatrix(false, true, true), y)
+  const rssNoBFull = computeRSS(buildMatrix(true, false, true), y)
+  const rssNoABFull = computeRSS(buildMatrix(true, true, false), y)
+
+  const ssA = rssNoAFull - rssFull
+  const ssB = rssNoBFull - rssFull
+  const ssAB = rssNoABFull - rssFull
+
+  const dfA = levelsA.length - 1
+  const dfB = levelsB.length - 1
+  const dfAB = dfA * dfB
+  const dfResid = n - XFull.cols
+
+  const msResid = rssFull / dfResid
+  const ssTotal = y.reduce((s, v) => s + (v - _mean(y)) ** 2, 0)
+
+  const rows: ANOVATableRow[] = [
+    { source: 'A', ss: ssA, df: dfA, ms: ssA / dfA, F: msResid > 0 ? (ssA / dfA) / msResid : 0, pValue: fDistPValue((ssA / dfA) / Math.max(1e-15, msResid), dfA, dfResid), etaSq: ssTotal > 0 ? ssA / ssTotal : 0 },
+    { source: 'B', ss: ssB, df: dfB, ms: ssB / dfB, F: msResid > 0 ? (ssB / dfB) / msResid : 0, pValue: fDistPValue((ssB / dfB) / Math.max(1e-15, msResid), dfB, dfResid), etaSq: ssTotal > 0 ? ssB / ssTotal : 0 },
+    { source: 'A:B', ss: ssAB, df: dfAB, ms: ssAB / dfAB, F: msResid > 0 ? (ssAB / dfAB) / msResid : 0, pValue: fDistPValue((ssAB / dfAB) / Math.max(1e-15, msResid), dfAB, dfResid), etaSq: ssTotal > 0 ? ssAB / ssTotal : 0 },
+  ]
+
+  const formatted = rows.map(r => formatTwoWayANOVA(r.source, r.F, r.df, dfResid, r.pValue, r.etaSq)).join('; ')
+
+  return {
+    rows,
+    residual: { ss: rssFull, df: dfResid, ms: msResid },
+    total: { ss: ssTotal, df: n - 1 },
+    n,
+    formatted,
+  }
+}
+
+// ─── ANCOVA ─────────────────────────────────────────────────────────────
+
+/**
+ * Analysis of Covariance (ANCOVA).
+ * OLS regression with a dummy-coded factor + continuous covariate.
+ * Type III SS via model comparison (drop each term from full model).
+ * Computes adjusted group means at the grand mean of the covariate.
+ *
+ * @param y          Continuous outcome variable
+ * @param factor     Categorical grouping factor (parallel to y)
+ * @param covariate  Continuous covariate (parallel to y)
+ *
+ * Cross-validated with R:
+ * > library(car); Anova(lm(y ~ group + covariate), type=3)
+ * > library(emmeans); emmeans(lm(y ~ group + covariate), ~ group)
+ */
+export function ancova(
+  y: readonly number[],
+  factor: readonly (string | number)[],
+  covariate: readonly number[]
+): ANCOVAResult {
+  const n = y.length
+  if (n < 4) throw new Error('ancova: need at least 4 observations')
+  if (factor.length !== n || covariate.length !== n) {
+    throw new Error('ancova: all arrays must have equal length')
+  }
+
+  const levels = [...new Set(factor)]
+  if (levels.length < 2) throw new Error('ancova: factor must have at least 2 levels')
+
+  // Dummy columns for factor (reference = first level)
+  const dummies = buildDummies(factor, levels)  // n × (nLevels - 1)
+  const nDum = levels.length - 1
+
+  // Full design matrix: intercept + dummies + covariate
+  const XFull = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...dummies[i]!, covariate[i]!])
+  )
+
+  // Reduced models for Type III SS
+  // No-factor model: intercept + covariate only
+  const XNoFactor = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, covariate[i]!])
+  )
+  // No-covariate model: intercept + dummies only
+  const XNoCov = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...dummies[i]!])
+  )
+
+  const rssFull = computeRSS(XFull, y)
+  const rssNoFactor = computeRSS(XNoFactor, y)
+  const rssNoCov = computeRSS(XNoCov, y)
+
+  const ssFactor = rssNoFactor - rssFull
+  const ssCov = rssNoCov - rssFull
+  const dfFactor = nDum
+  const dfCov = 1
+  const dfResid = n - XFull.cols
+
+  const msResid = rssFull / dfResid
+  const ssTotal = y.reduce((s, v) => s + (v - _mean(y)) ** 2, 0)
+
+  const FFactorVal = msResid > 0 ? (ssFactor / dfFactor) / msResid : 0
+  const FCovVal = msResid > 0 ? (ssCov / dfCov) / msResid : 0
+
+  const rows: ANOVATableRow[] = [
+    {
+      source: 'Factor',
+      ss: ssFactor,
+      df: dfFactor,
+      ms: ssFactor / dfFactor,
+      F: FFactorVal,
+      pValue: fDistPValue(FFactorVal, dfFactor, dfResid),
+      etaSq: ssTotal > 0 ? ssFactor / ssTotal : 0,
+    },
+    {
+      source: 'Covariate',
+      ss: ssCov,
+      df: dfCov,
+      ms: ssCov / dfCov,
+      F: FCovVal,
+      pValue: fDistPValue(FCovVal, dfCov, dfResid),
+      etaSq: ssTotal > 0 ? ssCov / ssTotal : 0,
+    },
+  ]
+
+  // Compute adjusted group means at grand mean of covariate
+  // Adjusted mean = group mean(y) - b_cov * (group mean(cov) - grand mean(cov))
+  // where b_cov is the covariate slope from the full model
+  const Xt = XFull.transpose()
+  const XtX = Xt.multiply(XFull)
+  const XtY = Xt.multiply(Matrix.colVec(y))
+  const betaM = XtX.inverse().multiply(XtY)
+  const bCov = betaM.get(XFull.cols - 1, 0)  // last column is covariate
+  const grandMeanCov = _mean(covariate)
+
+  const adjustedMeans = levels.map(level => {
+    const idx: number[] = []
+    for (let i = 0; i < n; i++) {
+      if (factor[i] === level) idx.push(i)
+    }
+    const groupMeanY = _mean(idx.map(i => y[i]!))
+    const groupMeanCov = _mean(idx.map(i => covariate[i]!))
+    return {
+      label: String(level),
+      adjustedMean: groupMeanY - bCov * (groupMeanCov - grandMeanCov),
+    }
+  })
+
+  const formatted = rows.map(r => formatANCOVA(r.source, r.F, r.df, dfResid, r.pValue, r.etaSq)).join('; ')
+
+  return {
+    rows,
+    residual: { ss: rssFull, df: dfResid, ms: msResid },
+    total: { ss: ssTotal, df: n - 1 },
+    adjustedMeans,
+    n,
+    formatted,
   }
 }
