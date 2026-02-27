@@ -41,8 +41,8 @@
     "@types/node": "^22.0.0"
   },
   "scripts": {
-    "build": "tsup",
-    "prepare": "tsup",
+    "build": "node build.mjs",
+    "prepare": "node build.mjs",
     "test": "NODE_OPTIONS='--max-old-space-size=4096' vitest run",
     "test:watch": "vitest",
     "demo": "vite demo",
