@@ -10,7 +10,9 @@ import {
   rank,
   tDistPValue,
   normalQuantile,
-  normalCDF,
+  normalSurvival,
+  pKendallExact,
+  pSpearmanExact,
   roundTo,
 } from '../core/math.js'
 import { formatCorrelation, interpretR } from '../core/apa.js'
@@ -101,15 +103,46 @@ export function spearmanCorrelation(
   // Pearson r on ranks
   const rx = rank(x), ry = rank(y)
   const rhoResult = pearsonCorrelation(rx, ry, ciLevel)
+  const rho = rhoResult.statistic
+
+  // Check for ties in ranks
+  const hasTies = new Set(rx).size < n || new Set(ry).size < n
+
+  // Exact/Edgeworth p-value for n ≤ 1290 without ties (matching R's cor.test)
+  // R uses AS89 (prho.c): exact enumeration for n ≤ 9, Edgeworth series for n ≥ 10
+  let pValue = rhoResult.pValue
+  if (!hasTies && n <= 1290) {
+    // Compute D = Σ(d_i²) directly from ranks (avoid rounding through rho)
+    let D = 0
+    for (let i = 0; i < n; i++) {
+      const d = rx[i]! - ry[i]!
+      D += d * d
+    }
+    const q = (n * n * n - n) / 6 // expected D under H0
+
+    // Two-sided test matching R's cor.test logic:
+    // R calls pspearman(q, n, lower.tail) which passes round(q) + 2*lower.tail to C_pRho
+    // prho computes P(S >= is) [upper] or P(S < is) [lower]
+    let p: number
+    if (D > q) {
+      // Negative correlation: upper tail P(S >= D)
+      p = pSpearmanExact(Math.round(D), n, false)
+    } else {
+      // Positive correlation: lower tail P(S < D+2) = P(S <= D)
+      p = pSpearmanExact(Math.round(D) + 2, n, true)
+    }
+    pValue = Math.min(2 * p, 1)
+  }
 
   return {
     ...rhoResult,
+    pValue,
     testName: "Spearman's ρ",
     effectSize: {
       ...rhoResult.effectSize,
       name: "Spearman's ρ",
     },
-    formatted: formatCorrelation(rhoResult.statistic, typeof rhoResult.df === 'number' ? rhoResult.df : 0, rhoResult.pValue, rhoResult.ci, 'ρ', ciLevel),
+    formatted: formatCorrelation(rho, typeof rhoResult.df === 'number' ? rhoResult.df : 0, pValue, rhoResult.ci, 'ρ', ciLevel),
   }
 }
 
@@ -149,10 +182,59 @@ export function kendallTau(
   const n2 = n * (n - 1) / 2
   const tau = (concordant - discordant) / Math.sqrt((n2 - tiesX) * (n2 - tiesY))
 
-  // Normal approximation for p-value
-  const varTau = (2 * (2 * n + 5)) / (9 * n * (n - 1))
-  const z = tau / Math.sqrt(varTau)
-  const pValue = 2 * (1 - normalCDF(Math.abs(z)))
+  // Tie-corrected variance formula — Kendall (1970)
+  // Compute tie group sizes for X and Y
+  const xCounts = new Map<number, number>()
+  const yCounts = new Map<number, number>()
+  for (let i = 0; i < n; i++) {
+    const xv = x[i]!
+    const yv = y[i]!
+    xCounts.set(xv, (xCounts.get(xv) ?? 0) + 1)
+    yCounts.set(yv, (yCounts.get(yv) ?? 0) + 1)
+  }
+
+  const v0 = n * (n - 1) * (2 * n + 5)
+  let vt = 0  // tie correction for X
+  let vu = 0  // tie correction for Y
+  let v1t = 0 // t_i * (t_i - 1)
+  let v1u = 0 // u_j * (u_j - 1)
+  let v2t = 0 // t_i * (t_i - 1) * (t_i - 2)
+  let v2u = 0 // u_j * (u_j - 1) * (u_j - 2)
+
+  for (const t of xCounts.values()) {
+    vt += t * (t - 1) * (2 * t + 5)
+    v1t += t * (t - 1)
+    v2t += t * (t - 1) * (t - 2)
+  }
+  for (const u of yCounts.values()) {
+    vu += u * (u - 1) * (2 * u + 5)
+    v1u += u * (u - 1)
+    v2u += u * (u - 1) * (u - 2)
+  }
+
+  const sigma2 = (v0 - vt - vu) / 18
+    + (v1t * v1u) / (2 * n * (n - 1))
+    + (v2t * v2u) / (9 * n * (n - 1) * (n - 2))
+
+  const z = (concordant - discordant) / Math.sqrt(sigma2)
+
+  // Check for ties
+  const hasTies = tiesX > 0 || tiesY > 0
+
+  // Exact p-value for n < 50 without ties (matching R's cor.test)
+  let pValue: number
+  if (!hasTies && n < 50) {
+    // T = number of concordant pairs = (S + n2) / 2 where S = concordant - discordant
+    const S = concordant - discordant
+    const T = (S + n2) / 2
+    // Two-sided: P(tau >= |observed|) = P(T >= T_obs) + P(T <= n2 - T_obs)
+    // By symmetry: p = 2 * min(P(T <= T_obs), P(T >= T_obs))
+    const pLower = pKendallExact(Math.round(T), n)
+    const pUpper = 1 - pKendallExact(Math.round(T) - 1, n)
+    pValue = Math.min(1, 2 * Math.min(pLower, pUpper))
+  } else {
+    pValue = 2 * normalSurvival(Math.abs(z))
+  }
 
   // CI via Fisher z approximation (approximate for Kendall)
   const ci = fisherZCI(tau, n, ciLevel)
@@ -194,7 +276,24 @@ export function partialCorrelation(
   // Use OLS residuals: residualize x and y on controls
   const xRes = residualize(x, controls)
   const yRes = residualize(y, controls)
-  return pearsonCorrelation(xRes, yRes)
+  const result = pearsonCorrelation(xRes, yRes)
+
+  // Correct degrees of freedom: df = n - 2 - q (q = number of control variables)
+  const n = x.length
+  const q = controls.length
+  const correctedDf = n - 2 - q
+  if (correctedDf < 1) return result  // can't correct if df < 1
+
+  const r = result.effectSize.value
+  const t = Math.abs(r) === 1 ? Infinity : r * Math.sqrt(correctedDf / (1 - r * r))
+  const pValue = tDistPValue(t, correctedDf)
+
+  return {
+    ...result,
+    df: correctedDf,
+    pValue: roundTo(pValue, 4),
+    formatted: formatCorrelation(result.statistic, correctedDf, pValue, result.ci, 'r', result.ciLevel),
+  }
 }
 
 /** Compute OLS residuals of y regressed on predictors. */
@@ -246,7 +345,7 @@ export function correlationMatrix(
       if (i === j) return 1
       if (j < i) return 0  // fill below diagonal later
       try {
-        return corrFn(data[i]!, data[j]!).statistic
+        return corrFn(data[i]!, data[j]!).effectSize.value
       } catch {
         return NaN
       }

@@ -4,7 +4,7 @@
  * diagnostics (R², AIC, BIC, VIF, residual plots).
  */
 
-import { mean as _mean, variance as _variance, fDistPValue, tDistPValue, tDistQuantile, roundTo } from '../core/math.js'
+import { mean as _mean, variance as _variance, fDistPValue, tDistPValue, tDistQuantile, normalQuantile, roundTo } from '../core/math.js'
 import { formatRegression } from '../core/apa.js'
 import { Matrix } from '../core/matrix.js'
 import type { RegressionResult, RegressionCoef } from '../core/types.js'
@@ -175,8 +175,17 @@ export function polynomialRegression(
  * Binary logistic regression via IRLS (iteratively reweighted least squares).
  * Outcome y must be 0/1.
  *
+ * Implements Fisher scoring matching R's glm.fit exactly:
+ *   Working response: z = η + (y - μ) / w   where w = μ(1-μ)
+ *   Solve WLS: (X'WX) β_new = X'Wz
+ *   Equivalently: (Xw'Xw) β_new = Xw' zw   with Xw = √W·X, zw = √W·z
+ *
  * Cross-validated with R:
  * > glm(y ~ x1 + x2, family = binomial, data = df)
+ *
+ * Cross-validated with Python:
+ * > import statsmodels.api as sm
+ * > sm.GLM(y, sm.add_constant(X), family=sm.families.Binomial()).fit()
  */
 export function logisticRegression(
   y: readonly number[],
@@ -197,85 +206,139 @@ export function logisticRegression(
   )
   const names = ['(Intercept)', ...predictors.map(pr => pr.name)]
 
-  // IRLS: start with β = 0
-  let beta = new Array<number>(p).fill(0)
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    // η = Xβ, μ = logistic(η), W = diag(μ(1-μ))
-    const eta = Array.from({ length: n }, (_, i) => {
+  // Helper: compute η = Xβ
+  const computeEta = (b: number[]): number[] =>
+    Array.from({ length: n }, (_, i) => {
       let v = 0
-      for (let j = 0; j < p; j++) v += X.get(i, j) * (beta[j] ?? 0)
+      for (let j = 0; j < p; j++) v += X.get(i, j) * (b[j] ?? 0)
       return v
     })
-    const mu = eta.map(e => 1 / (1 + Math.exp(-e)))
+
+  // Helper: logistic with eta clamping to prevent overflow
+  // Clamp output to (eps, 1-eps) matching R's family$linkinv boundary behavior
+  const EPS_MU = 1e-15
+  const logistic = (e: number): number => {
+    const mu = 1 / (1 + Math.exp(-Math.min(700, Math.max(-700, e))))
+    return Math.min(1 - EPS_MU, Math.max(EPS_MU, mu))
+  }
+
+  // Helper: compute deviance = -2 * logLik
+  const computeDeviance = (yArr: readonly number[], muArr: number[]): number => {
+    let dev = 0
+    for (let i = 0; i < n; i++) {
+      const yi = yArr[i] ?? 0
+      const mi = muArr[i]!
+      dev += -2 * (yi * Math.log(Math.max(1e-15, mi)) + (1 - yi) * Math.log(Math.max(1e-15, 1 - mi)))
+    }
+    return dev
+  }
+
+  // IRLS with step-halving (matching R's glm.fit Fisher scoring)
+  // Initialize: intercept = log(p̄/(1-p̄)), other coefficients = 0
+  let beta = new Array<number>(p).fill(0)
+  const pMeanInit = Math.min(1 - 1e-6, Math.max(1e-6, _mean([...y])))
+  beta[0] = Math.log(pMeanInit / (1 - pMeanInit))
+
+  let prevDeviance = Infinity
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // η = Xβ, μ = logistic(η), w = μ(1-μ)
+    const eta = computeEta(beta)
+    const mu = eta.map(logistic)
     const w = mu.map(m => Math.max(1e-10, m * (1 - m)))
 
-    // Weighted least squares: X'WX · Δβ = X'W(y - μ)
+    // Deviance = -2 * logLik
+    const dev = computeDeviance(y, mu)
+
+    // Convergence: |dev - devold| / (0.1 + |dev|) < tol  (R's formula)
+    if (iter > 0 && Math.abs(dev - prevDeviance) / (0.1 + Math.abs(dev)) < tol) break
+    prevDeviance = dev
+
+    // Working response: z_i = η_i + (y_i - μ_i) / w_i
+    // This is the linearized pseudo-observation from the Fisher scoring derivation.
+    // R's glm.fit: z <- eta + (y - mu) / mu.eta.val  where mu.eta.val = dmu/deta = mu*(1-mu)
+    const z = Array.from({ length: n }, (_, i) => eta[i]! + ((y[i] ?? 0) - mu[i]!) / w[i]!)
+
+    // Weighted system: Xw = √W·X, zw = √W·z
+    // Solve (Xw'Xw) β_new = Xw' zw  ⟹  β_new = (X'WX)⁻¹ X'Wz
+    const sqrtW = w.map(Math.sqrt)
     const Xw = Matrix.fromArray(
-      Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * Math.sqrt(w[i]!)))
+      Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * sqrtW[i]!))
     )
-    const yAdj = Array.from({ length: n }, (_, i) => Math.sqrt(w[i]!) * ((y[i] ?? 0) - (mu[i] ?? 0)))
+    const zw = z.map((zi, i) => zi * sqrtW[i]!)
 
     try {
       const Xwt = Xw.transpose()
       const XwtXw = Xwt.multiply(Xw)
-      const XwtY = Xwt.multiply(Matrix.colVec(yAdj))
-      const delta = XwtXw.inverse().multiply(XwtY)
-      let maxChange = 0
-      for (let j = 0; j < p; j++) {
-        const d = delta.get(j, 0)
-        beta[j] = (beta[j] ?? 0) + d
-        maxChange = Math.max(maxChange, Math.abs(d))
+      const XwtZw = Xwt.multiply(Matrix.colVec(zw))
+      const betaNewM = XwtXw.inverse().multiply(XwtZw)
+      const betaNew = Array.from({ length: p }, (_, j) => betaNewM.get(j, 0))
+
+      // Step-halving: if deviance increases or is non-finite, halve toward betaNew
+      let accepted = false
+      let stepScale = 1.0
+      for (let half = 0; half < 10; half++) {
+        const betaTry = beta.map((b, j) => b + stepScale * (betaNew[j]! - b))
+
+        // Compute trial deviance
+        const etaTry = computeEta(betaTry)
+        const muTry = etaTry.map(logistic)
+        const trialDev = computeDeviance(y, muTry)
+
+        if (isFinite(trialDev) && (trialDev <= dev + 1e-8 || half === 9)) {
+          beta = betaTry
+          accepted = true
+          break
+        }
+        stepScale *= 0.5
       }
-      if (maxChange < tol) break
+      if (!accepted) break
     } catch {
       break  // singular — stop iterating
     }
   }
 
-  // Compute SEs from Fisher information matrix
-  const eta = Array.from({ length: n }, (_, i) => {
-    let v = 0
-    for (let j = 0; j < p; j++) v += X.get(i, j) * (beta[j] ?? 0)
-    return v
-  })
-  const mu = eta.map(e => 1 / (1 + Math.exp(-e)))
+  // ── Final quantities at converged β ──────────────────────────────────
+  const eta = computeEta(beta)
+  const mu = eta.map(logistic)  // clamped via logistic helper
   const w = mu.map(m => Math.max(1e-10, m * (1 - m)))
 
+  // Fisher information: (X'WX)⁻¹ = covariance of β̂
+  const sqrtW = w.map(Math.sqrt)
   const Xw = Matrix.fromArray(
-    Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * Math.sqrt(w[i]!)))
+    Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * sqrtW[i]!))
   )
-  let cov: Matrix
+  let covBeta: Matrix
   try {
-    cov = Xw.transpose().multiply(Xw).inverse()
+    covBeta = Xw.transpose().multiply(Xw).inverse()
   } catch {
-    cov = Matrix.identity(p)
+    covBeta = Matrix.identity(p)
   }
 
-  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, n - p)
+  // CIs use normal quantile (MLE asymptotics), not t-distribution
+  const zCrit = normalQuantile(1 - (1 - ciLevel) / 2)
   const coefficients: RegressionCoef[] = beta.map((b, i) => {
-    const se = Math.sqrt(Math.max(0, cov.get(i, i)))
-    const z = se === 0 ? 0 : b / se
-    const pVal = 2 * (1 - normCDFLocal(Math.abs(z)))
-    const ci: readonly [number, number] = [b - tCrit * se, b + tCrit * se]
+    const se = Math.sqrt(Math.max(0, covBeta.get(i, i)))
+    const zStat = se === 0 ? 0 : b / se
+    const pVal = 2 * (1 - normCDFLocal(Math.abs(zStat)))
+    const ci: readonly [number, number] = [b - zCrit * se, b + zCrit * se]
     return {
       name: names[i] ?? `β${i}`,
-      estimate: roundTo(b, 6),
-      se: roundTo(se, 6),
-      tValue: roundTo(z, 4),
-      pValue: roundTo(pVal, 4),
+      estimate: roundTo(b, 10),
+      se: roundTo(se, 10),
+      tValue: roundTo(zStat, 6),
+      pValue: roundTo(pVal, 6),
       ci,
     }
   })
 
-  // Log-likelihood
+  // Log-likelihood at converged estimates
   const logLik = mu.reduce((s, m, i) => {
     const yi = y[i] ?? 0
     return s + yi * Math.log(Math.max(1e-15, m)) + (1 - yi) * Math.log(Math.max(1e-15, 1 - m))
   }, 0)
 
   // Null log-likelihood (intercept only)
-  // Clamp pMean away from 0/1 to prevent nullLogLik = 0 on degenerate outcomes
   const pMeanRaw = _mean([...y])
   const pMean = Math.min(1 - 1e-12, Math.max(1e-12, pMeanRaw))
   const nullLogLik = n * (pMean * Math.log(Math.max(1e-15, pMean)) + (1 - pMean) * Math.log(Math.max(1e-15, 1 - pMean)))

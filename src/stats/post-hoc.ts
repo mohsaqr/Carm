@@ -9,6 +9,8 @@ import {
   tDistQuantile,
   rank,
   adjustPValues,
+  pValueStudentizedRangeApprox,
+  normalSurvival,
 } from '../core/math.js'
 import type { PairwiseResult, GroupData, PAdjMethod } from '../core/types.js'
 
@@ -46,11 +48,12 @@ export function tukeyHSD(
       const se = Math.sqrt(msWithin / 2 * (1 / n1 + 1 / n2))
       const q = se === 0 ? 0 : Math.abs(diff) / se  // studentized range statistic
 
-      // p-value via Tukey distribution approximation (uses chi-square approximation)
-      // For production accuracy this uses the Bonferroni-approximated critical value
-      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin)
-      const pValue = pValueStudentizedRange(q, k, dfWithin)
+      // p-value via proper studentized range distribution
+      const pValue = pValueStudentizedRangeApprox(q, k, dfWithin)
 
+      // CI uses studentized range critical value approximation
+      // Use Bonferroni-corrected t as approximation for qtukey critical value
+      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin)
       const ciHalf = tCrit * se
       const ci: readonly [number, number] = [diff - ciHalf, diff + ciHalf]
 
@@ -68,27 +71,6 @@ export function tukeyHSD(
     }
   }
   return results
-}
-
-/**
- * Approximation for Tukey's studentized range p-value.
- * Uses the Bonferroni-adjusted t-distribution as a conservative approximation.
- */
-function pValueStudentizedRange(q: number, k: number, _df: number): number {
-  // Based on the approximation from Lund & Lund (1983)
-  // P(q > x | k, df) ≈ 1 - [Φ(q/√2)]^k ... (approximation)
-  // We use a more conservative normal approximation
-  const t = q / Math.SQRT2
-  const pOne = 2 * (1 - normCDF(t))
-  return Math.min(1, k * (k - 1) / 2 * pOne)
-}
-
-function normCDF(z: number): number {
-  const x = Math.abs(z) / Math.SQRT2
-  const t = 1 / (1 + 0.3275911 * x)
-  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
-  const erf = 1 - poly * Math.exp(-x * x)
-  return 0.5 * (1 + (z >= 0 ? erf : -erf))
 }
 
 // ─── Games-Howell ────────────────────────────────────────────────────────
@@ -120,8 +102,8 @@ export function gamesHowell(
       const v2 = _variance(g2.values)
       const diff = m1 - m2
 
-      // Welch SE
-      const se = Math.sqrt(v1 / n1 + v2 / n2)
+      // Welch SE (with /2 to match studentized range convention used by rstatix)
+      const se = Math.sqrt((v1 / n1 + v2 / n2) / 2)
       const q = se === 0 ? 0 : Math.abs(diff) / se
 
       // Welch-Satterthwaite df
@@ -129,7 +111,7 @@ export function gamesHowell(
       const dfDen = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1)
       const df = dfDen > 0 ? dfNum / dfDen : n1 + n2 - 2
 
-      const pValue = pValueStudentizedRange(q, k, df)
+      const pValue = pValueStudentizedRangeApprox(q, k, df)
       const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), df)
       const ciHalf = tCrit * se
 
@@ -188,34 +170,87 @@ export function dunnTest(
   for (const t of tieCounts.values()) C += t * t * t - t
   const tieAdj = C / (12 * (n - 1))
 
+  // Variance of rank sums (with tie correction matching R's dunn.test)
+  const baseVar = n * (n + 1) / 12 - tieAdj
+
   // Raw p-values
   const rawPValues: number[] = []
+  const rawZs: number[] = []
+  const rawSEs: number[] = []
   const pairs: Array<{ i: number; j: number }> = []
 
   for (let i = 0; i < k; i++) {
     for (let j = i + 1; j < k; j++) {
       const diff = (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0)
       const se = Math.sqrt(
-        (n * (n + 1) / 12 - tieAdj) * (1 / (groupNs[i] ?? 1) + 1 / (groupNs[j] ?? 1))
+        baseVar * (1 / (groupNs[i] ?? 1) + 1 / (groupNs[j] ?? 1))
       )
       const z = se === 0 ? 0 : diff / se
-      const p = 2 * (1 - normCDF(Math.abs(z)))
+      // One-tailed p-value matching R's dunn.test default (altp=FALSE)
+      // Uses normalSurvival for numerical stability in the tails
+      const p = normalSurvival(Math.abs(z))
       rawPValues.push(p)
+      rawZs.push(z)
+      rawSEs.push(se)
       pairs.push({ i, j })
     }
   }
 
-  const adjPValues = adjustPValues(rawPValues, method)
+  // R's dunn.test implements Holm/BH without enforcing monotonicity (no cummax/cummin).
+  // Use adjustPValues for bonferroni (identical), but match dunn.test behavior for holm/BH.
+  const adjPValues = method === 'holm'
+    ? dunnStyleHolm(rawPValues)
+    : method === 'BH'
+    ? dunnStyleBH(rawPValues)
+    : adjustPValues(rawPValues, method)
 
   return pairs.map(({ i, j }, idx) => ({
     group1: groups[i]!.label,
     group2: groups[j]!.label,
     meanDiff: (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0),
-    se: 0,
-    statistic: 0,
+    se: rawSEs[idx]!,
+    statistic: rawZs[idx]!,
     pValue: rawPValues[idx]!,
     pValueAdj: adjPValues[idx]!,
     ci: [NaN, NaN] as readonly [number, number],
     significant: (adjPValues[idx] ?? 1) < 0.05,
   }))
+}
+
+// ─── Dunn-style Holm (no cummax) ─────────────────────────────────────────
+
+/**
+ * Holm adjustment matching R's dunn.test behavior.
+ * Unlike standard Holm (p.adjust), dunn.test does NOT enforce
+ * monotonicity via cumulative maximum. It simply multiplies
+ * each sorted p-value by (m+1-i) and caps at 1.
+ */
+function dunnStyleHolm(pValues: readonly number[]): number[] {
+  const m = pValues.length
+  if (m === 0) return []
+  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p)
+  const adj = new Array<number>(m)
+  for (let k = 0; k < m; k++) {
+    const { p, i } = order[k]!
+    adj[i] = Math.min(1, p * (m - k))
+  }
+  return adj
+}
+
+/**
+ * BH (Benjamini-Hochberg) adjustment matching R's dunn.test behavior.
+ * Unlike standard BH (p.adjust), dunn.test does NOT enforce
+ * monotonicity via cumulative minimum.
+ */
+function dunnStyleBH(pValues: readonly number[]): number[] {
+  const m = pValues.length
+  if (m === 0) return []
+  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p) // descending
+  const adj = new Array<number>(m)
+  for (let k = 0; k < m; k++) {
+    const { p, i } = order[k]!
+    const rank = m - k // rank from smallest (1-indexed)
+    adj[i] = Math.min(1, p * m / rank)
+  }
+  return adj
 }

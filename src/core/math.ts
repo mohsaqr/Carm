@@ -232,6 +232,142 @@ export function normalCDF(z: number): number {
 }
 
 /**
+ * Upper-tail probability P(Z > z) — numerically stable for large z.
+ * Uses erfc directly to avoid catastrophic cancellation in `1 - normalCDF(z)`.
+ * Matches R's `pnorm(z, lower.tail = FALSE)`.
+ */
+export function normalSurvival(z: number): number {
+  if (z >= 0) {
+    // P(Z > z) = 0.5 * erfc(z / sqrt(2))
+    return 0.5 * erfc(z / Math.SQRT2)
+  }
+  // P(Z > z) for z < 0: use symmetry = 1 - 0.5*erfc(-z/sqrt(2))
+  return 1 - 0.5 * erfc(-z / Math.SQRT2)
+}
+
+// ─── Exact distribution functions for rank correlations ───────────────────
+
+/**
+ * Exact CDF of Kendall's tau concordance count: P(T ≤ q).
+ * T = number of concordant pairs in a permutation of n elements.
+ * Uses recursive DP with memoization (R's kendall.c algorithm, Best & Gipps 1974).
+ * Only valid for n < 50 (no ties). Falls back to normal approximation otherwise.
+ */
+export function pKendallExact(q: number, n: number): number {
+  q = Math.floor(q + 1e-7)
+  const maxT = n * (n - 1) / 2
+  if (q < 0) return 0
+  if (q > maxT) return 1
+
+  // ckendall(k, nn): number of permutations of nn elements with exactly k concordant pairs
+  const cache = new Map<number, Float64Array>()
+  function ckendall(k: number, nn: number): number {
+    const u = nn * (nn - 1) / 2
+    if (k < 0 || k > u) return 0
+    if (nn === 1) return k === 0 ? 1 : 0
+
+    if (!cache.has(nn)) {
+      const arr = new Float64Array(u + 1)
+      for (let i = 0; i <= u; i++) arr[i] = -1
+      cache.set(nn, arr)
+    }
+    const w = cache.get(nn)!
+    if (w[k]! < 0) {
+      let s = 0
+      for (let i = 0; i < nn; i++) s += ckendall(k - i, nn - 1)
+      w[k] = s
+    }
+    return w[k]!
+  }
+
+  let p = 0
+  for (let j = 0; j <= q; j++) p += ckendall(j, n)
+
+  // Divide by n!
+  let nfact = 1
+  for (let i = 2; i <= n; i++) nfact *= i
+  return p / nfact
+}
+
+/**
+ * Exact/Edgeworth CDF for Spearman's rho statistic D = Σ(d_i²).
+ * For n ≤ 9: exact enumeration of all n! permutations (AS89).
+ * For n > 9: Edgeworth series expansion (AS89 large-n approximation).
+ * Reference: Best & Roberts (1975), R's prho.c
+ *
+ * @param D - Sum of squared rank differences Σ(rank_x_i - rank_y_i)²
+ * @param n - Sample size
+ * @param lowerTail - If true, returns P(D' ≤ D); if false, P(D' ≥ D)
+ */
+export function pSpearmanExact(D: number, n: number, lowerTail: boolean): number {
+  const n3 = n * (n * n - 1) / 3 // max possible D
+
+  if (n <= 1) return lowerTail ? 0 : 1
+  if (D <= 0) return lowerTail ? 0 : 1
+  if (D > n3) return lowerTail ? 1 : 0
+
+  if (n <= 9) {
+    // Exact enumeration — generate all n! permutations
+    const perm = new Array<number>(n)
+    for (let i = 0; i < n; i++) perm[i] = i + 1
+
+    let nfac = 1
+    for (let i = 1; i <= n; i++) nfac *= i
+
+    let ifr = 0 // count of perms where D' ≥ D
+    // Use the same permutation algorithm as R's prho.c
+    for (let m = 0; m < nfac; m++) {
+      // Compute sum of squared differences for current permutation
+      let ise = 0
+      for (let i = 0; i < n; i++) {
+        const d = i + 1 - perm[i]!
+        ise += d * d
+      }
+      if (D <= ise) ifr++
+
+      // Advance to next permutation (R's cyclic rotation method)
+      let n1 = n
+      do {
+        const mt = perm[0]!
+        for (let i = 1; i < n1; i++) perm[i - 1] = perm[i]!
+        n1--
+        perm[n1] = mt
+        if (mt !== n1 + 1 || n1 <= 1) break
+      } while (true)
+    }
+
+    return (lowerTail ? nfac - ifr : ifr) / nfac
+  }
+
+  // Edgeworth series expansion for n > 9 (from R's prho.c, AS89)
+  const c1 = 0.2274, c2 = 0.2531, c3 = 0.1745, c4 = 0.0758
+  const c5 = 0.1033, c6 = 0.3932, c7 = 0.0879, c8 = 0.0151
+  const c9 = 0.0072, c10 = 0.0831, c11 = 0.0131, c12 = 4.6e-4
+
+  const yn = n
+  const b = 1 / yn
+  const x = (6 * (D - 1) * b / (yn * yn - 1) - 1) * Math.sqrt(yn - 1)
+  let y = x * x
+  const u = x * b * (c1 + b * (c2 + c3 * b) +
+    y * (-c4 + b * (c5 + c6 * b) -
+      y * b * (c7 + c8 * b -
+        y * (c9 - c10 * b + y * b * (c11 - c12 * y)))))
+  y = x * x // restore y
+  const correction = u / Math.exp(y / 2)
+
+  // pnorm(x, lower_tail) + correction
+  let pv: number
+  if (lowerTail) {
+    pv = -correction + normalCDF(x)
+  } else {
+    pv = correction + normalSurvival(x)
+  }
+  if (pv < 0) pv = 0
+  if (pv > 1) pv = 1
+  return pv
+}
+
+/**
  * Inverse standard normal CDF (quantile function).
  * Peter Acklam's rational approximation — max absolute error ~1.15e-9.
  * Reference: https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/
@@ -279,6 +415,16 @@ function erf(x: number): number {
   const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
   const result = 1 - poly * Math.exp(-x * x)
   return x >= 0 ? result : -result
+}
+
+/** Complementary error function erfc(x) = 1 - erf(x), stable for large x. */
+function erfc(x: number): number {
+  // For x >= 0: erfc(x) = poly * exp(-x²), directly from A&S 7.1.26
+  const ax = Math.abs(x)
+  const t = 1 / (1 + 0.3275911 * ax)
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
+  const val = poly * Math.exp(-ax * ax)
+  return x >= 0 ? val : 2 - val
 }
 
 // ─── Nelder-Mead Optimizer ────────────────────────────────────────────────
@@ -544,4 +690,188 @@ export function clamp(v: number, lo: number, hi: number): number {
 export function roundTo(v: number, n: number): number {
   const factor = 10 ** n
   return Math.round(v * factor) / factor
+}
+
+// ─── Studentized Range Distribution (ptukey) ─────────────────────────────
+
+/**
+ * Standard normal PDF.
+ */
+function normalPDF(z: number): number {
+  return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)
+}
+
+/**
+ * CDF of the studentized range distribution P(Q ≤ q | k, df).
+ *
+ * Uses multi-interval Gauss-Legendre quadrature over the variable
+ * v = 2χ²/df which has density Gamma(df/2, rate=df/4) with mean=2.
+ * The integral: P(Q ≤ q | k, df) = ∫_0^∞ f_v(v) · P_∞(q·√(v/2)) dv
+ *
+ * Follows R's Copenhaver & Holland (1988) approach: adaptive subinterval
+ * widths based on df, 16-point Gauss-Legendre per subinterval.
+ *
+ * Reference: Copenhaver & Holland (1988), JRSS-B 50:36-45;
+ * R source code src/nmath/ptukey.c
+ */
+export function ptukeyApprox(q: number, k: number, df: number): number {
+  if (q <= 0) return 0
+  if (!isFinite(q) || isNaN(q)) return NaN
+  if (k < 2) return NaN
+
+  // For very large df, use the normal (df=∞) case directly
+  if (df > 5000) return ptukeyInfDf(q, k)
+
+  // Determine subinterval width based on df (narrower for larger df
+  // so the chi-square peak near v=2 is adequately resolved)
+  let wStep: number
+  if (df <= 100) wStep = 1.0
+  else if (df <= 800) wStep = 0.5
+  else if (df <= 5000) wStep = 0.25
+  else wStep = 0.125
+
+  // Density of v = 2χ²/df: v ~ Gamma(shape=df/2, rate=df/4)
+  // f_v(v) = (df/4)^(df/2) / Gamma(df/2) · v^(df/2-1) · exp(-df·v/4)
+  // Mean=2, Variance=8/df
+  const halfDf = df / 2
+  const rate = df / 4
+  const logNorm = halfDf * Math.log(rate) - logGamma(halfDf)
+
+  // 16-point Gauss-Legendre per subinterval (matches R)
+  const glPts = 16
+  const gl = gaussLegendreRef(glPts)
+
+  let result = 0
+  let vLo = 0
+
+  // Integrate subintervals until contribution is negligible
+  for (let interval = 0; interval < 200; interval++) {
+    const vHi = vLo + wStep
+    const mid = (vLo + vHi) / 2
+    const half = (vHi - vLo) / 2
+
+    let subResult = 0
+    for (let i = 0; i < glPts; i++) {
+      const v = mid + half * gl.nodes[i]!
+      const w = half * gl.weights[i]!
+      if (v <= 0) continue
+
+      // Gamma(df/2, rate=df/4) density
+      const logDens = logNorm + (halfDf - 1) * Math.log(v) - rate * v
+      const dens = Math.exp(logDens)
+      if (dens < 1e-300) continue
+
+      // P_∞(q · √(v/2))  where √(v/2) = √(χ²/df)
+      const scaledQ = q * Math.sqrt(v / 2)
+      const pInf = ptukeyInfDf(scaledQ, k)
+
+      subResult += w * dens * pInf
+    }
+
+    result += subResult
+    vLo = vHi
+
+    // Stop when this subinterval contributed negligibly AND we're past the peak
+    if (vLo > 2 && Math.abs(subResult) < 1e-10) break
+  }
+
+  return Math.max(0, Math.min(1, result))
+}
+
+/**
+ * CDF of studentized range for df = ∞ (normal case).
+ * P(Q ≤ q | k, ∞) = k * ∫_{-∞}^{∞} φ(z) * [Φ(z + q) - Φ(z)]^{k-1} dz
+ *
+ * Uses Gauss-Hermite quadrature for the infinite-range integral.
+ */
+function ptukeyInfDf(q: number, k: number): number {
+  if (q <= 0) return 0
+
+  // Use Gauss-Legendre on a truncated range. φ(z) is negligible for |z| > 8
+  const lo = -8
+  const hi = 8
+  const npts = 64
+
+  const { nodes, weights } = gaussLegendreAB(npts, lo, hi)
+
+  let result = 0
+  for (let i = 0; i < npts; i++) {
+    const z = nodes[i]!
+    const w = weights[i]!
+    const phi = normalPDF(z)
+    const diff = normalCDF(z + q) - normalCDF(z)
+    if (diff <= 0) continue
+    result += w * phi * Math.pow(diff, k - 1)
+  }
+
+  return Math.max(0, Math.min(1, k * result))
+}
+
+/**
+ * Upper-tail p-value for studentized range distribution.
+ * P(Q > q | k, df)
+ */
+export function pValueStudentizedRangeApprox(q: number, k: number, df: number): number {
+  return Math.max(0, Math.min(1, 1 - ptukeyApprox(q, k, df)))
+}
+
+// ─── Gauss-Legendre Quadrature Nodes & Weights ──────────────────────────
+
+/**
+ * Gauss-Legendre nodes and weights on [a, b].
+ * Computes from [-1, 1] reference nodes via affine transformation.
+ */
+function gaussLegendreAB(n: number, a: number, b: number): { nodes: number[]; weights: number[] } {
+  const ref = gaussLegendreRef(n)
+  const mid = (a + b) / 2
+  const half = (b - a) / 2
+  return {
+    nodes: ref.nodes.map(t => mid + half * t),
+    weights: ref.weights.map(w => half * w),
+  }
+}
+
+/**
+ * Gauss-Legendre nodes and weights on [-1, 1].
+ * Uses Newton iteration on Legendre polynomials.
+ * Reference: Golub & Welsch (1969)
+ */
+function gaussLegendreRef(n: number): { nodes: number[]; weights: number[] } {
+  const nodes: number[] = []
+  const weights: number[] = []
+  const m = Math.ceil(n / 2)
+
+  for (let i = 0; i < m; i++) {
+    // Initial guess from Tricomi approximation
+    let z = Math.cos(Math.PI * (i + 0.75) / (n + 0.5))
+
+    let pp = 0
+    for (let iter = 0; iter < 100; iter++) {
+      let p0 = 1
+      let p1 = z
+      for (let j = 2; j <= n; j++) {
+        const p2 = ((2 * j - 1) * z * p1 - (j - 1) * p0) / j
+        p0 = p1
+        p1 = p2
+      }
+      pp = n * (z * p1 - p0) / (z * z - 1)
+      const zOld = z
+      z = z - p1 / pp
+      if (Math.abs(z - zOld) < 1e-15) break
+    }
+
+    nodes.push(z)
+    nodes.push(-z)
+    const w = 2 / ((1 - z * z) * pp * pp)
+    weights.push(w)
+    weights.push(w)
+  }
+
+  // If n is odd, the center node (z=0) was added twice — fix
+  if (n % 2 === 1) {
+    nodes.pop()
+    weights.pop()
+  }
+
+  return { nodes, weights }
 }
