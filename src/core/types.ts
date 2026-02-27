@@ -71,12 +71,17 @@ export interface LMMResult {
     readonly residual: number    // σ²_e
     readonly slopes?: Readonly<Record<string, number>>
   }
+  readonly randomCorrelations?: Readonly<Record<string, number>>  // correlations between random effects
   readonly icc: number           // intraclass correlation
   readonly logLik: number
   readonly aic: number
   readonly bic: number
   readonly nObs: number
   readonly nGroups: number
+  readonly nParams: number       // total model parameters (for LRT)
+  readonly method: 'REML' | 'ML'
+  readonly r2Marginal: number    // Nakagawa R² — fixed effects only
+  readonly r2Conditional: number // Nakagawa R² — fixed + random
   readonly formatted: string
 }
 

@@ -1,3 +1,26 @@
+## 2026-02-27 (LMM Extensions + Poisson Regression)
+
+### Log-Cholesky parameterization for LMM random slopes
+- Parameterize relative covariance Ψ = L·L' where L is lower-triangular
+- θ = [log(L[0,0]), L[1,0], log(L[1,1]), ...] — diagonal elements log-transformed for positivity
+- For q random effects per group, θ has q(q+1)/2 free parameters
+- Woodbury identity avoids forming n×n V⁻¹: `V⁻¹v = v - A·D⁻¹·A'v` where A = Z·(I_g⊗L), D = I + A'A
+
+### ML vs REML profiled log-likelihood
+- ML: σ² = quadForm/n, ℓ = -½[n·log(σ²) + log|D|]
+- REML: σ² = quadForm/(n-p), ℓ = -½[(n-p)·log(σ²) + log|D| + log|X'V⁻¹X|]
+- Normalizing constant (for R-compatible logLik): -½·df·(1+log(2π)) where df = n for ML, n-p for REML
+
+### Nakagawa R² random effects variance for slopes
+- σ²_r = (1/n)·Σ_i z_i'Gz_i where z_i = [1, x_i1, x_i2, ...] (random-effect predictors)
+- For intercept-only: σ²_r = σ²_b (simplifies correctly)
+- For slopes: includes cross-terms from G covariance
+
+### Poisson IRLS convergence matches R glm
+- Working response: z = η + (y-μ)/μ, Weights: W = diag(μ)
+- Convergence criterion: |dev - devold| / (0.1 + |dev|) < tol (R's formula)
+- Step-halving prevents deviance divergence
+
 ## 2026-02-27 (Shapiro-Wilk p-value fix: 97.7%→100%, 169/169 ALL PERFECT)
 
 ### R's swilk.c uses ascending-degree polynomials with n (not 1/n) as variable for small samples

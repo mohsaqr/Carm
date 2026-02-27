@@ -1,3 +1,14 @@
+### 2026-02-27 — LMM improvements (ML, random slopes, Nakagawa R², LRT) + Poisson regression
+
+- `src/core/types.ts`: Extended `LMMResult` with `method`, `r2Marginal`, `r2Conditional`, `randomCorrelations`, `nParams`
+- `src/stats/mixed.ts`: Complete rewrite — generalized profiled log-likelihood via log-Cholesky parameterization supporting random slopes, ML/REML estimation, Nakagawa R², new `compareLMM()` function for LRT model comparison. Efficient Woodbury-based computation (never forms n×n matrix).
+- `src/stats/regression.ts`: Added `poissonRegression()` via IRLS with step-halving, matching R's `glm(family=poisson)`. Full deviance, AIC/BIC, Wald z-tests.
+- `src/core/apa.ts`: Added `formatPoisson()` APA formatter
+- `tests/stats/mixed-extended.test.ts`: NEW — 38 tests covering REML backward compat, ML estimation, Nakagawa R², LRT comparison, random slopes, edge cases
+- `tests/stats/poisson.test.ts`: NEW — 25 tests covering simple/multi/zero-heavy Poisson, edge cases
+- `tests/fixtures/lmm-poisson-ref.json`: NEW — R lme4+MuMIn reference values
+- Tests: 629/629 pass (566 existing + 63 new)
+
 ### 2026-02-27 — Document cross-validation tricks in 5 documentation files
 
 **CARM-PROMPT.md:**

@@ -229,6 +229,14 @@ export function formatCFAFit(fit: FactorFit): string {
   return `χ²(${formatDF(fit.df)}) = ${formatStat(fit.chiSq)}, ${formatP(fit.pValue)}, RMSEA = ${formatStat(fit.rmsea, 3)} ${formatCI(fit.rmseaCI, 3)}, CFI = ${formatStat(fit.cfi, 3)}, TLI = ${formatStat(fit.tli, 3)}, SRMR = ${formatStat(fit.srmr, 3)}`
 }
 
+/**
+ * APA string for Poisson regression.
+ * e.g. "Deviance = 12.3, Null deviance = 45.6, AIC = 78.9"
+ */
+export function formatPoisson(deviance: number, nullDeviance: number, aic: number): string {
+  return `Deviance = ${formatStat(deviance, 1)}, Null deviance = ${formatStat(nullDeviance, 1)}, AIC = ${formatStat(aic, 1)}`
+}
+
 /** Generic effect size interpretation helper. */
 export function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation {
   const abs = Math.abs(value)

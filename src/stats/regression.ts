@@ -4,8 +4,8 @@
  * diagnostics (R², AIC, BIC, VIF, residual plots).
  */
 
-import { mean as _mean, variance as _variance, fDistPValue, tDistPValue, tDistQuantile, normalQuantile, roundTo } from '../core/math.js'
-import { formatRegression } from '../core/apa.js'
+import { mean as _mean, variance as _variance, fDistPValue, tDistPValue, tDistQuantile, normalQuantile, logGamma, roundTo } from '../core/math.js'
+import { formatRegression, formatPoisson } from '../core/apa.js'
 import { Matrix } from '../core/matrix.js'
 import type { RegressionResult, RegressionCoef } from '../core/types.js'
 
@@ -438,5 +438,199 @@ export function regressionDiagnostics(
   })
 
   return { leverage, cooksDistance, standardizedResiduals, vif }
+}
+
+// ─── Poisson regression ──────────────────────────────────────────────────
+
+/**
+ * Poisson regression via IRLS (iteratively reweighted least squares).
+ * Link: log(μ) = Xβ,  Variance: V(μ) = μ
+ * Outcome y must be non-negative (ideally integer counts).
+ *
+ * Implements Fisher scoring matching R's glm(family = poisson):
+ *   Working response: z = η + (y - μ) / μ
+ *   Weights: W = diag(μ)
+ *   Solve WLS: (X'WX) β_new = X'Wz
+ *
+ * Cross-validated with R:
+ * > glm(y ~ x1 + x2, family = poisson, data = df)
+ * > coef(mod); summary(mod)$coefficients; AIC(mod); deviance(mod)
+ */
+export function poissonRegression(
+  y: readonly number[],
+  predictors: ReadonlyArray<{ name: string; values: readonly number[] }>,
+  ciLevel = 0.95,
+  maxIter = 100,
+  tol = 1e-8
+): RegressionResult {
+  const n = y.length
+  for (let i = 0; i < n; i++) {
+    if ((y[i] ?? 0) < 0) throw new Error('poissonRegression: y must be non-negative')
+  }
+  const p = predictors.length + 1  // +intercept
+
+  // Design matrix
+  const X = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => [1, ...predictors.map(pr => pr.values[i] ?? 0)])
+  )
+  const names = ['(Intercept)', ...predictors.map(pr => pr.name)]
+
+  // Helper: compute η = Xβ
+  const computeEta = (b: number[]): number[] =>
+    Array.from({ length: n }, (_, i) => {
+      let v = 0
+      for (let j = 0; j < p; j++) v += X.get(i, j) * (b[j] ?? 0)
+      return v
+    })
+
+  // Helper: exp with overflow protection
+  const safeExp = (x: number): number => Math.exp(Math.min(700, Math.max(-700, x)))
+  const EPS_MU = 1e-10
+
+  // Helper: compute Poisson deviance = 2·Σ[y·log(y/μ) − (y − μ)]
+  // Convention: 0·log(0) = 0
+  const computeDeviance = (yArr: readonly number[], muArr: number[]): number => {
+    let dev = 0
+    for (let i = 0; i < n; i++) {
+      const yi = yArr[i] ?? 0
+      const mi = muArr[i]!
+      if (yi > 0) dev += yi * Math.log(yi / Math.max(EPS_MU, mi))
+      dev -= (yi - mi)
+    }
+    return 2 * dev
+  }
+
+  // IRLS with step-halving
+  // Initialize: intercept = log(mean(y)), other coefficients = 0
+  let beta = new Array<number>(p).fill(0)
+  const yMeanRaw = _mean([...y])
+  const yMeanSafe = Math.max(EPS_MU, yMeanRaw)
+  beta[0] = Math.log(yMeanSafe)
+
+  let prevDeviance = Infinity
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const eta = computeEta(beta)
+    const mu = eta.map(e => Math.max(EPS_MU, safeExp(e)))
+    const dev = computeDeviance(y, mu)
+
+    // Convergence check (R's formula)
+    if (iter > 0 && Math.abs(dev - prevDeviance) / (0.1 + Math.abs(dev)) < tol) break
+    prevDeviance = dev
+
+    // Working response: z_i = η_i + (y_i − μ_i) / μ_i
+    // Weights: w_i = μ_i
+    const z = Array.from({ length: n }, (_, i) => eta[i]! + ((y[i] ?? 0) - mu[i]!) / mu[i]!)
+    const w = mu.map(m => Math.max(EPS_MU, m))
+
+    // Weighted LS: (X'WX)β = X'Wz via √W transformation
+    const sqrtW = w.map(Math.sqrt)
+    const Xw = Matrix.fromArray(
+      Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * sqrtW[i]!))
+    )
+    const zw = z.map((zi, i) => zi * sqrtW[i]!)
+
+    try {
+      const Xwt = Xw.transpose()
+      const XwtXw = Xwt.multiply(Xw)
+      const XwtZw = Xwt.multiply(Matrix.colVec(zw))
+      const betaNewM = XwtXw.inverse().multiply(XwtZw)
+      const betaNew = Array.from({ length: p }, (_, j) => betaNewM.get(j, 0))
+
+      // Step-halving: if deviance increases, halve step
+      let accepted = false
+      let stepScale = 1.0
+      for (let half = 0; half < 10; half++) {
+        const betaTry = beta.map((b, j) => b + stepScale * (betaNew[j]! - b))
+        const etaTry = computeEta(betaTry)
+        const muTry = etaTry.map(e => Math.max(EPS_MU, safeExp(e)))
+        const trialDev = computeDeviance(y, muTry)
+
+        if (isFinite(trialDev) && (trialDev <= dev + 1e-8 || half === 9)) {
+          beta = betaTry
+          accepted = true
+          break
+        }
+        stepScale *= 0.5
+      }
+      if (!accepted) break
+    } catch {
+      break  // singular — stop iterating
+    }
+  }
+
+  // ── Final quantities at converged β ──────────────────────────────────
+  const eta = computeEta(beta)
+  const mu = eta.map(e => Math.max(EPS_MU, safeExp(e)))
+
+  // Fisher information: (X'WX)⁻¹  where W = diag(μ)
+  const sqrtW = mu.map(m => Math.sqrt(Math.max(EPS_MU, m)))
+  const Xw = Matrix.fromArray(
+    Array.from({ length: n }, (_, i) => Array.from({ length: p }, (_, j) => X.get(i, j) * sqrtW[i]!))
+  )
+  let covBeta: Matrix
+  try {
+    covBeta = Xw.transpose().multiply(Xw).inverse()
+  } catch {
+    covBeta = Matrix.identity(p)
+  }
+
+  // Wald z-tests (normal approximation)
+  const zCrit = normalQuantile(1 - (1 - ciLevel) / 2)
+  const coefficients: RegressionCoef[] = beta.map((b, i) => {
+    const se = Math.sqrt(Math.max(0, covBeta.get(i, i)))
+    const zStat = se === 0 ? 0 : b / se
+    const pVal = 2 * (1 - normCDFLocal(Math.abs(zStat)))
+    const ci: readonly [number, number] = [b - zCrit * se, b + zCrit * se]
+    return {
+      name: names[i] ?? `β${i}`,
+      estimate: roundTo(b, 10),
+      se: roundTo(se, 10),
+      tValue: roundTo(zStat, 6),  // actually z, but same field
+      pValue: roundTo(pVal, 6),
+      ci,
+    }
+  })
+
+  // Log-likelihood: Σ[y·log(μ) − μ − log(y!)]
+  let logLik = 0
+  for (let i = 0; i < n; i++) {
+    const yi = y[i] ?? 0
+    const mi = mu[i]!
+    logLik += yi * Math.log(Math.max(EPS_MU, mi)) - mi - logGamma(yi + 1)
+  }
+
+  // Null log-likelihood (intercept-only model: μ = mean(y))
+  let nullLogLik = 0
+  for (let i = 0; i < n; i++) {
+    const yi = y[i] ?? 0
+    nullLogLik += yi * Math.log(Math.max(EPS_MU, yMeanSafe)) - yMeanSafe - logGamma(yi + 1)
+  }
+
+  // Deviance and null deviance
+  const deviance = computeDeviance(y, mu)
+  const nullDeviance = computeDeviance(y, new Array(n).fill(yMeanSafe))
+
+  // McFadden pseudo-R² = 1 − deviance/null_deviance
+  const r2 = nullDeviance > 1e-12 ? 1 - deviance / nullDeviance : 0
+
+  const aic = -2 * logLik + 2 * p
+  const bic = -2 * logLik + Math.log(n) * p
+  const residuals = y.map((v, i) => (v ?? 0) - (mu[i] ?? 0))
+
+  return {
+    coefficients,
+    r2: roundTo(r2, 6),
+    adjR2: roundTo(r2, 6),  // McFadden pseudo-R² for Poisson
+    fStatistic: NaN,
+    fDf: [p - 1, n - p],
+    fPValue: NaN,
+    aic: roundTo(aic, 2),
+    bic: roundTo(bic, 2),
+    residuals,
+    fitted: mu,
+    n,
+    formatted: formatPoisson(deviance, nullDeviance, aic),
+  }
 }
 
