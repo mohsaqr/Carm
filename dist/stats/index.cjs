@@ -34,6 +34,7 @@ __export(stats_exports, {
   describe: () => describe,
   detectFieldType: () => detectFieldType,
   dunnTest: () => dunnTest,
+  epsilonCorrections: () => epsilonCorrections,
   etaSquared: () => etaSquared,
   etaSquaredKW: () => etaSquaredKW,
   euclideanDistMatrix: () => euclideanDistMatrix,
@@ -54,9 +55,11 @@ __export(stats_exports, {
   kendallTau: () => kendallTau,
   kruskalWallis: () => kruskalWallis,
   kurtosis: () => kurtosis,
+  leveneTest: () => leveneTest,
   linearRegression: () => linearRegression,
   logisticRegression: () => logisticRegression,
   mannWhitneyU: () => mannWhitneyU,
+  mauchlysTest: () => mauchlysTest,
   mean: () => mean,
   median: () => median,
   multipleRegression: () => multipleRegression,
@@ -73,6 +76,7 @@ __export(stats_exports, {
   rankBiserial: () => rankBiserial,
   rankBiserialWilcoxon: () => rankBiserialWilcoxon,
   regressionDiagnostics: () => regressionDiagnostics,
+  repeatedMeasuresANOVA: () => repeatedMeasuresANOVA,
   runCFA: () => runCFA,
   runDBSCAN: () => runDBSCAN,
   runEFA: () => runEFA,
@@ -661,6 +665,10 @@ function formatTTest(t, df, pValue, effectSize, effectName, ci, ciLevel = 0.95) 
 function formatANOVA(F, df1, df2, pValue, effectSize, effectName = "\u03B7\xB2") {
   return `F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
 }
+function formatRMANOVA(F, df1, df2, pValue, effectSize, effectName = "\u03B7\xB2_p", correction) {
+  const prefix = correction === "Greenhouse-Geisser" ? "F_GG" : correction === "Huynh-Feldt" ? "F_HF" : "F";
+  return `${prefix}(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
+}
 function formatChiSq(chiSq, df, pValue, effectSize, effectName = "V") {
   return `\u03C7\xB2(${formatDF(df)}) = ${formatStat(chiSq)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
 }
@@ -1182,440 +1190,6 @@ function goodnessOfFit(observed, expected) {
   };
 }
 
-// src/stats/comparison.ts
-function tTestIndependent(x1, x2, equalVariances = false, ciLevel = 0.95, alternative = "two.sided") {
-  if (x1.length < 2 || x2.length < 2) throw new Error("tTestIndependent: need at least 2 per group");
-  const n1 = x1.length, n2 = x2.length;
-  const m1 = mean(x1), m2 = mean(x2);
-  const v1 = variance(x1), v2 = variance(x2);
-  let df;
-  let se2;
-  if (equalVariances) {
-    const spSq = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2);
-    se2 = Math.sqrt(spSq * (1 / n1 + 1 / n2));
-    df = n1 + n2 - 2;
-  } else {
-    se2 = Math.sqrt(v1 / n1 + v2 / n2);
-    const num = (v1 / n1 + v2 / n2) ** 2;
-    const den = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
-    df = den > 0 ? num / den : n1 + n2 - 2;
-  }
-  const t = se2 === 0 ? 0 : (m1 - m2) / se2;
-  const pFull = tDistPValue(t, df);
-  const pValue = alternative === "two.sided" ? pFull : alternative === "less" ? t < 0 ? pFull / 2 : 1 - pFull / 2 : t > 0 ? pFull / 2 : 1 - pFull / 2;
-  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
-  const diff = m1 - m2;
-  const ci = [diff - tCrit * se2, diff + tCrit * se2];
-  const effectSize = cohensD(x1, x2);
-  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
-  return {
-    testName: equalVariances ? "Student's t-test" : "Welch's t-test",
-    statistic: t,
-    df,
-    pValue,
-    effectSize,
-    ci,
-    ciLevel,
-    n: n1 + n2,
-    formatted
-  };
-}
-function tTestPaired(x1, x2, ciLevel = 0.95) {
-  if (x1.length !== x2.length) throw new Error("tTestPaired: arrays must have equal length");
-  if (x1.length < 2) throw new Error("tTestPaired: need at least 2 pairs");
-  const diffs = x1.map((v, i) => v - (x2[i] ?? 0));
-  const n = diffs.length;
-  const mDiff = mean(diffs);
-  const seDiff = se(diffs);
-  const df = n - 1;
-  const t = seDiff === 0 ? 0 : mDiff / seDiff;
-  const pValue = tDistPValue(t, df);
-  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
-  const ci = [mDiff - tCrit * seDiff, mDiff + tCrit * seDiff];
-  const effectSize = cohensDPaired(diffs);
-  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
-  return {
-    testName: "Paired t-test",
-    statistic: t,
-    df,
-    pValue,
-    effectSize,
-    ci,
-    ciLevel,
-    n,
-    formatted
-  };
-}
-function oneWayANOVA(groups) {
-  if (groups.length < 2) throw new Error("oneWayANOVA: need at least 2 groups");
-  const k = groups.length;
-  const allValues = groups.flatMap((g) => [...g.values]);
-  const n = allValues.length;
-  const grandMean = mean(allValues);
-  let ssBetween = 0, ssWithin = 0;
-  const groupStats = groups.map((g) => {
-    const gm = mean(g.values);
-    const gn = g.values.length;
-    ssBetween += gn * (gm - grandMean) ** 2;
-    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
-    return { label: g.label, n: gn, mean: gm, sd: sd(g.values) };
-  });
-  const ssTotal = ssBetween + ssWithin;
-  const dfBetween = k - 1;
-  const dfWithin = n - k;
-  const msBetween = ssBetween / dfBetween;
-  const msWithin = ssWithin / dfWithin;
-  const F = msWithin === 0 ? Infinity : msBetween / msWithin;
-  const pValue = fDistPValue(F, dfBetween, dfWithin);
-  const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin);
-  const formatted = formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
-  return {
-    testName: "One-way ANOVA",
-    statistic: F,
-    df: [dfBetween, dfWithin],
-    pValue,
-    effectSize: omega,
-    ci: [NaN, NaN],
-    ciLevel: 0.95,
-    n,
-    formatted,
-    groups: groupStats,
-    ssBetween,
-    ssWithin,
-    ssTotal,
-    msBetween,
-    msWithin,
-    dfBetween,
-    dfWithin
-  };
-}
-function mannWhitneyU(x1, x2, alternative = "two.sided") {
-  if (x1.length < 1 || x2.length < 1) throw new Error("mannWhitneyU: empty group");
-  const n1 = x1.length, n2 = x2.length;
-  const combined = [
-    ...x1.map((v, i) => ({ v, group: 1, i })),
-    ...x2.map((v, i) => ({ v, group: 2, i }))
-  ].sort((a, b) => a.v - b.v);
-  const allCombined = rank(combined.map((d) => d.v));
-  let R1 = 0;
-  for (let i = 0; i < combined.length; i++) {
-    if (combined[i].group === 1) R1 += allCombined[i];
-  }
-  const U1 = R1 - n1 * (n1 + 1) / 2;
-  const N = n1 + n2;
-  const muU = n1 * n2 / 2;
-  const allVals = combined.map((d) => d.v);
-  const tieCountsU = /* @__PURE__ */ new Map();
-  for (const v of allVals) tieCountsU.set(v, (tieCountsU.get(v) ?? 0) + 1);
-  let tieCorr = 0;
-  for (const t of tieCountsU.values()) tieCorr += t * t * t - t;
-  const varU = n1 * n2 / 12 * (N + 1 - tieCorr / (N * (N - 1)));
-  const z = varU === 0 ? 0 : (U1 - muU) / Math.sqrt(varU);
-  const zAbs = Math.abs(z);
-  const pNormal = 2 * (1 - normalCDFInline(zAbs));
-  const pValue = alternative === "two.sided" ? pNormal : alternative === "less" ? z < 0 ? pNormal / 2 : 1 - pNormal / 2 : z > 0 ? pNormal / 2 : 1 - pNormal / 2;
-  const effect = rankBiserial(U1, n1, n2);
-  const formatted = formatMannWhitney(U1, pValue, effect.value);
-  return {
-    testName: "Mann-Whitney U",
-    statistic: U1,
-    df: 0,
-    pValue: Math.min(1, Math.max(0, pValue)),
-    effectSize: effect,
-    ci: [NaN, NaN],
-    ciLevel: 0.95,
-    n: n1 + n2,
-    formatted
-  };
-}
-function normalCDFInline(z) {
-  const x = Math.abs(z) / Math.SQRT2;
-  const t = 1 / (1 + 0.3275911 * x);
-  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
-  const erf2 = 1 - poly * Math.exp(-x * x);
-  return 0.5 * (1 + (z >= 0 ? erf2 : -erf2));
-}
-function wilcoxonExactP(W, n) {
-  const maxW = n * (n + 1) / 2;
-  let dist = new Array(maxW + 1).fill(0);
-  dist[0] = 1;
-  for (let k = 1; k <= n; k++) {
-    const newDist = [...dist];
-    for (let w = k; w <= maxW; w++) {
-      newDist[w] += dist[w - k];
-    }
-    dist = newDist;
-  }
-  const total = Math.pow(2, n);
-  let cumP = 0;
-  for (let w = 0; w <= W && w <= maxW; w++) {
-    cumP += (dist[w] ?? 0) / total;
-  }
-  return Math.min(1, 2 * cumP);
-}
-function wilcoxonSignedRank(x1, x2) {
-  if (x1.length !== x2.length) throw new Error("wilcoxonSignedRank: arrays must match length");
-  const diffs = x1.map((v, i) => v - (x2[i] ?? 0)).filter((d) => d !== 0);
-  const n = diffs.length;
-  if (n === 0) throw new Error("wilcoxonSignedRank: no non-zero differences");
-  const absDiffs = diffs.map(Math.abs);
-  const ranks_ = rank(absDiffs);
-  let Wplus = 0, Wminus = 0;
-  for (let i = 0; i < n; i++) {
-    if ((diffs[i] ?? 0) > 0) Wplus += ranks_[i];
-    else Wminus += ranks_[i];
-  }
-  const W = Math.min(Wplus, Wminus);
-  let pValue;
-  if (n <= 20) {
-    pValue = wilcoxonExactP(W, n);
-  } else {
-    const muW = n * (n + 1) / 4;
-    const varW = n * (n + 1) * (2 * n + 1) / 24;
-    const z = varW === 0 ? 0 : (W + 0.5 - muW) / Math.sqrt(varW);
-    pValue = 2 * (1 - normalCDFInline(Math.abs(z)));
-  }
-  const effect = { value: Wplus / (n * (n + 1) / 2) * 2 - 1, name: "r (rank-biserial)", interpretation: "small" };
-  return {
-    testName: "Wilcoxon Signed-Rank",
-    statistic: W,
-    df: 0,
-    pValue: Math.min(1, Math.max(0, pValue)),
-    effectSize: effect,
-    ci: [NaN, NaN],
-    ciLevel: 0.95,
-    n,
-    formatted: `V = ${W}, ${formatP(pValue)}, r = ${effect.value.toFixed(2)}`
-  };
-}
-function kruskalWallis(groups) {
-  if (groups.length < 2) throw new Error("kruskalWallis: need at least 2 groups");
-  const k = groups.length;
-  const allValues = groups.flatMap((g) => [...g.values]);
-  const n = allValues.length;
-  const allRanks_ = rank(allValues);
-  let offset = 0;
-  let H = 0;
-  for (const g of groups) {
-    const gn = g.values.length;
-    let Rj = 0;
-    for (let i = 0; i < gn; i++) Rj += allRanks_[offset + i];
-    H += Rj * Rj / gn;
-    offset += gn;
-  }
-  H = 12 / (n * (n + 1)) * H - 3 * (n + 1);
-  const tieCounts = /* @__PURE__ */ new Map();
-  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
-  let C = 0;
-  for (const t of tieCounts.values()) C += t * t * t - t;
-  const correction = 1 - C / (n * n * n - n);
-  if (correction > 0) H /= correction;
-  const df = k - 1;
-  const pValue = chiSqPValue(H, df);
-  const effect = etaSquaredKW(H, k, n);
-  const formatted = formatKruskalWallis(H, df, pValue, effect.value);
-  return {
-    testName: "Kruskal-Wallis",
-    statistic: H,
-    df,
-    pValue,
-    effectSize: effect,
-    ci: [NaN, NaN],
-    ciLevel: 0.95,
-    n,
-    formatted
-  };
-}
-function friedmanTest(data) {
-  const n = data.length;
-  if (n < 2) throw new Error("friedmanTest: need at least 2 subjects");
-  const k = data[0].length;
-  if (k < 2) throw new Error("friedmanTest: need at least 2 conditions");
-  let sumRankSq = 0;
-  for (const row of data) {
-    const rowRanks = rank(row);
-    for (const r of rowRanks) sumRankSq += r * r;
-  }
-  const colRankSums = Array.from(
-    { length: k },
-    (_, j) => data.reduce((s, row) => {
-      const rowRanks = rank(row);
-      return s + (rowRanks[j] ?? 0);
-    }, 0)
-  );
-  const Rj2sum = colRankSums.reduce((s, r) => s + r * r, 0);
-  const chi2 = 12 / (n * k * (k + 1)) * Rj2sum - 3 * n * (k + 1);
-  const df = k - 1;
-  const pValue = chiSqPValue(chi2, df);
-  const w = chi2 / (n * (k - 1));
-  return {
-    testName: "Friedman Test",
-    statistic: chi2,
-    df,
-    pValue,
-    effectSize: {
-      value: w,
-      name: "Kendall's W",
-      interpretation: w < 0.1 ? "negligible" : w < 0.3 ? "small" : w < 0.5 ? "medium" : "large"
-    },
-    ci: [NaN, NaN],
-    ciLevel: 0.95,
-    n,
-    formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${formatP(pValue)}, W = ${w.toFixed(2)}`
-  };
-}
-
-// src/stats/post-hoc.ts
-function tukeyHSD(groups, msWithin, dfWithin, ciLevel = 0.95) {
-  const results = [];
-  const alpha = 1 - ciLevel;
-  const k = groups.length;
-  for (let i = 0; i < k; i++) {
-    for (let j = i + 1; j < k; j++) {
-      const g1 = groups[i];
-      const g2 = groups[j];
-      const n1 = g1.values.length;
-      const n2 = g2.values.length;
-      const m1 = mean(g1.values);
-      const m2 = mean(g2.values);
-      const diff = m1 - m2;
-      const se2 = Math.sqrt(msWithin / 2 * (1 / n1 + 1 / n2));
-      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
-      const pValue = pValueStudentizedRangeApprox(q, k, dfWithin);
-      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin);
-      const ciHalf = tCrit * se2;
-      const ci = [diff - ciHalf, diff + ciHalf];
-      results.push({
-        group1: g1.label,
-        group2: g2.label,
-        meanDiff: diff,
-        se: se2,
-        statistic: q,
-        pValue,
-        pValueAdj: pValue,
-        // already family-wise corrected
-        ci,
-        significant: pValue < alpha
-      });
-    }
-  }
-  return results;
-}
-function gamesHowell(groups, ciLevel = 0.95) {
-  const results = [];
-  const alpha = 1 - ciLevel;
-  const k = groups.length;
-  for (let i = 0; i < k; i++) {
-    for (let j = i + 1; j < k; j++) {
-      const g1 = groups[i];
-      const g2 = groups[j];
-      const n1 = g1.values.length;
-      const n2 = g2.values.length;
-      const m1 = mean(g1.values);
-      const m2 = mean(g2.values);
-      const v1 = variance(g1.values);
-      const v2 = variance(g2.values);
-      const diff = m1 - m2;
-      const se2 = Math.sqrt((v1 / n1 + v2 / n2) / 2);
-      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
-      const dfNum = (v1 / n1 + v2 / n2) ** 2;
-      const dfDen = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
-      const df = dfDen > 0 ? dfNum / dfDen : n1 + n2 - 2;
-      const pValue = pValueStudentizedRangeApprox(q, k, df);
-      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), df);
-      const ciHalf = tCrit * se2;
-      results.push({
-        group1: g1.label,
-        group2: g2.label,
-        meanDiff: diff,
-        se: se2,
-        statistic: q,
-        pValue,
-        pValueAdj: pValue,
-        ci: [diff - ciHalf, diff + ciHalf],
-        significant: pValue < alpha
-      });
-    }
-  }
-  return results;
-}
-function dunnTest(groups, method = "bonferroni") {
-  const k = groups.length;
-  const allValues = groups.flatMap((g) => [...g.values]);
-  const n = allValues.length;
-  const allRanks = rank(allValues);
-  let offset = 0;
-  const groupRankMeans = [];
-  const groupNs = [];
-  for (const g of groups) {
-    const gn = g.values.length;
-    let Rj = 0;
-    for (let i = 0; i < gn; i++) Rj += allRanks[offset + i];
-    groupRankMeans.push(Rj / gn);
-    groupNs.push(gn);
-    offset += gn;
-  }
-  const tieCounts = /* @__PURE__ */ new Map();
-  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
-  let C = 0;
-  for (const t of tieCounts.values()) C += t * t * t - t;
-  const tieAdj = C / (12 * (n - 1));
-  const baseVar = n * (n + 1) / 12 - tieAdj;
-  const rawPValues = [];
-  const rawZs = [];
-  const rawSEs = [];
-  const pairs = [];
-  for (let i = 0; i < k; i++) {
-    for (let j = i + 1; j < k; j++) {
-      const diff = (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0);
-      const se2 = Math.sqrt(
-        baseVar * (1 / (groupNs[i] ?? 1) + 1 / (groupNs[j] ?? 1))
-      );
-      const z = se2 === 0 ? 0 : diff / se2;
-      const p = normalSurvival(Math.abs(z));
-      rawPValues.push(p);
-      rawZs.push(z);
-      rawSEs.push(se2);
-      pairs.push({ i, j });
-    }
-  }
-  const adjPValues = method === "holm" ? dunnStyleHolm(rawPValues) : method === "BH" ? dunnStyleBH(rawPValues) : adjustPValues(rawPValues, method);
-  return pairs.map(({ i, j }, idx) => ({
-    group1: groups[i].label,
-    group2: groups[j].label,
-    meanDiff: (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0),
-    se: rawSEs[idx],
-    statistic: rawZs[idx],
-    pValue: rawPValues[idx],
-    pValueAdj: adjPValues[idx],
-    ci: [NaN, NaN],
-    significant: (adjPValues[idx] ?? 1) < 0.05
-  }));
-}
-function dunnStyleHolm(pValues) {
-  const m = pValues.length;
-  if (m === 0) return [];
-  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
-  const adj = new Array(m);
-  for (let k = 0; k < m; k++) {
-    const { p, i } = order[k];
-    adj[i] = Math.min(1, p * (m - k));
-  }
-  return adj;
-}
-function dunnStyleBH(pValues) {
-  const m = pValues.length;
-  if (m === 0) return [];
-  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
-  const adj = new Array(m);
-  for (let k = 0; k < m; k++) {
-    const { p, i } = order[k];
-    const rank2 = m - k;
-    adj[i] = Math.min(1, p * m / rank2);
-  }
-  return adj;
-}
-
 // src/core/matrix.ts
 var Matrix = class _Matrix {
   rows;
@@ -1970,6 +1544,673 @@ var Matrix = class _Matrix {
     };
   }
 };
+
+// src/stats/comparison.ts
+function tTestIndependent(x1, x2, equalVariances = false, ciLevel = 0.95, alternative = "two.sided") {
+  if (x1.length < 2 || x2.length < 2) throw new Error("tTestIndependent: need at least 2 per group");
+  const n1 = x1.length, n2 = x2.length;
+  const m1 = mean(x1), m2 = mean(x2);
+  const v1 = variance(x1), v2 = variance(x2);
+  let df;
+  let se2;
+  if (equalVariances) {
+    const spSq = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2);
+    se2 = Math.sqrt(spSq * (1 / n1 + 1 / n2));
+    df = n1 + n2 - 2;
+  } else {
+    se2 = Math.sqrt(v1 / n1 + v2 / n2);
+    const num = (v1 / n1 + v2 / n2) ** 2;
+    const den = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
+    df = den > 0 ? num / den : n1 + n2 - 2;
+  }
+  const t = se2 === 0 ? 0 : (m1 - m2) / se2;
+  const pFull = tDistPValue(t, df);
+  const pValue = alternative === "two.sided" ? pFull : alternative === "less" ? t < 0 ? pFull / 2 : 1 - pFull / 2 : t > 0 ? pFull / 2 : 1 - pFull / 2;
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const diff = m1 - m2;
+  const ci = [diff - tCrit * se2, diff + tCrit * se2];
+  const effectSize = cohensD(x1, x2);
+  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  return {
+    testName: equalVariances ? "Student's t-test" : "Welch's t-test",
+    statistic: t,
+    df,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel,
+    n: n1 + n2,
+    formatted
+  };
+}
+function tTestPaired(x1, x2, ciLevel = 0.95) {
+  if (x1.length !== x2.length) throw new Error("tTestPaired: arrays must have equal length");
+  if (x1.length < 2) throw new Error("tTestPaired: need at least 2 pairs");
+  const diffs = x1.map((v, i) => v - (x2[i] ?? 0));
+  const n = diffs.length;
+  const mDiff = mean(diffs);
+  const seDiff = se(diffs);
+  const df = n - 1;
+  const t = seDiff === 0 ? 0 : mDiff / seDiff;
+  const pValue = tDistPValue(t, df);
+  const tCrit = tDistQuantile(1 - (1 - ciLevel) / 2, df);
+  const ci = [mDiff - tCrit * seDiff, mDiff + tCrit * seDiff];
+  const effectSize = cohensDPaired(diffs);
+  const formatted = formatTTest(t, df, pValue, effectSize.value, "d", ci, ciLevel);
+  return {
+    testName: "Paired t-test",
+    statistic: t,
+    df,
+    pValue,
+    effectSize,
+    ci,
+    ciLevel,
+    n,
+    formatted
+  };
+}
+function leveneTest(groups, center = "median") {
+  if (groups.length < 2) throw new Error("leveneTest: need at least 2 groups");
+  const k = groups.length;
+  const centerFn = center === "median" ? median : mean;
+  const devGroups = groups.map((g) => {
+    const c = centerFn(g.values);
+    return {
+      label: g.label,
+      values: g.values.map((v) => Math.abs(v - c))
+    };
+  });
+  const allDevs = devGroups.flatMap((g) => [...g.values]);
+  const n = allDevs.length;
+  const grandMean = mean(allDevs);
+  let ssBetween = 0;
+  let ssWithin = 0;
+  for (const g of devGroups) {
+    const gm = mean(g.values);
+    ssBetween += g.values.length * (gm - grandMean) ** 2;
+    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
+  }
+  const dfBetween = k - 1;
+  const dfWithin = n - k;
+  const msBetween = ssBetween / dfBetween;
+  const msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0;
+  const F = msWithin > 0 ? msBetween / msWithin : msBetween > 0 ? Infinity : 0;
+  const pValue = fDistPValue(F, dfBetween, dfWithin);
+  const testLabel = center === "median" ? "Brown-Forsythe" : "Levene's";
+  const formatted = `${testLabel}: F(${dfBetween}, ${dfWithin}) = ${F.toFixed(2)}, ${formatP(pValue)}`;
+  return {
+    testName: `${testLabel} Test`,
+    statistic: F,
+    df: [dfBetween, dfWithin],
+    pValue,
+    effectSize: { value: 0, name: "none", interpretation: "negligible" },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted
+  };
+}
+function oneWayANOVA(groups) {
+  if (groups.length < 2) throw new Error("oneWayANOVA: need at least 2 groups");
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const grandMean = mean(allValues);
+  let ssBetween = 0, ssWithin = 0;
+  const groupStats = groups.map((g) => {
+    const gm = mean(g.values);
+    const gn = g.values.length;
+    ssBetween += gn * (gm - grandMean) ** 2;
+    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
+    return { label: g.label, n: gn, mean: gm, sd: sd(g.values) };
+  });
+  const ssTotal = ssBetween + ssWithin;
+  const dfBetween = k - 1;
+  const dfWithin = n - k;
+  const msBetween = ssBetween / dfBetween;
+  const msWithin = ssWithin / dfWithin;
+  const F = msWithin === 0 ? Infinity : msBetween / msWithin;
+  const pValue = fDistPValue(F, dfBetween, dfWithin);
+  const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin);
+  const lev = leveneTest(groups);
+  const levene = {
+    statistic: lev.statistic,
+    pValue: lev.pValue,
+    df: lev.df,
+    homogeneous: lev.pValue >= 0.05
+  };
+  const formatted = formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
+  return {
+    testName: "One-way ANOVA",
+    statistic: F,
+    df: [dfBetween, dfWithin],
+    pValue,
+    effectSize: omega,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted,
+    groups: groupStats,
+    ssBetween,
+    ssWithin,
+    ssTotal,
+    msBetween,
+    msWithin,
+    dfBetween,
+    dfWithin,
+    levene
+  };
+}
+function mannWhitneyU(x1, x2, alternative = "two.sided") {
+  if (x1.length < 1 || x2.length < 1) throw new Error("mannWhitneyU: empty group");
+  const n1 = x1.length, n2 = x2.length;
+  const combined = [
+    ...x1.map((v, i) => ({ v, group: 1, i })),
+    ...x2.map((v, i) => ({ v, group: 2, i }))
+  ].sort((a, b) => a.v - b.v);
+  const allCombined = rank(combined.map((d) => d.v));
+  let R1 = 0;
+  for (let i = 0; i < combined.length; i++) {
+    if (combined[i].group === 1) R1 += allCombined[i];
+  }
+  const U1 = R1 - n1 * (n1 + 1) / 2;
+  const N = n1 + n2;
+  const muU = n1 * n2 / 2;
+  const allVals = combined.map((d) => d.v);
+  const tieCountsU = /* @__PURE__ */ new Map();
+  for (const v of allVals) tieCountsU.set(v, (tieCountsU.get(v) ?? 0) + 1);
+  let tieCorr = 0;
+  for (const t of tieCountsU.values()) tieCorr += t * t * t - t;
+  const varU = n1 * n2 / 12 * (N + 1 - tieCorr / (N * (N - 1)));
+  const z = varU === 0 ? 0 : (U1 - muU) / Math.sqrt(varU);
+  const zAbs = Math.abs(z);
+  const pNormal = 2 * (1 - normalCDFInline(zAbs));
+  const pValue = alternative === "two.sided" ? pNormal : alternative === "less" ? z < 0 ? pNormal / 2 : 1 - pNormal / 2 : z > 0 ? pNormal / 2 : 1 - pNormal / 2;
+  const effect = rankBiserial(U1, n1, n2);
+  const formatted = formatMannWhitney(U1, pValue, effect.value);
+  return {
+    testName: "Mann-Whitney U",
+    statistic: U1,
+    df: 0,
+    pValue: Math.min(1, Math.max(0, pValue)),
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n: n1 + n2,
+    formatted
+  };
+}
+function normalCDFInline(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf2 = 1 - poly * Math.exp(-x * x);
+  return 0.5 * (1 + (z >= 0 ? erf2 : -erf2));
+}
+function wilcoxonExactP(W, n) {
+  const maxW = n * (n + 1) / 2;
+  let dist = new Array(maxW + 1).fill(0);
+  dist[0] = 1;
+  for (let k = 1; k <= n; k++) {
+    const newDist = [...dist];
+    for (let w = k; w <= maxW; w++) {
+      newDist[w] += dist[w - k];
+    }
+    dist = newDist;
+  }
+  const total = Math.pow(2, n);
+  let cumP = 0;
+  for (let w = 0; w <= W && w <= maxW; w++) {
+    cumP += (dist[w] ?? 0) / total;
+  }
+  return Math.min(1, 2 * cumP);
+}
+function wilcoxonSignedRank(x1, x2) {
+  if (x1.length !== x2.length) throw new Error("wilcoxonSignedRank: arrays must match length");
+  const diffs = x1.map((v, i) => v - (x2[i] ?? 0)).filter((d) => d !== 0);
+  const n = diffs.length;
+  if (n === 0) throw new Error("wilcoxonSignedRank: no non-zero differences");
+  const absDiffs = diffs.map(Math.abs);
+  const ranks_ = rank(absDiffs);
+  let Wplus = 0, Wminus = 0;
+  for (let i = 0; i < n; i++) {
+    if ((diffs[i] ?? 0) > 0) Wplus += ranks_[i];
+    else Wminus += ranks_[i];
+  }
+  const W = Math.min(Wplus, Wminus);
+  let pValue;
+  if (n <= 20) {
+    pValue = wilcoxonExactP(W, n);
+  } else {
+    const muW = n * (n + 1) / 4;
+    const varW = n * (n + 1) * (2 * n + 1) / 24;
+    const z = varW === 0 ? 0 : (W + 0.5 - muW) / Math.sqrt(varW);
+    pValue = 2 * (1 - normalCDFInline(Math.abs(z)));
+  }
+  const effect = { value: Wplus / (n * (n + 1) / 2) * 2 - 1, name: "r (rank-biserial)", interpretation: "small" };
+  return {
+    testName: "Wilcoxon Signed-Rank",
+    statistic: W,
+    df: 0,
+    pValue: Math.min(1, Math.max(0, pValue)),
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted: `V = ${W}, ${formatP(pValue)}, r = ${effect.value.toFixed(2)}`
+  };
+}
+function kruskalWallis(groups) {
+  if (groups.length < 2) throw new Error("kruskalWallis: need at least 2 groups");
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const allRanks_ = rank(allValues);
+  let offset = 0;
+  let H = 0;
+  for (const g of groups) {
+    const gn = g.values.length;
+    let Rj = 0;
+    for (let i = 0; i < gn; i++) Rj += allRanks_[offset + i];
+    H += Rj * Rj / gn;
+    offset += gn;
+  }
+  H = 12 / (n * (n + 1)) * H - 3 * (n + 1);
+  const tieCounts = /* @__PURE__ */ new Map();
+  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
+  let C = 0;
+  for (const t of tieCounts.values()) C += t * t * t - t;
+  const correction = 1 - C / (n * n * n - n);
+  if (correction > 0) H /= correction;
+  const df = k - 1;
+  const pValue = chiSqPValue(H, df);
+  const effect = etaSquaredKW(H, k, n);
+  const formatted = formatKruskalWallis(H, df, pValue, effect.value);
+  return {
+    testName: "Kruskal-Wallis",
+    statistic: H,
+    df,
+    pValue,
+    effectSize: effect,
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted
+  };
+}
+function friedmanTest(data) {
+  const n = data.length;
+  if (n < 2) throw new Error("friedmanTest: need at least 2 subjects");
+  const k = data[0].length;
+  if (k < 2) throw new Error("friedmanTest: need at least 2 conditions");
+  let sumRankSq = 0;
+  for (const row of data) {
+    const rowRanks = rank(row);
+    for (const r of rowRanks) sumRankSq += r * r;
+  }
+  const colRankSums = Array.from(
+    { length: k },
+    (_, j) => data.reduce((s, row) => {
+      const rowRanks = rank(row);
+      return s + (rowRanks[j] ?? 0);
+    }, 0)
+  );
+  const Rj2sum = colRankSums.reduce((s, r) => s + r * r, 0);
+  const chi2 = 12 / (n * k * (k + 1)) * Rj2sum - 3 * n * (k + 1);
+  const df = k - 1;
+  const pValue = chiSqPValue(chi2, df);
+  const w = chi2 / (n * (k - 1));
+  return {
+    testName: "Friedman Test",
+    statistic: chi2,
+    df,
+    pValue,
+    effectSize: {
+      value: w,
+      name: "Kendall's W",
+      interpretation: w < 0.1 ? "negligible" : w < 0.3 ? "small" : w < 0.5 ? "medium" : "large"
+    },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${formatP(pValue)}, W = ${w.toFixed(2)}`
+  };
+}
+function helmertContrasts(k) {
+  const C = [];
+  for (let i = 0; i < k - 1; i++) {
+    const row = new Array(k).fill(0);
+    const denom = Math.sqrt((i + 1) * (i + 2));
+    for (let j = 0; j <= i; j++) row[j] = 1 / denom;
+    row[i + 1] = -(i + 1) / denom;
+    C.push(row);
+  }
+  return C;
+}
+function covarianceMatrixCols(data, k) {
+  const n = data.length;
+  const means = [];
+  for (let j = 0; j < k; j++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += data[i][j];
+    means.push(s / n);
+  }
+  const cov2 = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let a = 0; a < k; a++) {
+    for (let b = a; b < k; b++) {
+      let s = 0;
+      for (let i = 0; i < n; i++) {
+        s += (data[i][a] - means[a]) * (data[i][b] - means[b]);
+      }
+      const val = s / (n - 1);
+      cov2[a][b] = val;
+      cov2[b][a] = val;
+    }
+  }
+  return cov2;
+}
+function mauchlysTest(data) {
+  const n = data.length;
+  const k = data[0].length;
+  if (k < 3) throw new Error("mauchlysTest: need at least 3 conditions (k \u2265 3)");
+  if (n < 2) throw new Error("mauchlysTest: need at least 2 subjects");
+  const p = k - 1;
+  const sigma = covarianceMatrixCols(data, k);
+  const C = helmertContrasts(k);
+  const CMat = Matrix.fromArray(C);
+  const sigmaMat = Matrix.fromArray(sigma);
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose());
+  const lambdas = S.eigen().values;
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0);
+  const meanLambda = sumLambda / p;
+  const logW = lambdas.reduce((s, v) => s + Math.log(Math.max(v, 1e-300)), 0) - p * Math.log(meanLambda);
+  const W = Math.exp(logW);
+  const nu = n - 1 - (2 * p * p + p + 2) / (6 * p);
+  const chiSq = Math.max(0, -nu * logW);
+  const df = p * (p + 1) / 2 - 1;
+  const pValue = chiSq > 0 && df > 0 ? chiSqPValue(chiSq, df) : 1;
+  return { W, chiSq, df, pValue };
+}
+function epsilonCorrections(data) {
+  const n = data.length;
+  const k = data[0].length;
+  const p = k - 1;
+  const sigma = covarianceMatrixCols(data, k);
+  const C = helmertContrasts(k);
+  const CMat = Matrix.fromArray(C);
+  const sigmaMat = Matrix.fromArray(sigma);
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose());
+  const lambdas = S.eigen().values;
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0);
+  const sumLambdaSq = lambdas.reduce((s, v) => s + v * v, 0);
+  const gg = sumLambdaSq > 0 ? sumLambda * sumLambda / (p * sumLambdaSq) : 1;
+  const num = n * p * gg - 2;
+  const den = p * (n - 1 - p * gg);
+  const hf = den > 0 ? num / den : 1;
+  const lower = 1 / p;
+  return {
+    gg: Math.max(lower, Math.min(1, gg)),
+    hf: Math.max(lower, Math.min(1, hf))
+  };
+}
+function repeatedMeasuresANOVA(data, options) {
+  const n = data.length;
+  if (n < 2) throw new Error("repeatedMeasuresANOVA: need at least 2 subjects");
+  const k = data[0].length;
+  if (k < 2) throw new Error("repeatedMeasuresANOVA: need at least 2 conditions");
+  for (let i = 1; i < n; i++) {
+    if (data[i].length !== k) {
+      throw new Error(`repeatedMeasuresANOVA: row ${i} has ${data[i].length} columns, expected ${k}`);
+    }
+  }
+  const ciLevel = options?.ciLevel ?? 0.95;
+  const labels = options?.labels ?? Array.from({ length: k }, (_, i) => `C${i + 1}`);
+  let grandSum = 0;
+  for (const row of data) for (const v of row) grandSum += v;
+  const grandMean = grandSum / (n * k);
+  const condMeans = [];
+  const condSds = [];
+  for (let j = 0; j < k; j++) {
+    const col = [];
+    for (let i = 0; i < n; i++) col.push(data[i][j]);
+    condMeans.push(mean(col));
+    condSds.push(sd(col));
+  }
+  const subjMeans = data.map((row) => mean([...row]));
+  let ssTotal = 0;
+  for (const row of data) for (const v of row) ssTotal += (v - grandMean) ** 2;
+  let ssSubjects = 0;
+  for (const sm of subjMeans) ssSubjects += k * (sm - grandMean) ** 2;
+  let ssConditions = 0;
+  for (const cm of condMeans) ssConditions += n * (cm - grandMean) ** 2;
+  const ssError = ssTotal - ssSubjects - ssConditions;
+  const dfConditions = k - 1;
+  const dfSubjects = n - 1;
+  const dfError = dfConditions * dfSubjects;
+  const msConditions = ssConditions / dfConditions;
+  const msError = dfError > 0 ? ssError / dfError : 0;
+  const F = msError > 0 ? msConditions / msError : msConditions > 0 ? Infinity : 0;
+  let sphericity = null;
+  let epsilonGG = 1;
+  let epsilonHF = 1;
+  if (k >= 3) {
+    try {
+      sphericity = mauchlysTest(data);
+      const eps = epsilonCorrections(data);
+      epsilonGG = eps.gg;
+      epsilonHF = eps.hf;
+    } catch {
+      sphericity = null;
+    }
+  }
+  const sphericityViolated = sphericity !== null && sphericity.pValue < 0.05;
+  const correction = sphericityViolated ? "Greenhouse-Geisser" : "none";
+  let df1 = dfConditions;
+  let df2 = dfError;
+  if (correction === "Greenhouse-Geisser") {
+    df1 = epsilonGG * dfConditions;
+    df2 = epsilonGG * dfError;
+  }
+  const pValue = fDistPValue(F, df1, df2);
+  const partialEta2 = ssConditions + ssError > 0 ? ssConditions / (ssConditions + ssError) : 0;
+  const effectSize = {
+    value: partialEta2,
+    name: "\u03B7\xB2_p",
+    interpretation: interpretEtaSq(partialEta2)
+  };
+  const formatted = formatRMANOVA(
+    F,
+    df1,
+    df2,
+    pValue,
+    partialEta2,
+    "\u03B7\xB2_p",
+    correction !== "none" ? correction : void 0
+  );
+  const conditions = labels.map((label, j) => ({
+    label,
+    mean: condMeans[j],
+    sd: condSds[j],
+    n
+  }));
+  return {
+    testName: "Repeated Measures ANOVA",
+    statistic: F,
+    df: [df1, df2],
+    pValue,
+    effectSize,
+    ci: [NaN, NaN],
+    ciLevel,
+    n: n * k,
+    formatted,
+    conditions,
+    ssConditions,
+    ssSubjects,
+    ssError,
+    ssTotal,
+    dfConditions,
+    dfSubjects,
+    dfError,
+    msConditions,
+    msError,
+    sphericity,
+    epsilonGG,
+    epsilonHF,
+    ...correction !== "none" ? { correctedDf: [df1, df2] } : {},
+    correction
+  };
+}
+
+// src/stats/post-hoc.ts
+function tukeyHSD(groups, msWithin, dfWithin, ciLevel = 0.95) {
+  const results = [];
+  const alpha = 1 - ciLevel;
+  const k = groups.length;
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const g1 = groups[i];
+      const g2 = groups[j];
+      const n1 = g1.values.length;
+      const n2 = g2.values.length;
+      const m1 = mean(g1.values);
+      const m2 = mean(g2.values);
+      const diff = m1 - m2;
+      const se2 = Math.sqrt(msWithin / 2 * (1 / n1 + 1 / n2));
+      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
+      const pValue = pValueStudentizedRangeApprox(q, k, dfWithin);
+      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), dfWithin);
+      const ciHalf = tCrit * se2;
+      const ci = [diff - ciHalf, diff + ciHalf];
+      results.push({
+        group1: g1.label,
+        group2: g2.label,
+        meanDiff: diff,
+        se: se2,
+        statistic: q,
+        pValue,
+        pValueAdj: pValue,
+        // already family-wise corrected
+        ci,
+        significant: pValue < alpha
+      });
+    }
+  }
+  return results;
+}
+function gamesHowell(groups, ciLevel = 0.95) {
+  const results = [];
+  const alpha = 1 - ciLevel;
+  const k = groups.length;
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const g1 = groups[i];
+      const g2 = groups[j];
+      const n1 = g1.values.length;
+      const n2 = g2.values.length;
+      const m1 = mean(g1.values);
+      const m2 = mean(g2.values);
+      const v1 = variance(g1.values);
+      const v2 = variance(g2.values);
+      const diff = m1 - m2;
+      const se2 = Math.sqrt((v1 / n1 + v2 / n2) / 2);
+      const q = se2 === 0 ? 0 : Math.abs(diff) / se2;
+      const dfNum = (v1 / n1 + v2 / n2) ** 2;
+      const dfDen = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1);
+      const df = dfDen > 0 ? dfNum / dfDen : n1 + n2 - 2;
+      const pValue = pValueStudentizedRangeApprox(q, k, df);
+      const tCrit = tDistQuantile(1 - alpha / (k * (k - 1)), df);
+      const ciHalf = tCrit * se2;
+      results.push({
+        group1: g1.label,
+        group2: g2.label,
+        meanDiff: diff,
+        se: se2,
+        statistic: q,
+        pValue,
+        pValueAdj: pValue,
+        ci: [diff - ciHalf, diff + ciHalf],
+        significant: pValue < alpha
+      });
+    }
+  }
+  return results;
+}
+function dunnTest(groups, method = "bonferroni") {
+  const k = groups.length;
+  const allValues = groups.flatMap((g) => [...g.values]);
+  const n = allValues.length;
+  const allRanks = rank(allValues);
+  let offset = 0;
+  const groupRankMeans = [];
+  const groupNs = [];
+  for (const g of groups) {
+    const gn = g.values.length;
+    let Rj = 0;
+    for (let i = 0; i < gn; i++) Rj += allRanks[offset + i];
+    groupRankMeans.push(Rj / gn);
+    groupNs.push(gn);
+    offset += gn;
+  }
+  const tieCounts = /* @__PURE__ */ new Map();
+  for (const v of allValues) tieCounts.set(v, (tieCounts.get(v) ?? 0) + 1);
+  let C = 0;
+  for (const t of tieCounts.values()) C += t * t * t - t;
+  const tieAdj = C / (12 * (n - 1));
+  const baseVar = n * (n + 1) / 12 - tieAdj;
+  const rawPValues = [];
+  const rawZs = [];
+  const rawSEs = [];
+  const pairs = [];
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const diff = (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0);
+      const se2 = Math.sqrt(
+        baseVar * (1 / (groupNs[i] ?? 1) + 1 / (groupNs[j] ?? 1))
+      );
+      const z = se2 === 0 ? 0 : diff / se2;
+      const p = normalSurvival(Math.abs(z));
+      rawPValues.push(p);
+      rawZs.push(z);
+      rawSEs.push(se2);
+      pairs.push({ i, j });
+    }
+  }
+  const adjPValues = method === "holm" ? dunnStyleHolm(rawPValues) : method === "BH" ? dunnStyleBH(rawPValues) : adjustPValues(rawPValues, method);
+  return pairs.map(({ i, j }, idx) => ({
+    group1: groups[i].label,
+    group2: groups[j].label,
+    meanDiff: (groupRankMeans[i] ?? 0) - (groupRankMeans[j] ?? 0),
+    se: rawSEs[idx],
+    statistic: rawZs[idx],
+    pValue: rawPValues[idx],
+    pValueAdj: adjPValues[idx],
+    ci: [NaN, NaN],
+    significant: (adjPValues[idx] ?? 1) < 0.05
+  }));
+}
+function dunnStyleHolm(pValues) {
+  const m = pValues.length;
+  if (m === 0) return [];
+  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+  const adj = new Array(m);
+  for (let k = 0; k < m; k++) {
+    const { p, i } = order[k];
+    adj[i] = Math.min(1, p * (m - k));
+  }
+  return adj;
+}
+function dunnStyleBH(pValues) {
+  const m = pValues.length;
+  if (m === 0) return [];
+  const order = pValues.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
+  const adj = new Array(m);
+  for (let k = 0; k < m; k++) {
+    const { p, i } = order[k];
+    const rank2 = m - k;
+    adj[i] = Math.min(1, p * m / rank2);
+  }
+  return adj;
+}
 
 // src/stats/correlation.ts
 function pearsonCorrelation(x, y, ciLevel = 0.95) {

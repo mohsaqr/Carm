@@ -40,6 +40,7 @@ __export(core_exports, {
   formatLMM: () => formatLMM,
   formatMannWhitney: () => formatMannWhitney,
   formatP: () => formatP,
+  formatRMANOVA: () => formatRMANOVA,
   formatRegression: () => formatRegression,
   formatStat: () => formatStat,
   formatTTest: () => formatTTest,
@@ -1025,6 +1026,10 @@ function formatTTest(t, df, pValue, effectSize, effectName, ci, ciLevel = 0.95) 
 }
 function formatANOVA(F, df1, df2, pValue, effectSize, effectName = "\u03B7\xB2") {
   return `F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
+}
+function formatRMANOVA(F, df1, df2, pValue, effectSize, effectName = "\u03B7\xB2_p", correction) {
+  const prefix = correction === "Greenhouse-Geisser" ? "F_GG" : correction === "Huynh-Feldt" ? "F_HF" : "F";
+  return `${prefix}(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;
 }
 function formatChiSq(chiSq, df, pValue, effectSize, effectName = "V") {
   return `\u03C7\xB2(${formatDF(df)}) = ${formatStat(chiSq)}, ${formatP(pValue)}, ${effectName} = ${formatStat(effectSize)}`;

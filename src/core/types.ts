@@ -218,6 +218,37 @@ export interface CFAResult extends FAResult {
   readonly model: Readonly<Record<string, readonly number[]>>
 }
 
+// ─── Repeated Measures ANOVA ─────────────────────────────────────────────
+
+/** Result from repeated measures one-way ANOVA. */
+export interface RMANOVAResult extends StatResult {
+  readonly conditions: readonly {
+    readonly label: string
+    readonly mean: number
+    readonly sd: number
+    readonly n: number
+  }[]
+  readonly ssConditions: number
+  readonly ssSubjects: number
+  readonly ssError: number
+  readonly ssTotal: number
+  readonly dfConditions: number
+  readonly dfSubjects: number
+  readonly dfError: number
+  readonly msConditions: number
+  readonly msError: number
+  readonly sphericity: {
+    readonly W: number
+    readonly chiSq: number
+    readonly df: number
+    readonly pValue: number
+  } | null
+  readonly epsilonGG: number
+  readonly epsilonHF: number
+  readonly correctedDf?: readonly [number, number]
+  readonly correction: 'none' | 'Greenhouse-Geisser' | 'Huynh-Feldt'
+}
+
 // ─── analyze() dispatch layer ─────────────────────────────────────────────
 
 /** Field type descriptor for the analyze() dispatch layer. */

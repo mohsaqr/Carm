@@ -90,6 +90,14 @@ describe('oneWayANOVA', () => {
       expect(g.sd).toBeGreaterThanOrEqual(0)
     }
   })
+  it('levene field present with F, p, df, homogeneous', () => {
+    expect(result.levene).toBeDefined()
+    expect(result.levene.statistic).toBeGreaterThanOrEqual(0)
+    expect(result.levene.pValue).toBeGreaterThanOrEqual(0)
+    expect(result.levene.pValue).toBeLessThanOrEqual(1)
+    expect(result.levene.df[0]).toBe(groups.length - 1)
+    expect(typeof result.levene.homogeneous).toBe('boolean')
+  })
 })
 
 describe('mannWhitneyU', () => {

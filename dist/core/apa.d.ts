@@ -33,6 +33,12 @@ export declare function formatTTest(t: number, df: number, pValue: number, effec
  */
 export declare function formatANOVA(F: number, df1: number, df2: number, pValue: number, effectSize: number, effectName?: string): string;
 /**
+ * APA string for repeated measures ANOVA.
+ * Sphericity assumed: "F(2, 18) = 4.21, p = .018, η²_p = 0.32"
+ * GG corrected: "F_GG(1.23, 11.07) = 4.21, p = .042, η²_p = 0.32"
+ */
+export declare function formatRMANOVA(F: number, df1: number, df2: number, pValue: number, effectSize: number, effectName?: string, correction?: 'Greenhouse-Geisser' | 'Huynh-Feldt'): string;
+/**
  * Full APA string for chi-square test.
  * e.g. "χ²(3) = 8.46, p = .037, V = 0.29"
  */

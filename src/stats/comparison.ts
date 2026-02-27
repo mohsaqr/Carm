@@ -6,6 +6,7 @@
 
 import {
   mean as _mean,
+  median as _median,
   variance as _variance,
   sd as _sd,
   se as _se,
@@ -18,12 +19,15 @@ import {
 import {
   formatTTest,
   formatANOVA,
+  formatRMANOVA,
   formatMannWhitney,
   formatKruskalWallis,
   formatP,
+  interpretEtaSq,
 } from '../core/apa.js'
+import { Matrix } from '../core/matrix.js'
 import { cohensD, cohensDPaired, omegaSquared, etaSquaredKW, rankBiserial } from './effect-size.js'
-import type { StatResult, GroupData } from '../core/types.js'
+import type { StatResult, GroupData, RMANOVAResult, EffectInterpretation } from '../core/types.js'
 
 // ─── Independent samples t-test ───────────────────────────────────────────
 
@@ -137,6 +141,80 @@ export function tTestPaired(
   }
 }
 
+// ─── Levene's test ───────────────────────────────────────────────────────
+
+/**
+ * Levene's test for homogeneity of variances.
+ *
+ * Computes absolute deviations from each group's center, then runs
+ * a one-way ANOVA on those deviations. A significant result (p < .05)
+ * indicates unequal variances across groups.
+ *
+ * @param groups  Two or more groups with labels and values.
+ * @param center  'median' (default, Brown-Forsythe variant — more robust)
+ *                or 'mean' (original Levene).
+ *
+ * Cross-validated with R:
+ * > car::leveneTest(y ~ group, center = median)
+ * > # or manually:
+ * > medians <- tapply(y, group, median)
+ * > abs_dev <- abs(y - medians[group])
+ * > anova(lm(abs_dev ~ group))
+ */
+export function leveneTest(
+  groups: readonly GroupData[],
+  center: 'median' | 'mean' = 'median'
+): StatResult {
+  if (groups.length < 2) throw new Error('leveneTest: need at least 2 groups')
+
+  const k = groups.length
+  const centerFn = center === 'median' ? _median : _mean
+
+  // Compute absolute deviations from each group's center
+  const devGroups: GroupData[] = groups.map(g => {
+    const c = centerFn(g.values)
+    return {
+      label: g.label,
+      values: g.values.map(v => Math.abs(v - c)),
+    }
+  })
+
+  // One-way ANOVA on the absolute deviations
+  const allDevs = devGroups.flatMap(g => [...g.values])
+  const n = allDevs.length
+  const grandMean = _mean(allDevs)
+
+  let ssBetween = 0
+  let ssWithin = 0
+  for (const g of devGroups) {
+    const gm = _mean(g.values)
+    ssBetween += g.values.length * (gm - grandMean) ** 2
+    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0)
+  }
+
+  const dfBetween = k - 1
+  const dfWithin = n - k
+  const msBetween = ssBetween / dfBetween
+  const msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0
+  const F = msWithin > 0 ? msBetween / msWithin : (msBetween > 0 ? Infinity : 0)
+  const pValue = fDistPValue(F, dfBetween, dfWithin)
+
+  const testLabel = center === 'median' ? 'Brown-Forsythe' : "Levene's"
+  const formatted = `${testLabel}: F(${dfBetween}, ${dfWithin}) = ${F.toFixed(2)}, ${formatP(pValue)}`
+
+  return {
+    testName: `${testLabel} Test`,
+    statistic: F,
+    df: [dfBetween, dfWithin],
+    pValue,
+    effectSize: { value: 0, name: 'none', interpretation: 'negligible' },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted,
+  }
+}
+
 // ─── One-way ANOVA ────────────────────────────────────────────────────────
 
 export interface ANOVAResult extends StatResult {
@@ -153,6 +231,12 @@ export interface ANOVAResult extends StatResult {
   readonly msWithin: number
   readonly dfBetween: number
   readonly dfWithin: number
+  readonly levene: {
+    readonly statistic: number
+    readonly pValue: number
+    readonly df: readonly [number, number]
+    readonly homogeneous: boolean
+  }
 }
 
 /**
@@ -190,6 +274,15 @@ export function oneWayANOVA(groups: readonly GroupData[]): ANOVAResult {
 
   const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin)
 
+  // Levene's test (Brown-Forsythe variant) for homogeneity of variances
+  const lev = leveneTest(groups)
+  const levene = {
+    statistic: lev.statistic,
+    pValue: lev.pValue,
+    df: (lev.df as readonly [number, number]),
+    homogeneous: lev.pValue >= 0.05,
+  }
+
   const formatted = formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, 'ω²')
 
   return {
@@ -210,6 +303,7 @@ export function oneWayANOVA(groups: readonly GroupData[]): ANOVAResult {
     msWithin,
     dfBetween,
     dfWithin,
+    levene,
   }
 }
 
@@ -472,5 +566,314 @@ export function friedmanTest(data: readonly (readonly number[])[]): StatResult {
     ciLevel: 0.95,
     n,
     formatted: `χ²_F(${df}) = ${chi2.toFixed(2)}, ${formatP(pValue)}, W = ${w.toFixed(2)}`,
+  }
+}
+
+// ─── Repeated Measures ANOVA ────────────────────────────────────────────
+
+/**
+ * Helmert orthonormal contrast matrix ((k-1) × k).
+ * Row i (0-indexed): 1/√((i+1)(i+2)) for j ≤ i,
+ *   -(i+1)/√((i+1)(i+2)) for j = i+1, 0 otherwise.
+ * Rows are orthonormal: C·C' = I_{k-1}.
+ */
+function helmertContrasts(k: number): number[][] {
+  const C: number[][] = []
+  for (let i = 0; i < k - 1; i++) {
+    const row = new Array(k).fill(0) as number[]
+    const denom = Math.sqrt((i + 1) * (i + 2))
+    for (let j = 0; j <= i; j++) row[j] = 1 / denom
+    row[i + 1] = -(i + 1) / denom
+    C.push(row)
+  }
+  return C
+}
+
+/**
+ * Sample covariance matrix (k × k) from an n × k data matrix.
+ * Uses Bessel correction (n-1 denominator).
+ */
+function covarianceMatrixCols(
+  data: readonly (readonly number[])[],
+  k: number
+): number[][] {
+  const n = data.length
+  const means: number[] = []
+  for (let j = 0; j < k; j++) {
+    let s = 0
+    for (let i = 0; i < n; i++) s += data[i]![j]!
+    means.push(s / n)
+  }
+  const cov: number[][] = Array.from({ length: k }, () => new Array(k).fill(0) as number[])
+  for (let a = 0; a < k; a++) {
+    for (let b = a; b < k; b++) {
+      let s = 0
+      for (let i = 0; i < n; i++) {
+        s += (data[i]![a]! - means[a]!) * (data[i]![b]! - means[b]!)
+      }
+      const val = s / (n - 1)
+      cov[a]![b] = val
+      cov[b]![a] = val
+    }
+  }
+  return cov
+}
+
+/**
+ * Mauchly's test of sphericity for repeated measures designs.
+ * Tests whether the covariance matrix of orthonormalized contrasts
+ * is proportional to an identity matrix.
+ *
+ * @param data  Subjects × conditions matrix (n × k, k ≥ 3).
+ * @returns { W, chiSq, df, pValue } where W is Mauchly's statistic.
+ *
+ * Reference: Mauchly (1940), "Significance test for sphericity of a
+ * normal n-variate distribution"
+ *
+ * Cross-validated with R:
+ * > library(ez)
+ * > ezANOVA(data=df, dv=y, wid=subj, within=cond)$`Mauchly's Test for Sphericity`
+ */
+export function mauchlysTest(
+  data: readonly (readonly number[])[]
+): { readonly W: number; readonly chiSq: number; readonly df: number; readonly pValue: number } {
+  const n = data.length
+  const k = data[0]!.length
+  if (k < 3) throw new Error('mauchlysTest: need at least 3 conditions (k ≥ 3)')
+  if (n < 2) throw new Error('mauchlysTest: need at least 2 subjects')
+
+  const p = k - 1
+
+  // Covariance matrix of conditions (k × k)
+  const sigma = covarianceMatrixCols(data, k)
+
+  // Helmert orthonormal contrasts (p × k)
+  const C = helmertContrasts(k)
+
+  // S_star = C × Σ × C' (p × p)
+  const CMat = Matrix.fromArray(C)
+  const sigmaMat = Matrix.fromArray(sigma)
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose())
+
+  // Eigenvalues of S_star (symmetric positive semi-definite)
+  const lambdas = S.eigen().values
+
+  // W = det(S) / (trace(S)/p)^p
+  // In log-space: ln(W) = Σln(λ_i) - p·ln(Σλ_i/p)
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0)
+  const meanLambda = sumLambda / p
+  const logW = lambdas.reduce((s, v) => s + Math.log(Math.max(v, 1e-300)), 0) - p * Math.log(meanLambda)
+  const W = Math.exp(logW)
+
+  // Box's chi-square approximation
+  // χ² = -(n - 1 - (2p² + p + 2)/(6p)) × ln(W)
+  const nu = n - 1 - (2 * p * p + p + 2) / (6 * p)
+  const chiSq = Math.max(0, -nu * logW)
+  const df = p * (p + 1) / 2 - 1
+  const pValue = chiSq > 0 && df > 0 ? chiSqPValue(chiSq, df) : 1
+
+  return { W, chiSq, df, pValue }
+}
+
+/**
+ * Greenhouse-Geisser and Huynh-Feldt epsilon corrections for sphericity.
+ *
+ * @param data  Subjects × conditions matrix (n × k).
+ * @returns { gg, hf } clamped to [1/(k-1), 1].
+ *
+ * Reference: Greenhouse & Geisser (1959); Huynh & Feldt (1976)
+ */
+export function epsilonCorrections(
+  data: readonly (readonly number[])[]
+): { readonly gg: number; readonly hf: number } {
+  const n = data.length
+  const k = data[0]!.length
+  const p = k - 1
+
+  // Covariance matrix of orthonormalized contrasts
+  const sigma = covarianceMatrixCols(data, k)
+  const C = helmertContrasts(k)
+  const CMat = Matrix.fromArray(C)
+  const sigmaMat = Matrix.fromArray(sigma)
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose())
+
+  const lambdas = S.eigen().values
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0)
+  const sumLambdaSq = lambdas.reduce((s, v) => s + v * v, 0)
+
+  // Greenhouse-Geisser: ε_GG = (Σλ)² / (p × Σλ²)
+  const gg = sumLambdaSq > 0 ? (sumLambda * sumLambda) / (p * sumLambdaSq) : 1
+
+  // Huynh-Feldt: ε_HF = (n(k-1)ε_GG - 2) / ((k-1)(n - 1 - (k-1)ε_GG))
+  const num = n * p * gg - 2
+  const den = p * (n - 1 - p * gg)
+  const hf = den > 0 ? num / den : 1
+
+  // Clamp to [1/(k-1), 1]
+  const lower = 1 / p
+  return {
+    gg: Math.max(lower, Math.min(1, gg)),
+    hf: Math.max(lower, Math.min(1, hf)),
+  }
+}
+
+/**
+ * Repeated measures one-way ANOVA.
+ *
+ * Decomposes total variance into SS_subjects + SS_conditions + SS_error.
+ * Tests whether condition means differ, accounting for within-subject correlation.
+ * Automatically runs Mauchly's sphericity test (k ≥ 3) and applies
+ * Greenhouse-Geisser correction when sphericity is violated (p < .05).
+ *
+ * @param data     n × k matrix: data[i][j] = score for subject i in condition j.
+ * @param options  { labels?: string[], ciLevel?: number }
+ *
+ * Cross-validated with R:
+ * > fit <- aov(y ~ cond + Error(subj/cond), data=df)
+ * > summary(fit)
+ * > library(ez); ezANOVA(data=df, dv=y, wid=subj, within=cond)
+ */
+export function repeatedMeasuresANOVA(
+  data: readonly (readonly number[])[],
+  options?: { readonly labels?: readonly string[]; readonly ciLevel?: number }
+): RMANOVAResult {
+  const n = data.length
+  if (n < 2) throw new Error('repeatedMeasuresANOVA: need at least 2 subjects')
+  const k = data[0]!.length
+  if (k < 2) throw new Error('repeatedMeasuresANOVA: need at least 2 conditions')
+  for (let i = 1; i < n; i++) {
+    if (data[i]!.length !== k) {
+      throw new Error(`repeatedMeasuresANOVA: row ${i} has ${data[i]!.length} columns, expected ${k}`)
+    }
+  }
+
+  const ciLevel = options?.ciLevel ?? 0.95
+  const labels = options?.labels ?? Array.from({ length: k }, (_, i) => `C${i + 1}`)
+
+  // ── Grand mean ──
+  let grandSum = 0
+  for (const row of data) for (const v of row) grandSum += v
+  const grandMean = grandSum / (n * k)
+
+  // ── Condition means and descriptives ──
+  const condMeans: number[] = []
+  const condSds: number[] = []
+  for (let j = 0; j < k; j++) {
+    const col: number[] = []
+    for (let i = 0; i < n; i++) col.push(data[i]![j]!)
+    condMeans.push(_mean(col))
+    condSds.push(_sd(col))
+  }
+
+  // ── Subject means ──
+  const subjMeans: number[] = data.map(row => _mean([...row]))
+
+  // ── SS decomposition ──
+  // SS_total = Σ_ij (x_ij - grand_mean)²
+  let ssTotal = 0
+  for (const row of data) for (const v of row) ssTotal += (v - grandMean) ** 2
+
+  // SS_subjects = k × Σ_i (subj_mean_i - grand_mean)²
+  let ssSubjects = 0
+  for (const sm of subjMeans) ssSubjects += k * (sm - grandMean) ** 2
+
+  // SS_conditions = n × Σ_j (cond_mean_j - grand_mean)²
+  let ssConditions = 0
+  for (const cm of condMeans) ssConditions += n * (cm - grandMean) ** 2
+
+  // SS_error = SS_total - SS_subjects - SS_conditions (residual)
+  const ssError = ssTotal - ssSubjects - ssConditions
+
+  // ── Degrees of freedom ──
+  const dfConditions = k - 1
+  const dfSubjects = n - 1
+  const dfError = dfConditions * dfSubjects
+
+  // ── Mean squares & F ──
+  const msConditions = ssConditions / dfConditions
+  const msError = dfError > 0 ? ssError / dfError : 0
+  const F = msError > 0 ? msConditions / msError : (msConditions > 0 ? Infinity : 0)
+
+  // ── Sphericity test & epsilon corrections (k ≥ 3 only) ──
+  let sphericity: RMANOVAResult['sphericity'] = null
+  let epsilonGG = 1
+  let epsilonHF = 1
+
+  if (k >= 3) {
+    try {
+      sphericity = mauchlysTest(data)
+      const eps = epsilonCorrections(data)
+      epsilonGG = eps.gg
+      epsilonHF = eps.hf
+    } catch {
+      // If sphericity test fails (e.g., singular matrix), assume sphericity
+      sphericity = null
+    }
+  }
+
+  // ── Determine correction ──
+  const sphericityViolated = sphericity !== null && sphericity.pValue < 0.05
+  const correction: RMANOVAResult['correction'] = sphericityViolated ? 'Greenhouse-Geisser' : 'none'
+
+  // ── Compute p-value (with correction if needed) ──
+  let df1 = dfConditions
+  let df2 = dfError
+  if (correction === 'Greenhouse-Geisser') {
+    df1 = epsilonGG * dfConditions
+    df2 = epsilonGG * dfError
+  }
+  const pValue = fDistPValue(F, df1, df2)
+
+  // ── Effect size: partial eta-squared ──
+  // η²_p = SS_conditions / (SS_conditions + SS_error)
+  const partialEta2 = (ssConditions + ssError) > 0
+    ? ssConditions / (ssConditions + ssError)
+    : 0
+
+  const effectSize = {
+    value: partialEta2,
+    name: 'η²_p',
+    interpretation: interpretEtaSq(partialEta2) as EffectInterpretation,
+  }
+
+  // ── APA formatted string ──
+  const formatted = formatRMANOVA(
+    F, df1, df2, pValue, partialEta2, 'η²_p',
+    correction !== 'none' ? correction : undefined
+  )
+
+  // ── Condition descriptives ──
+  const conditions = labels.map((label, j) => ({
+    label,
+    mean: condMeans[j]!,
+    sd: condSds[j]!,
+    n,
+  }))
+
+  return {
+    testName: 'Repeated Measures ANOVA',
+    statistic: F,
+    df: [df1, df2],
+    pValue,
+    effectSize,
+    ci: [NaN, NaN],
+    ciLevel,
+    n: n * k,
+    formatted,
+    conditions,
+    ssConditions,
+    ssSubjects,
+    ssError,
+    ssTotal,
+    dfConditions,
+    dfSubjects,
+    dfError,
+    msConditions,
+    msError,
+    sphericity,
+    epsilonGG,
+    epsilonHF,
+    ...(correction !== 'none' ? { correctedDf: [df1, df2] as const } : {}),
+    correction,
   }
 }

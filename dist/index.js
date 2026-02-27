@@ -14,6 +14,7 @@ import {
   describe,
   detectFieldType,
   dunnTest,
+  epsilonCorrections,
   etaSquared,
   etaSquaredKW,
   euclideanDistMatrix,
@@ -34,9 +35,11 @@ import {
   kendallTau,
   kruskalWallis,
   kurtosis,
+  leveneTest,
   linearRegression,
   logisticRegression,
   mannWhitneyU,
+  mauchlysTest,
   multipleRegression,
   omegaSquared,
   oneWayANOVA,
@@ -50,6 +53,7 @@ import {
   rankBiserial,
   rankBiserialWilcoxon,
   regressionDiagnostics,
+  repeatedMeasuresANOVA,
   runCFA,
   runDBSCAN,
   runEFA,
@@ -69,7 +73,7 @@ import {
   tukeyHSD,
   varimaxRotation,
   wilcoxonSignedRank
-} from "./chunk-UNPMBU3W.js";
+} from "./chunk-VFX4ZNZG.js";
 import {
   Matrix,
   solveLinear
@@ -139,7 +143,7 @@ import {
   showTooltip,
   themeColorScale,
   totalBracketHeight
-} from "./chunk-XIZSHUTJ.js";
+} from "./chunk-AKTKAD6L.js";
 import {
   adjustPValues,
   betaFn,
@@ -160,6 +164,7 @@ import {
   formatLMM,
   formatMannWhitney,
   formatP,
+  formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
@@ -194,7 +199,7 @@ import {
   tDistPValue,
   tDistQuantile,
   variance
-} from "./chunk-CPNEYYXS.js";
+} from "./chunk-IFAUJ3FI.js";
 export {
   CARM_PALETTE,
   DARK_THEME,
@@ -228,6 +233,7 @@ export {
   describe,
   detectFieldType,
   dunnTest,
+  epsilonCorrections,
   etaSquared,
   etaSquaredKW,
   euclideanDistMatrix,
@@ -252,6 +258,7 @@ export {
   formatLMM,
   formatMannWhitney,
   formatP,
+  formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
@@ -276,11 +283,13 @@ export {
   kendallTau,
   kruskalWallis,
   kurtosis,
+  leveneTest,
   linearRegression,
   logBeta,
   logGamma,
   logisticRegression,
   mannWhitneyU,
+  mauchlysTest,
   mean,
   median,
   multipleRegression,
@@ -352,6 +361,7 @@ export {
   renderWaffleChart,
   renderXAxis,
   renderYAxis,
+  repeatedMeasuresANOVA,
   roundTo,
   runCFA,
   runDBSCAN,

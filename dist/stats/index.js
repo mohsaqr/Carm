@@ -13,6 +13,7 @@ import {
   describe,
   detectFieldType,
   dunnTest,
+  epsilonCorrections,
   etaSquared,
   etaSquaredKW,
   euclideanDistMatrix,
@@ -33,9 +34,11 @@ import {
   kendallTau,
   kruskalWallis,
   kurtosis,
+  leveneTest,
   linearRegression,
   logisticRegression,
   mannWhitneyU,
+  mauchlysTest,
   multipleRegression,
   omegaSquared,
   oneWayANOVA,
@@ -49,6 +52,7 @@ import {
   rankBiserial,
   rankBiserialWilcoxon,
   regressionDiagnostics,
+  repeatedMeasuresANOVA,
   runCFA,
   runDBSCAN,
   runEFA,
@@ -68,7 +72,7 @@ import {
   tukeyHSD,
   varimaxRotation,
   wilcoxonSignedRank
-} from "../chunk-UNPMBU3W.js";
+} from "../chunk-VFX4ZNZG.js";
 import "../chunk-S5HCH6CR.js";
 import {
   mean,
@@ -77,7 +81,7 @@ import {
   sd,
   se,
   variance
-} from "../chunk-CPNEYYXS.js";
+} from "../chunk-IFAUJ3FI.js";
 export {
   analyze,
   chiSquareTest,
@@ -93,6 +97,7 @@ export {
   describe,
   detectFieldType,
   dunnTest,
+  epsilonCorrections,
   etaSquared,
   etaSquaredKW,
   euclideanDistMatrix,
@@ -113,9 +118,11 @@ export {
   kendallTau,
   kruskalWallis,
   kurtosis,
+  leveneTest,
   linearRegression,
   logisticRegression,
   mannWhitneyU,
+  mauchlysTest,
   mean,
   median,
   multipleRegression,
@@ -132,6 +139,7 @@ export {
   rankBiserial,
   rankBiserialWilcoxon,
   regressionDiagnostics,
+  repeatedMeasuresANOVA,
   runCFA,
   runDBSCAN,
   runEFA,

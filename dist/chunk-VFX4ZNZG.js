@@ -14,6 +14,7 @@ import {
   formatLMM,
   formatMannWhitney,
   formatP,
+  formatRMANOVA,
   formatRegression,
   formatTTest,
   interpretCohensD,
@@ -38,7 +39,7 @@ import {
   tDistPValue,
   tDistQuantile,
   variance
-} from "./chunk-CPNEYYXS.js";
+} from "./chunk-IFAUJ3FI.js";
 
 // src/stats/descriptive.ts
 function mode(x) {
@@ -573,6 +574,47 @@ function tTestPaired(x1, x2, ciLevel = 0.95) {
     formatted
   };
 }
+function leveneTest(groups, center = "median") {
+  if (groups.length < 2) throw new Error("leveneTest: need at least 2 groups");
+  const k = groups.length;
+  const centerFn = center === "median" ? median : mean;
+  const devGroups = groups.map((g) => {
+    const c = centerFn(g.values);
+    return {
+      label: g.label,
+      values: g.values.map((v) => Math.abs(v - c))
+    };
+  });
+  const allDevs = devGroups.flatMap((g) => [...g.values]);
+  const n = allDevs.length;
+  const grandMean = mean(allDevs);
+  let ssBetween = 0;
+  let ssWithin = 0;
+  for (const g of devGroups) {
+    const gm = mean(g.values);
+    ssBetween += g.values.length * (gm - grandMean) ** 2;
+    ssWithin += g.values.reduce((s, v) => s + (v - gm) ** 2, 0);
+  }
+  const dfBetween = k - 1;
+  const dfWithin = n - k;
+  const msBetween = ssBetween / dfBetween;
+  const msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0;
+  const F = msWithin > 0 ? msBetween / msWithin : msBetween > 0 ? Infinity : 0;
+  const pValue = fDistPValue(F, dfBetween, dfWithin);
+  const testLabel = center === "median" ? "Brown-Forsythe" : "Levene's";
+  const formatted = `${testLabel}: F(${dfBetween}, ${dfWithin}) = ${F.toFixed(2)}, ${formatP(pValue)}`;
+  return {
+    testName: `${testLabel} Test`,
+    statistic: F,
+    df: [dfBetween, dfWithin],
+    pValue,
+    effectSize: { value: 0, name: "none", interpretation: "negligible" },
+    ci: [NaN, NaN],
+    ciLevel: 0.95,
+    n,
+    formatted
+  };
+}
 function oneWayANOVA(groups) {
   if (groups.length < 2) throw new Error("oneWayANOVA: need at least 2 groups");
   const k = groups.length;
@@ -595,6 +637,13 @@ function oneWayANOVA(groups) {
   const F = msWithin === 0 ? Infinity : msBetween / msWithin;
   const pValue = fDistPValue(F, dfBetween, dfWithin);
   const omega = omegaSquared(ssBetween, ssTotal, dfBetween, msWithin);
+  const lev = leveneTest(groups);
+  const levene = {
+    statistic: lev.statistic,
+    pValue: lev.pValue,
+    df: lev.df,
+    homogeneous: lev.pValue >= 0.05
+  };
   const formatted = formatANOVA(F, dfBetween, dfWithin, pValue, omega.value, "\u03C9\xB2");
   return {
     testName: "One-way ANOVA",
@@ -613,7 +662,8 @@ function oneWayANOVA(groups) {
     msBetween,
     msWithin,
     dfBetween,
-    dfWithin
+    dfWithin,
+    levene
   };
 }
 function mannWhitneyU(x1, x2, alternative = "two.sided") {
@@ -789,6 +839,190 @@ function friedmanTest(data) {
     ciLevel: 0.95,
     n,
     formatted: `\u03C7\xB2_F(${df}) = ${chi2.toFixed(2)}, ${formatP(pValue)}, W = ${w.toFixed(2)}`
+  };
+}
+function helmertContrasts(k) {
+  const C = [];
+  for (let i = 0; i < k - 1; i++) {
+    const row = new Array(k).fill(0);
+    const denom = Math.sqrt((i + 1) * (i + 2));
+    for (let j = 0; j <= i; j++) row[j] = 1 / denom;
+    row[i + 1] = -(i + 1) / denom;
+    C.push(row);
+  }
+  return C;
+}
+function covarianceMatrixCols(data, k) {
+  const n = data.length;
+  const means = [];
+  for (let j = 0; j < k; j++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += data[i][j];
+    means.push(s / n);
+  }
+  const cov2 = Array.from({ length: k }, () => new Array(k).fill(0));
+  for (let a = 0; a < k; a++) {
+    for (let b = a; b < k; b++) {
+      let s = 0;
+      for (let i = 0; i < n; i++) {
+        s += (data[i][a] - means[a]) * (data[i][b] - means[b]);
+      }
+      const val = s / (n - 1);
+      cov2[a][b] = val;
+      cov2[b][a] = val;
+    }
+  }
+  return cov2;
+}
+function mauchlysTest(data) {
+  const n = data.length;
+  const k = data[0].length;
+  if (k < 3) throw new Error("mauchlysTest: need at least 3 conditions (k \u2265 3)");
+  if (n < 2) throw new Error("mauchlysTest: need at least 2 subjects");
+  const p = k - 1;
+  const sigma = covarianceMatrixCols(data, k);
+  const C = helmertContrasts(k);
+  const CMat = Matrix.fromArray(C);
+  const sigmaMat = Matrix.fromArray(sigma);
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose());
+  const lambdas = S.eigen().values;
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0);
+  const meanLambda = sumLambda / p;
+  const logW = lambdas.reduce((s, v) => s + Math.log(Math.max(v, 1e-300)), 0) - p * Math.log(meanLambda);
+  const W = Math.exp(logW);
+  const nu = n - 1 - (2 * p * p + p + 2) / (6 * p);
+  const chiSq = Math.max(0, -nu * logW);
+  const df = p * (p + 1) / 2 - 1;
+  const pValue = chiSq > 0 && df > 0 ? chiSqPValue(chiSq, df) : 1;
+  return { W, chiSq, df, pValue };
+}
+function epsilonCorrections(data) {
+  const n = data.length;
+  const k = data[0].length;
+  const p = k - 1;
+  const sigma = covarianceMatrixCols(data, k);
+  const C = helmertContrasts(k);
+  const CMat = Matrix.fromArray(C);
+  const sigmaMat = Matrix.fromArray(sigma);
+  const S = CMat.multiply(sigmaMat).multiply(CMat.transpose());
+  const lambdas = S.eigen().values;
+  const sumLambda = lambdas.reduce((s, v) => s + v, 0);
+  const sumLambdaSq = lambdas.reduce((s, v) => s + v * v, 0);
+  const gg = sumLambdaSq > 0 ? sumLambda * sumLambda / (p * sumLambdaSq) : 1;
+  const num = n * p * gg - 2;
+  const den = p * (n - 1 - p * gg);
+  const hf = den > 0 ? num / den : 1;
+  const lower = 1 / p;
+  return {
+    gg: Math.max(lower, Math.min(1, gg)),
+    hf: Math.max(lower, Math.min(1, hf))
+  };
+}
+function repeatedMeasuresANOVA(data, options) {
+  const n = data.length;
+  if (n < 2) throw new Error("repeatedMeasuresANOVA: need at least 2 subjects");
+  const k = data[0].length;
+  if (k < 2) throw new Error("repeatedMeasuresANOVA: need at least 2 conditions");
+  for (let i = 1; i < n; i++) {
+    if (data[i].length !== k) {
+      throw new Error(`repeatedMeasuresANOVA: row ${i} has ${data[i].length} columns, expected ${k}`);
+    }
+  }
+  const ciLevel = options?.ciLevel ?? 0.95;
+  const labels = options?.labels ?? Array.from({ length: k }, (_, i) => `C${i + 1}`);
+  let grandSum = 0;
+  for (const row of data) for (const v of row) grandSum += v;
+  const grandMean = grandSum / (n * k);
+  const condMeans = [];
+  const condSds = [];
+  for (let j = 0; j < k; j++) {
+    const col = [];
+    for (let i = 0; i < n; i++) col.push(data[i][j]);
+    condMeans.push(mean(col));
+    condSds.push(sd(col));
+  }
+  const subjMeans = data.map((row) => mean([...row]));
+  let ssTotal = 0;
+  for (const row of data) for (const v of row) ssTotal += (v - grandMean) ** 2;
+  let ssSubjects = 0;
+  for (const sm of subjMeans) ssSubjects += k * (sm - grandMean) ** 2;
+  let ssConditions = 0;
+  for (const cm of condMeans) ssConditions += n * (cm - grandMean) ** 2;
+  const ssError = ssTotal - ssSubjects - ssConditions;
+  const dfConditions = k - 1;
+  const dfSubjects = n - 1;
+  const dfError = dfConditions * dfSubjects;
+  const msConditions = ssConditions / dfConditions;
+  const msError = dfError > 0 ? ssError / dfError : 0;
+  const F = msError > 0 ? msConditions / msError : msConditions > 0 ? Infinity : 0;
+  let sphericity = null;
+  let epsilonGG = 1;
+  let epsilonHF = 1;
+  if (k >= 3) {
+    try {
+      sphericity = mauchlysTest(data);
+      const eps = epsilonCorrections(data);
+      epsilonGG = eps.gg;
+      epsilonHF = eps.hf;
+    } catch {
+      sphericity = null;
+    }
+  }
+  const sphericityViolated = sphericity !== null && sphericity.pValue < 0.05;
+  const correction = sphericityViolated ? "Greenhouse-Geisser" : "none";
+  let df1 = dfConditions;
+  let df2 = dfError;
+  if (correction === "Greenhouse-Geisser") {
+    df1 = epsilonGG * dfConditions;
+    df2 = epsilonGG * dfError;
+  }
+  const pValue = fDistPValue(F, df1, df2);
+  const partialEta2 = ssConditions + ssError > 0 ? ssConditions / (ssConditions + ssError) : 0;
+  const effectSize = {
+    value: partialEta2,
+    name: "\u03B7\xB2_p",
+    interpretation: interpretEtaSq(partialEta2)
+  };
+  const formatted = formatRMANOVA(
+    F,
+    df1,
+    df2,
+    pValue,
+    partialEta2,
+    "\u03B7\xB2_p",
+    correction !== "none" ? correction : void 0
+  );
+  const conditions = labels.map((label, j) => ({
+    label,
+    mean: condMeans[j],
+    sd: condSds[j],
+    n
+  }));
+  return {
+    testName: "Repeated Measures ANOVA",
+    statistic: F,
+    df: [df1, df2],
+    pValue,
+    effectSize,
+    ci: [NaN, NaN],
+    ciLevel,
+    n: n * k,
+    formatted,
+    conditions,
+    ssConditions,
+    ssSubjects,
+    ssError,
+    ssTotal,
+    dfConditions,
+    dfSubjects,
+    dfError,
+    msConditions,
+    msError,
+    sphericity,
+    epsilonGG,
+    epsilonHF,
+    ...correction !== "none" ? { correctedDf: [df1, df2] } : {},
+    correction
   };
 }
 
@@ -4450,11 +4684,15 @@ export {
   goodnessOfFit,
   tTestIndependent,
   tTestPaired,
+  leveneTest,
   oneWayANOVA,
   mannWhitneyU,
   wilcoxonSignedRank,
   kruskalWallis,
   friedmanTest,
+  mauchlysTest,
+  epsilonCorrections,
+  repeatedMeasuresANOVA,
   tukeyHSD,
   gamesHowell,
   dunnTest,
@@ -4497,4 +4735,4 @@ export {
   runEFA,
   runCFA
 };
-//# sourceMappingURL=chunk-UNPMBU3W.js.map
+//# sourceMappingURL=chunk-VFX4ZNZG.js.map

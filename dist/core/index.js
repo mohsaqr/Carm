@@ -23,6 +23,7 @@ import {
   formatLMM,
   formatMannWhitney,
   formatP,
+  formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
@@ -57,7 +58,7 @@ import {
   tDistPValue,
   tDistQuantile,
   variance
-} from "../chunk-CPNEYYXS.js";
+} from "../chunk-IFAUJ3FI.js";
 export {
   Matrix,
   adjustPValues,
@@ -79,6 +80,7 @@ export {
   formatLMM,
   formatMannWhitney,
   formatP,
+  formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
