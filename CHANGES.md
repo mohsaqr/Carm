@@ -1,3 +1,24 @@
+### 2026-02-27 — Document cross-validation tricks in 5 documentation files
+
+**CARM-PROMPT.md:**
+- Added §10 subsections: quality-based comparison for non-convex optimization, multi-start strategy table, R swilk.c polynomial conventions
+
+**validation/CROSSVAL-RESULTS.md:**
+- Updated executive summary from 123/167 (73.7%) to 169/169 (100%)
+- Updated all 7 round detail tables to reflect current 100% pass rates
+- Replaced "Classification of Failures" with "All Issues Resolved" summary table
+- Documented 3 key cross-validation techniques
+
+**validation/DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md:**
+- Rewrote §2.4: replaced old buggy `polynomialEval` code with correct `polyAsc`, R's coefficient arrays, n=3 exact formula, historical bug note
+
+**validation/GMM-TECHNICAL-REPORT.md:**
+- Extended §20.2 with "Cross-validation resolution (2026-02-27)": 200-start + quality-based comparison achieving 100%
+
+**validation/VALIDATION-STRATEGY.md:**
+- Added "Cross-Validation Tricks for Non-Convex Optimization" section (quality-based comparison, multi-start strategy, swilk.c conventions)
+- Updated algorithm differences table with K-Means, GMM, Shapiro-Wilk entries
+
 ### 2026-02-27 — Fix Shapiro-Wilk p-value: 40/41→41/41 t-test (169/169 total — ALL PERFECT)
 
 **src/stats/descriptive.ts:**

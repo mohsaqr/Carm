@@ -8,6 +8,12 @@
   - Rewrote `shapiroWilkPValue()` with R's actual swilk.c coefficients
   - Added n=3 exact formula, fixed n≤11 polynomial (was using 1/n instead of n)
 - **Build fix**: esbuild direct invocation when tsup fails on Node.js v25
+- **Documentation update**: Added cross-validation tricks to 5 documentation files
+  - `CARM-PROMPT.md`: Quality-based comparison, multi-start strategy, swilk.c conventions
+  - `validation/CROSSVAL-RESULTS.md`: Updated 123/167 → 169/169 (100%)
+  - `validation/DESCRIPTIVE-COMPARISON-TECHNICAL-REPORT.md`: Rewrote §2.4 with correct polyAsc code
+  - `validation/GMM-TECHNICAL-REPORT.md`: Extended §20.2 with quality-based resolution
+  - `validation/VALIDATION-STRATEGY.md`: New "Cross-Validation Tricks" section
 
 ## Current State
 
@@ -45,7 +51,7 @@
 - No DTS generation with esbuild (`.d.ts` files are stale from last tsup build)
 
 ## Context
-- Branch: `dev-clean`
+- Branch: `main`
 - Node.js v25.5.0 (only version available)
 - R 4.5.1 with Saqrlab, dunn.test, rstatix, lme4, mclust, lavaan, ppcor, car
 - Run harnesses: `npx tsx validation/ts-harness/<name>-report.ts`
