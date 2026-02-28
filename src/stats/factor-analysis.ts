@@ -134,8 +134,10 @@ function computeCorrelationMatrix(
 export interface EFAOptions {
   readonly nFactors?: number               // auto-detect via parallel analysis if omitted
   readonly extraction?: 'paf' | 'ml'       // default: 'ml'
-  readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'none'  // default: 'promax'
+  readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'quartimax' | 'target' | 'none'  // default: 'promax'
   readonly geominDelta?: number              // geomin epsilon/delta (default: 0.001, matches lavaan)
+  readonly targetMatrix?: readonly (readonly number[])[]   // p×k target loadings for target rotation
+  readonly targetWeight?: readonly (readonly number[])[]   // p×k weights (1=specified, 0=free) for target rotation
   readonly seed?: number                   // default: 42 (for parallel analysis)
   readonly maxIter?: number                // default: 1000
   readonly tol?: number                    // default: 1e-6
@@ -734,6 +736,61 @@ function criterionGeomin(L: number[][], delta: number): CriterionResult {
 }
 
 /**
+ * Quartimax criterion.
+ * f = -(1/4) Σ_ij λ⁴_ij
+ * Gq_ij = -λ³_ij
+ *
+ * Reference: Neuhaus & Wrigley (1954), JASA 49:325-332
+ * Implementation matches R GPArotation::vgQ.quartimax exactly.
+ */
+function criterionQuartimax(L: number[][]): CriterionResult {
+  const p = L.length, k = L[0]!.length
+  const Gq: number[][] = Array.from({ length: p }, () => new Array<number>(k).fill(0))
+  let f = 0
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j < k; j++) {
+      const lij = L[i]![j]!
+      const l2 = lij * lij
+      f -= l2 * l2
+      Gq[i]![j] = -(lij * l2)  // -λ³
+    }
+  }
+  f /= 4
+  return { f, Gq }
+}
+
+/**
+ * Target rotation criterion (partially specified target / Procrustes).
+ * f = Σ_ij w²_ij (λ_ij - h_ij)²
+ * Gq_ij = 2 w²_ij (λ_ij - h_ij)
+ *
+ * When weight is omitted, all w=1 (full target, equivalent to vgQ.targetQ).
+ * When weight has 0s for unspecified cells, only specified cells contribute.
+ *
+ * Reference: Browne (1972), Psychometrika 37(2):123-138
+ * Implementation matches R GPArotation::vgQ.pst (partially specified target).
+ */
+function criterionTarget(
+  L: number[][],
+  target: readonly (readonly number[])[],
+  weight?: readonly (readonly number[])[]
+): CriterionResult {
+  const p = L.length, k = L[0]!.length
+  const Gq: number[][] = Array.from({ length: p }, () => new Array<number>(k).fill(0))
+  let f = 0
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j < k; j++) {
+      const w = weight ? weight[i]![j]! : 1
+      const w2 = w * w
+      const diff = L[i]![j]! - target[i]![j]!
+      f += w2 * diff * diff
+      Gq[i]![j] = 2 * w2 * diff
+    }
+  }
+  return { f, Gq }
+}
+
+/**
  * General oblique rotation via gradient projection (GPFoblq).
  * Matches R's GPArotation::GPFoblq algorithm exactly:
  *   - Rotated loadings: L = A × inv(T)'  (oblique parameterization)
@@ -753,7 +810,8 @@ function gpfOblq(
   criterion: (L: number[][]) => CriterionResult,
   maxIter: number,
   tol: number,
-  Tinit?: number[][]
+  Tinit?: number[][],
+  reflect: boolean = true
 ): { rotated: number[][]; T: number[][]; Phi: number[][]; f: number } {
   const k = A[0]!.length
   const Amat = Matrix.fromArray(A)
@@ -875,17 +933,21 @@ function gpfOblq(
   // lavaan::lav_matrix_rotate.R performs this after rotation to ensure
   // primary loadings are positive, improving interpretability and matching
   // lavaan's basin selection behavior.
-  for (let j = 0; j < k; j++) {
-    let colSum = 0
-    for (let i = 0; i < Larr.length; i++) colSum += Larr[i]![j]!
-    if (colSum < 0) {
-      // Flip loadings column j
-      for (let i = 0; i < Larr.length; i++) Larr[i]![j] = -Larr[i]![j]!
-      // Flip corresponding Phi row and column (off-diagonals only)
-      for (let m = 0; m < k; m++) {
-        if (m !== j) {
-          Phi[j]![m] = -Phi[j]![m]!
-          Phi[m]![j] = -Phi[m]![j]!
+  // Disabled for target rotation: reflection can move loadings away from the
+  // target and invalidates the criterion value used for multi-start selection.
+  if (reflect) {
+    for (let j = 0; j < k; j++) {
+      let colSum = 0
+      for (let i = 0; i < Larr.length; i++) colSum += Larr[i]![j]!
+      if (colSum < 0) {
+        // Flip loadings column j
+        for (let i = 0; i < Larr.length; i++) Larr[i]![j] = -Larr[i]![j]!
+        // Flip corresponding Phi row and column (off-diagonals only)
+        for (let m = 0; m < k; m++) {
+          if (m !== j) {
+            Phi[j]![m] = -Phi[j]![m]!
+            Phi[m]![j] = -Phi[m]![j]!
+          }
         }
       }
     }
@@ -916,6 +978,169 @@ function computeGPFoblqGradient(L: number[][], Gq: number[][], Tmat: Matrix): nu
     Array.from({ length: inner.cols }, (_, j) => -inner.get(j, i))
   )
   return G
+}
+
+/**
+ * General orthogonal rotation via gradient projection (GPForth).
+ * Matches R's GPArotation::GPForth algorithm:
+ *   - Rotated loadings: L = A × T  (orthogonal parameterization)
+ *   - Gradient w.r.t. T: G = A' × Gq
+ *   - Orthogonal projection: Gp = G − T × sym(T'G)
+ *     where sym(M) = (M + M') / 2
+ *   - Step update via SVD: T = U × V'  (polar decomposition of X = T − α·Gp)
+ *   - Phi = I (identity — orthogonal rotation)
+ *
+ * Reference: Bernaards & Jennrich (2005), "Gradient projection algorithms
+ *   and software for arbitrary rotation criteria in factor analysis."
+ *   Educational and Psychological Measurement, 65(5):676-696.
+ * Implementation: R GPArotation::GPForth (v2024.3-1)
+ */
+function gpfOrth(
+  A: number[][],
+  criterion: (L: number[][]) => CriterionResult,
+  maxIter: number,
+  tol: number,
+  Tinit?: number[][]
+): { rotated: number[][]; T: number[][]; Phi: number[][]; f: number } {
+  const p = A.length
+  const k = A[0]!.length
+
+  // Initialize T from Tinit or default to I_{k×k}
+  let Tarr: number[][] = Tinit
+    ? Tinit.map(r => [...r])
+    : Array.from({ length: k }, (_, i) =>
+        Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))
+      )
+
+  // Initial rotated loadings: L = A × T
+  let Larr: number[][] = Array.from({ length: p }, (_, i) =>
+    Array.from({ length: k }, (_, j) => {
+      let s = 0
+      for (let m = 0; m < k; m++) s += A[i]![m]! * Tarr[m]![j]!
+      return s
+    })
+  )
+
+  // Evaluate criterion
+  let vgQ = criterion(Larr)
+  let f = vgQ.f
+
+  // Initial gradient: G = A' × Gq  (k×p × p×k = k×k)
+  let G: number[][] = Array.from({ length: k }, (_, i) =>
+    Array.from({ length: k }, (_, j) => {
+      let s = 0
+      for (let r = 0; r < p; r++) s += A[r]![i]! * vgQ.Gq[r]![j]!
+      return s
+    })
+  )
+
+  let al = 1.0
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Orthogonal projection: Gp = G - T × sym(T'G)
+    // M = T'G  (k×k)
+    const M: number[][] = Array.from({ length: k }, (_, i) =>
+      Array.from({ length: k }, (_, j) => {
+        let s = 0
+        for (let r = 0; r < k; r++) s += Tarr[r]![i]! * G[r]![j]!
+        return s
+      })
+    )
+    // sym(M) = (M + M') / 2
+    const sym: number[][] = Array.from({ length: k }, (_, i) =>
+      Array.from({ length: k }, (_, j) => (M[i]![j]! + M[j]![i]!) / 2)
+    )
+    // Gp = G - T × sym
+    const Gp: number[][] = Array.from({ length: k }, (_, i) =>
+      Array.from({ length: k }, (_, j) => {
+        let s = 0
+        for (let m = 0; m < k; m++) s += Tarr[i]![m]! * sym[m]![j]!
+        return G[i]![j]! - s
+      })
+    )
+
+    // Convergence: s = ||Gp||_F
+    let s2 = 0
+    for (let i = 0; i < k; i++)
+      for (let j = 0; j < k; j++) s2 += Gp[i]![j]! ** 2
+    const s = Math.sqrt(s2)
+    if (s < tol) break
+
+    // Line search with backtracking (Armijo condition)
+    al = 2 * al
+    let Tnew: number[][] = Tarr
+    let Lnew = Larr
+    let vgQnew = vgQ
+
+    for (let lsIter = 0; lsIter <= 10; lsIter++) {
+      // X = T - al * Gp
+      const X: number[][] = Array.from({ length: k }, (_, i) =>
+        Array.from({ length: k }, (_, j) => Tarr[i]![j]! - al * Gp[i]![j]!)
+      )
+
+      // SVD of X → T_new = U × V'  (polar decomposition, ensures orthogonality)
+      const Xmat = Matrix.fromArray(X)
+      const { U: Umat, V: Vmat } = Xmat.svd()
+      const Uarr = Umat.toArray()
+      const Varr = Vmat.toArray()
+
+      // T_new = U × V'
+      const Tt: number[][] = Array.from({ length: k }, (_, i) =>
+        Array.from({ length: k }, (_, j) => {
+          let ss = 0
+          for (let m = 0; m < k; m++) ss += Uarr[i]![m]! * Varr[j]![m]!
+          return ss
+        })
+      )
+
+      // L_new = A × T_new
+      Lnew = Array.from({ length: p }, (_, i) =>
+        Array.from({ length: k }, (_, j) => {
+          let ss = 0
+          for (let m = 0; m < k; m++) ss += A[i]![m]! * Tt[m]![j]!
+          return ss
+        })
+      )
+
+      // Evaluate criterion
+      vgQnew = criterion(Lnew)
+      Tnew = Tt
+
+      const improvement = f - vgQnew.f
+      if (improvement > 0.5 * s2 * al) break
+      al = al / 2
+    }
+
+    // Always update after line search (even if Armijo not satisfied)
+    Tarr = Tnew
+    Larr = Lnew
+    f = vgQnew.f
+
+    // G = A' × Gq
+    G = Array.from({ length: k }, (_, i) =>
+      Array.from({ length: k }, (_, j) => {
+        let ss = 0
+        for (let r = 0; r < p; r++) ss += A[r]![i]! * vgQnew.Gq[r]![j]!
+        return ss
+      })
+    )
+  }
+
+  // Phi = I for orthogonal rotation
+  const Phi: number[][] = Array.from({ length: k }, (_, i) =>
+    Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))
+  )
+
+  // Reflect columns: flip factor if sum of loadings is negative
+  for (let j = 0; j < k; j++) {
+    let colSum = 0
+    for (let i = 0; i < Larr.length; i++) colSum += Larr[i]![j]!
+    if (colSum < 0) {
+      for (let i = 0; i < Larr.length; i++) Larr[i]![j] = -Larr[i]![j]!
+    }
+  }
+
+  return { rotated: Larr, T: Tarr, Phi, f }
 }
 
 /**
@@ -1042,7 +1267,9 @@ function applyRotation(
   tol: number,
   geominDelta: number = 0.001,
   randomStarts: number = 1,
-  seed: number = 42
+  seed: number = 42,
+  targetMatrix?: readonly (readonly number[])[],
+  targetWeight?: readonly (readonly number[])[]
 ): { rotated: number[][]; Phi: number[][] } {
   const k = loadings[0]!.length
 
@@ -1070,6 +1297,18 @@ function applyRotation(
   if (method === 'geomin') {
     const criterionFn = (L: number[][]) => criterionGeomin(L, geominDelta)
     return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed)
+  }
+
+  if (method === 'quartimax') {
+    return gpfOrthWithRandomStarts(loadings, criterionQuartimax, maxIter, tol, k, randomStarts, seed)
+  }
+
+  if (method === 'target') {
+    if (!targetMatrix) throw new Error('runEFA: target rotation requires targetMatrix')
+    const criterionFn = (L: number[][]) => criterionTarget(L, targetMatrix, targetWeight)
+    // reflect=false: column reflection can move loadings away from target and
+    // invalidate criterion values used for multi-start selection
+    return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed, false)
   }
 
   if (method === 'promax') {
@@ -1128,15 +1367,16 @@ function gpfOblqWithRandomStarts(
   tol: number,
   k: number,
   randomStarts: number,
-  seed: number
+  seed: number,
+  reflect: boolean = true
 ): { rotated: number[][]; Phi: number[][] } {
   // Start 0: T = I (always, for backward compatibility with GPArotation)
-  let best = gpfOblq(loadings, criterionFn, maxIter, tol)
+  let best = gpfOblq(loadings, criterionFn, maxIter, tol, undefined, reflect)
 
   // Start 1: T = Q from QR(A^T) — lower-triangular start matching lavaan
   const Tqr = qrStartMatrix(loadings, k)
   if (Tqr) {
-    const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr)
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr, reflect)
     if (result.f < best.f) best = result
   }
 
@@ -1145,7 +1385,7 @@ function gpfOblqWithRandomStarts(
   // a starting point explores a basin that pure random starts may miss.
   {
     const vmx = rotateVarimax(loadings, maxIter, tol)
-    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T)
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T, reflect)
     if (result.f < best.f) best = result
   }
 
@@ -1153,7 +1393,53 @@ function gpfOblqWithRandomStarts(
     const rng = new PRNG(seed)
     for (let s = 3; s < randomStarts; s++) {
       const Trand = randomOrthogonalMatrix(k, rng)
-      const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand)
+      const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand, reflect)
+      if (result.f < best.f) best = result
+    }
+  }
+
+  return { rotated: best.rotated, Phi: best.Phi }
+}
+
+/**
+ * Run gpfOrth with optional random starting matrices.
+ * Start 0 always uses T=I (deterministic, matches R/GPArotation).
+ * Start 1 uses T from QR(A^T) — lower-triangular start.
+ * Start 2 uses T from varimax — orthogonal simple-structure initialization.
+ * Starts 3..randomStarts-1 use Haar-distributed random orthogonal matrices.
+ * Returns the solution with the lowest criterion value.
+ */
+function gpfOrthWithRandomStarts(
+  loadings: number[][],
+  criterionFn: (L: number[][]) => CriterionResult,
+  maxIter: number,
+  tol: number,
+  k: number,
+  randomStarts: number,
+  seed: number
+): { rotated: number[][]; Phi: number[][] } {
+  // Start 0: T = I
+  let best = gpfOrth(loadings, criterionFn, maxIter, tol)
+
+  // Start 1: T = Q from QR(A^T)
+  const Tqr = qrStartMatrix(loadings, k)
+  if (Tqr) {
+    const result = gpfOrth(loadings, criterionFn, maxIter, tol, Tqr)
+    if (result.f < best.f) best = result
+  }
+
+  // Start 2: T from varimax
+  {
+    const vmx = rotateVarimax(loadings, maxIter, tol)
+    const result = gpfOrth(loadings, criterionFn, maxIter, tol, vmx.T)
+    if (result.f < best.f) best = result
+  }
+
+  if (randomStarts > 3) {
+    const rng = new PRNG(seed)
+    for (let s = 3; s < randomStarts; s++) {
+      const Trand = randomOrthogonalMatrix(k, rng)
+      const result = gpfOrth(loadings, criterionFn, maxIter, tol, Trand)
       if (result.f < best.f) best = result
     }
   }
@@ -1762,6 +2048,24 @@ export function runEFA(
   if (nFactors < 1) throw new Error('runEFA: nFactors must be at least 1')
   if (nFactors >= d) throw new Error('runEFA: nFactors must be less than number of variables')
 
+  // Validate target rotation
+  if (rotation === 'target') {
+    if (!options?.targetMatrix) {
+      throw new Error('runEFA: target rotation requires targetMatrix (p × k)')
+    }
+    if (options.targetMatrix.length !== d) {
+      throw new Error(`runEFA: targetMatrix must have ${d} rows (one per variable), got ${options.targetMatrix.length}`)
+    }
+    if (options.targetMatrix[0]!.length !== nFactors) {
+      throw new Error(`runEFA: targetMatrix must have ${nFactors} columns (one per factor), got ${options.targetMatrix[0]!.length}`)
+    }
+    if (options.targetWeight) {
+      if (options.targetWeight.length !== d || options.targetWeight[0]!.length !== nFactors) {
+        throw new Error(`runEFA: targetWeight dimensions must match targetMatrix (${d} × ${nFactors})`)
+      }
+    }
+  }
+
   // Extract
   const extracted = extraction === 'ml'
     ? extractML(R, nFactors, maxIter, tol)
@@ -1788,8 +2092,18 @@ export function runEFA(
     return row.map(v => v / scale)
   })
 
+  // Standardize target matrix alongside loadings (same scale transformation)
+  let targetForRotation: readonly (readonly number[])[] | undefined
+  if (options?.targetMatrix) {
+    targetForRotation = options.targetMatrix.map((row, i) => {
+      const scale = Math.sqrt(ovVar[i]!)
+      return row.map(v => v / scale)
+    })
+  }
+
   const { rotated: rotatedStd, Phi } = applyRotation(
-    loadingsForRotation, rotation, maxIter, tol, geominDelta, randomStarts, seed
+    loadingsForRotation, rotation, maxIter, tol, geominDelta, randomStarts, seed,
+    targetForRotation, options?.targetWeight
   )
 
   // De-standardize after rotation (restore original scale)

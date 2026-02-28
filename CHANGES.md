@@ -1,3 +1,20 @@
+### 2026-03-01 — EFA: quartimax and target rotation
+
+- `src/stats/factor-analysis.ts`:
+  - Added `criterionQuartimax(L)`: quartimax criterion f = -(1/4) Σ λ⁴, Gq = -λ³. Matches R GPArotation::vgQ.quartimax.
+  - Added `criterionTarget(L, target, weight?)`: Procrustes target criterion f = Σ w²(λ-h)². Matches R GPArotation::vgQ.pst / vgQ.targetQ.
+  - Added `gpfOrth(A, criterion, maxIter, tol, Tinit?)`: orthogonal gradient projection solver matching R GPArotation::GPForth. Uses SVD polar decomposition for step updates, symmetric projection for gradient, L=AT parameterization.
+  - Added `gpfOrthWithRandomStarts(...)`: multi-start wrapper for gpfOrth with same strategy as oblique: T=I, QR, varimax, random orthogonal starts.
+  - Modified `EFAOptions.rotation` to include `'quartimax' | 'target'`. Added `targetMatrix` and `targetWeight` options.
+  - Modified `applyRotation()` to dispatch quartimax → gpfOrthWithRandomStarts and target → gpfOblqWithRandomStarts (with reflect=false).
+  - Modified `runEFA()` to validate target dimensions, standardize target matrix alongside loadings, and pass through target parameters.
+  - Added `reflect` parameter to `gpfOblq()` and `gpfOblqWithRandomStarts()` — disabled for target rotation since column reflection can move loadings away from the target and invalidate criterion values used for multi-start selection.
+- `tests/stats/fa-quartimax-target.test.ts`: 14 new tests covering quartimax orthogonality, simple structure recovery, target convergence, dimension validation, error handling.
+- `validation/r-reference/fa-quartimax-target-ref.R`: R reference script generating quartimax (GPForth) and target (targetQ) fixtures.
+- `validation/ts-harness/fa-quartimax-target-crossval.ts`: Cross-validation harness with sign-alignment for target rotation.
+- Tests: 798/798 pass (784 original + 14 new), 200/200 geomin crossval pass
+- R cross-validation: quartimax 100/100, target 93/100 (7 failures are GPA basin differences, same phenomenon as geomin ~2.5% cases)
+
 ### 2026-02-28 — EFA geomin: model-implied standardization + column reflection
 
 - `src/stats/factor-analysis.ts`:

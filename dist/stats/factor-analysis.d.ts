@@ -18,8 +18,10 @@ import type { FADiagnostics, FAResult, CFAResult } from '../core/types.js';
 export interface EFAOptions {
     readonly nFactors?: number;
     readonly extraction?: 'paf' | 'ml';
-    readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'none';
+    readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'quartimax' | 'target' | 'none';
     readonly geominDelta?: number;
+    readonly targetMatrix?: readonly (readonly number[])[];
+    readonly targetWeight?: readonly (readonly number[])[];
     readonly seed?: number;
     readonly maxIter?: number;
     readonly tol?: number;

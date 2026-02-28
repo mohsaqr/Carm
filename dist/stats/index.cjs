@@ -6243,7 +6243,37 @@ function criterionGeomin(L, delta) {
   }
   return { f, Gq };
 }
-function gpfOblq(A, criterion, maxIter, tol, Tinit) {
+function criterionQuartimax(L) {
+  const p = L.length, k = L[0].length;
+  const Gq = Array.from({ length: p }, () => new Array(k).fill(0));
+  let f = 0;
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j < k; j++) {
+      const lij = L[i][j];
+      const l2 = lij * lij;
+      f -= l2 * l2;
+      Gq[i][j] = -(lij * l2);
+    }
+  }
+  f /= 4;
+  return { f, Gq };
+}
+function criterionTarget(L, target, weight) {
+  const p = L.length, k = L[0].length;
+  const Gq = Array.from({ length: p }, () => new Array(k).fill(0));
+  let f = 0;
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j < k; j++) {
+      const w = weight ? weight[i][j] : 1;
+      const w2 = w * w;
+      const diff = L[i][j] - target[i][j];
+      f += w2 * diff * diff;
+      Gq[i][j] = 2 * w2 * diff;
+    }
+  }
+  return { f, Gq };
+}
+function gpfOblq(A, criterion, maxIter, tol, Tinit, reflect = true) {
   const k = A[0].length;
   const Amat = Matrix.fromArray(A);
   let Tarr = Tinit ? Tinit.map((r) => [...r]) : Array.from(
@@ -6328,15 +6358,17 @@ function gpfOblq(A, criterion, maxIter, tol, Tinit) {
       return s;
     })
   );
-  for (let j = 0; j < k; j++) {
-    let colSum = 0;
-    for (let i = 0; i < Larr.length; i++) colSum += Larr[i][j];
-    if (colSum < 0) {
-      for (let i = 0; i < Larr.length; i++) Larr[i][j] = -Larr[i][j];
-      for (let m = 0; m < k; m++) {
-        if (m !== j) {
-          Phi[j][m] = -Phi[j][m];
-          Phi[m][j] = -Phi[m][j];
+  if (reflect) {
+    for (let j = 0; j < k; j++) {
+      let colSum = 0;
+      for (let i = 0; i < Larr.length; i++) colSum += Larr[i][j];
+      if (colSum < 0) {
+        for (let i = 0; i < Larr.length; i++) Larr[i][j] = -Larr[i][j];
+        for (let m = 0; m < k; m++) {
+          if (m !== j) {
+            Phi[j][m] = -Phi[j][m];
+            Phi[m][j] = -Phi[m][j];
+          }
         }
       }
     }
@@ -6358,6 +6390,118 @@ function computeGPFoblqGradient(L, Gq, Tmat) {
     (_, i) => Array.from({ length: inner.cols }, (_2, j) => -inner.get(j, i))
   );
   return G;
+}
+function gpfOrth(A, criterion, maxIter, tol, Tinit) {
+  const p = A.length;
+  const k = A[0].length;
+  let Tarr = Tinit ? Tinit.map((r) => [...r]) : Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  let Larr = Array.from(
+    { length: p },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      let s = 0;
+      for (let m = 0; m < k; m++) s += A[i][m] * Tarr[m][j];
+      return s;
+    })
+  );
+  let vgQ = criterion(Larr);
+  let f = vgQ.f;
+  let G = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => {
+      let s = 0;
+      for (let r = 0; r < p; r++) s += A[r][i] * vgQ.Gq[r][j];
+      return s;
+    })
+  );
+  let al = 1;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const M = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s3 = 0;
+        for (let r = 0; r < k; r++) s3 += Tarr[r][i] * G[r][j];
+        return s3;
+      })
+    );
+    const sym = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => (M[i][j] + M[j][i]) / 2)
+    );
+    const Gp = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let s3 = 0;
+        for (let m = 0; m < k; m++) s3 += Tarr[i][m] * sym[m][j];
+        return G[i][j] - s3;
+      })
+    );
+    let s2 = 0;
+    for (let i = 0; i < k; i++)
+      for (let j = 0; j < k; j++) s2 += Gp[i][j] ** 2;
+    const s = Math.sqrt(s2);
+    if (s < tol) break;
+    al = 2 * al;
+    let Tnew = Tarr;
+    let Lnew = Larr;
+    let vgQnew = vgQ;
+    for (let lsIter = 0; lsIter <= 10; lsIter++) {
+      const X = Array.from(
+        { length: k },
+        (_, i) => Array.from({ length: k }, (_2, j) => Tarr[i][j] - al * Gp[i][j])
+      );
+      const Xmat = Matrix.fromArray(X);
+      const { U: Umat, V: Vmat } = Xmat.svd();
+      const Uarr = Umat.toArray();
+      const Varr = Vmat.toArray();
+      const Tt = Array.from(
+        { length: k },
+        (_, i) => Array.from({ length: k }, (_2, j) => {
+          let ss = 0;
+          for (let m = 0; m < k; m++) ss += Uarr[i][m] * Varr[j][m];
+          return ss;
+        })
+      );
+      Lnew = Array.from(
+        { length: p },
+        (_, i) => Array.from({ length: k }, (_2, j) => {
+          let ss = 0;
+          for (let m = 0; m < k; m++) ss += A[i][m] * Tt[m][j];
+          return ss;
+        })
+      );
+      vgQnew = criterion(Lnew);
+      Tnew = Tt;
+      const improvement = f - vgQnew.f;
+      if (improvement > 0.5 * s2 * al) break;
+      al = al / 2;
+    }
+    Tarr = Tnew;
+    Larr = Lnew;
+    f = vgQnew.f;
+    G = Array.from(
+      { length: k },
+      (_, i) => Array.from({ length: k }, (_2, j) => {
+        let ss = 0;
+        for (let r = 0; r < p; r++) ss += A[r][i] * vgQnew.Gq[r][j];
+        return ss;
+      })
+    );
+  }
+  const Phi = Array.from(
+    { length: k },
+    (_, i) => Array.from({ length: k }, (_2, j) => i === j ? 1 : 0)
+  );
+  for (let j = 0; j < k; j++) {
+    let colSum = 0;
+    for (let i = 0; i < Larr.length; i++) colSum += Larr[i][j];
+    if (colSum < 0) {
+      for (let i = 0; i < Larr.length; i++) Larr[i][j] = -Larr[i][j];
+    }
+  }
+  return { rotated: Larr, T: Tarr, Phi, f };
 }
 function rotatePromax(L, power, maxIter, tol) {
   const d = L.length;
@@ -6423,7 +6567,7 @@ function rotatePromax(L, power, maxIter, tol) {
   const Phi = PhiMat.toArray();
   return { rotated, T: Tarr, Phi };
 }
-function applyRotation(loadings, method, maxIter, tol, geominDelta = 1e-3, randomStarts = 1, seed = 42) {
+function applyRotation(loadings, method, maxIter, tol, geominDelta = 1e-3, randomStarts = 1, seed = 42, targetMatrix, targetWeight) {
   const k = loadings[0].length;
   if (method === "none") {
     const Phi = Array.from(
@@ -6448,6 +6592,14 @@ function applyRotation(loadings, method, maxIter, tol, geominDelta = 1e-3, rando
   if (method === "geomin") {
     const criterionFn = (L) => criterionGeomin(L, geominDelta);
     return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed);
+  }
+  if (method === "quartimax") {
+    return gpfOrthWithRandomStarts(loadings, criterionQuartimax, maxIter, tol, k, randomStarts, seed);
+  }
+  if (method === "target") {
+    if (!targetMatrix) throw new Error("runEFA: target rotation requires targetMatrix");
+    const criterionFn = (L) => criterionTarget(L, targetMatrix, targetWeight);
+    return gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed, false);
   }
   if (method === "promax") {
     const { rotated, Phi } = rotatePromax(loadings, 4, maxIter, tol);
@@ -6475,23 +6627,45 @@ function qrStartMatrix(A, k) {
   }
   return Q;
 }
-function gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed) {
-  let best = gpfOblq(loadings, criterionFn, maxIter, tol);
+function gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed, reflect = true) {
+  let best = gpfOblq(loadings, criterionFn, maxIter, tol, void 0, reflect);
   const Tqr = qrStartMatrix(loadings, k);
   if (Tqr) {
-    const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr);
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr, reflect);
     if (result.f < best.f) best = result;
   }
   {
     const vmx = rotateVarimax(loadings, maxIter, tol);
-    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T);
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T, reflect);
     if (result.f < best.f) best = result;
   }
   if (randomStarts > 3) {
     const rng = new PRNG(seed);
     for (let s = 3; s < randomStarts; s++) {
       const Trand = randomOrthogonalMatrix(k, rng);
-      const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand);
+      const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand, reflect);
+      if (result.f < best.f) best = result;
+    }
+  }
+  return { rotated: best.rotated, Phi: best.Phi };
+}
+function gpfOrthWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomStarts, seed) {
+  let best = gpfOrth(loadings, criterionFn, maxIter, tol);
+  const Tqr = qrStartMatrix(loadings, k);
+  if (Tqr) {
+    const result = gpfOrth(loadings, criterionFn, maxIter, tol, Tqr);
+    if (result.f < best.f) best = result;
+  }
+  {
+    const vmx = rotateVarimax(loadings, maxIter, tol);
+    const result = gpfOrth(loadings, criterionFn, maxIter, tol, vmx.T);
+    if (result.f < best.f) best = result;
+  }
+  if (randomStarts > 3) {
+    const rng = new PRNG(seed);
+    for (let s = 3; s < randomStarts; s++) {
+      const Trand = randomOrthogonalMatrix(k, rng);
+      const result = gpfOrth(loadings, criterionFn, maxIter, tol, Trand);
       if (result.f < best.f) best = result;
     }
   }
@@ -6899,6 +7073,22 @@ function runEFA(data, options) {
   }
   if (nFactors < 1) throw new Error("runEFA: nFactors must be at least 1");
   if (nFactors >= d) throw new Error("runEFA: nFactors must be less than number of variables");
+  if (rotation === "target") {
+    if (!options?.targetMatrix) {
+      throw new Error("runEFA: target rotation requires targetMatrix (p \xD7 k)");
+    }
+    if (options.targetMatrix.length !== d) {
+      throw new Error(`runEFA: targetMatrix must have ${d} rows (one per variable), got ${options.targetMatrix.length}`);
+    }
+    if (options.targetMatrix[0].length !== nFactors) {
+      throw new Error(`runEFA: targetMatrix must have ${nFactors} columns (one per factor), got ${options.targetMatrix[0].length}`);
+    }
+    if (options.targetWeight) {
+      if (options.targetWeight.length !== d || options.targetWeight[0].length !== nFactors) {
+        throw new Error(`runEFA: targetWeight dimensions must match targetMatrix (${d} \xD7 ${nFactors})`);
+      }
+    }
+  }
   const extracted = extraction === "ml" ? extractML(R, nFactors, maxIter, tol) : extractPAF(R, nFactors, maxIter, tol);
   const ovVar = new Float64Array(d);
   for (let i = 0; i < d; i++) {
@@ -6911,6 +7101,13 @@ function runEFA(data, options) {
     const scale = Math.sqrt(ovVar[i]);
     return row.map((v) => v / scale);
   });
+  let targetForRotation;
+  if (options?.targetMatrix) {
+    targetForRotation = options.targetMatrix.map((row, i) => {
+      const scale = Math.sqrt(ovVar[i]);
+      return row.map((v) => v / scale);
+    });
+  }
   const { rotated: rotatedStd, Phi } = applyRotation(
     loadingsForRotation,
     rotation,
@@ -6918,7 +7115,9 @@ function runEFA(data, options) {
     tol,
     geominDelta,
     randomStarts,
-    seed
+    seed,
+    targetForRotation,
+    options?.targetWeight
   );
   const rotated = rotatedStd.map((row, i) => {
     const scale = Math.sqrt(ovVar[i]);

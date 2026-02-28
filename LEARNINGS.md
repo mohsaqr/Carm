@@ -1,3 +1,34 @@
+## 2026-03-01 (Quartimax and target rotation)
+
+### GPForth orthogonal solver differs from GPFoblq in key ways
+- Parameterization: L = A×T (orth) vs L = A×inv(T)' (oblq)
+- Gradient: G = A'×Gq (orth) vs G = -(L'×Gq×T⁻¹)' (oblq)
+- Projection: Gp = G - T×sym(T'G) where sym(M) = (M+M')/2 (orth) vs Gp = G - T×diag(T⊙G) (oblq)
+- Step update: SVD polar decomposition T = U×V' (orth) vs column normalization (oblq)
+- Phi: always I (orth) vs T'×T (oblq)
+
+### GPArotation::GPForth returns f=NULL
+- The `f` field is NULL in GPForth output. Criterion value must be extracted from `Table[nrow(Table), 2]`.
+- GPFoblq also returns f=NULL; use `Table` instead.
+
+### Column reflection breaks target rotation cross-validation
+- For sign-invariant criteria (geomin, oblimin, quartimax), flipping columns doesn't change the criterion.
+- For target rotation, flipping a column changes the distance to the target matrix.
+- More critically: the `f` value used for multi-start selection is computed BEFORE reflection, so the "best" start may become worst after reflection.
+- Fix: disable column reflection for target rotation via `reflect=false` parameter in `gpfOblq`.
+
+### Target rotation cross-validation requires sign alignment
+- ML extraction can produce arbitrary column signs (±1 per factor). Sign-invariant rotations handle this naturally.
+- Target rotation is NOT sign-invariant: the target was generated from R's sign convention.
+- If Carm's ML extraction produces a different sign for factor j, the target column j has the wrong sign.
+- Fix: compare R's and Carm's unrotated loading column sums, flip target columns where signs disagree.
+- Even with alignment, ~7% of datasets converge to different basins (same phenomenon as geomin).
+
+### R's targetQ() vs GPFoblq(method="pst")
+- `targetQ(L, Target=T)` is a convenience wrapper equivalent to `GPFoblq(L, method="targetQ", methodArgs=list(Target=T))`
+- `pst` (partially specified target) requires an additional `W` weight matrix: `GPFoblq(L, method="pst", methodArgs=list(Target=T, W=W))`
+- Both use `vgQ.pst` internally, but `targetQ` sets `W = matrix(1, p, k)` by default
+
 ## 2026-02-28 (Model-implied standardization + column reflection)
 
 ### Model-implied standardization is nearly a no-op for correlation matrix input
