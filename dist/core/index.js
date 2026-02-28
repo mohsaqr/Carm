@@ -1,8 +1,9 @@
-import "../chunk-5NA2TFPG.js";
+import "../chunk-AD7T42HJ.js";
 import {
   Matrix,
+  PRNG,
   solveLinear
-} from "../chunk-S5HCH6CR.js";
+} from "../chunk-2QCGK45B.js";
 import {
   adjustPValues,
   betaFn,
@@ -11,22 +12,30 @@ import {
   chiSqQuantile,
   clamp,
   cov,
+  digamma,
   fDistCDF,
   fDistPValue,
+  formatANCOVA,
   formatANOVA,
+  formatBinomial,
   formatCFAFit,
   formatCI,
   formatChiSq,
+  formatCochranQ,
   formatCorrelation,
   formatDF,
   formatKruskalWallis,
   formatLMM,
   formatMannWhitney,
+  formatNegBin,
   formatP,
+  formatPoisson,
+  formatProportions,
   formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
+  formatTwoWayANOVA,
   gamma,
   incompleteBeta,
   incompleteGamma,
@@ -57,10 +66,12 @@ import {
   tDistCDF,
   tDistPValue,
   tDistQuantile,
+  trigamma,
   variance
-} from "../chunk-IFAUJ3FI.js";
+} from "../chunk-53ARU5EP.js";
 export {
   Matrix,
+  PRNG,
   adjustPValues,
   betaFn,
   chiSqCDF,
@@ -68,22 +79,30 @@ export {
   chiSqQuantile,
   clamp,
   cov,
+  digamma,
   fDistCDF,
   fDistPValue,
+  formatANCOVA,
   formatANOVA,
+  formatBinomial,
   formatCFAFit,
   formatCI,
   formatChiSq,
+  formatCochranQ,
   formatCorrelation,
   formatDF,
   formatKruskalWallis,
   formatLMM,
   formatMannWhitney,
+  formatNegBin,
   formatP,
+  formatPoisson,
+  formatProportions,
   formatRMANOVA,
   formatRegression,
   formatStat,
   formatTTest,
+  formatTwoWayANOVA,
   gamma,
   incompleteBeta,
   incompleteGamma,
@@ -115,6 +134,7 @@ export {
   tDistCDF,
   tDistPValue,
   tDistQuantile,
+  trigamma,
   variance
 };
 //# sourceMappingURL=index.js.map

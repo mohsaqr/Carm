@@ -3,7 +3,14 @@
  * Simple and multiple OLS, logistic regression, polynomial regression,
  * diagnostics (R², AIC, BIC, VIF, residual plots).
  */
-import type { RegressionResult } from '../core/types.js';
+import { Matrix } from '../core/matrix.js';
+import type { RegressionResult, OrdinalRegressionResult } from '../core/types.js';
+/**
+ * Compute residual sum of squares from a design matrix and response.
+ * RSS = y'y - y'X(X'X)⁻¹X'y = ||y - X·β̂||²
+ * Used by two-way ANOVA and ANCOVA for Type II/III SS via model comparison.
+ */
+export declare function computeRSS(X: Matrix, y: readonly number[]): number;
 /**
  * Simple linear regression: y = β₀ + β₁·x
  */
@@ -54,4 +61,67 @@ export declare function regressionDiagnostics(result: RegressionResult, predicto
     name: string;
     values: readonly number[];
 }>): RegressionDiagnostics;
+/**
+ * Poisson regression via IRLS (iteratively reweighted least squares).
+ * Link: log(μ) = Xβ,  Variance: V(μ) = μ
+ * Outcome y must be non-negative (ideally integer counts).
+ *
+ * Implements Fisher scoring matching R's glm(family = poisson):
+ *   Working response: z = η + (y - μ) / μ
+ *   Weights: W = diag(μ)
+ *   Solve WLS: (X'WX) β_new = X'Wz
+ *
+ * Cross-validated with R:
+ * > glm(y ~ x1 + x2, family = poisson, data = df)
+ * > coef(mod); summary(mod)$coefficients; AIC(mod); deviance(mod)
+ */
+export declare function poissonRegression(y: readonly number[], predictors: ReadonlyArray<{
+    name: string;
+    values: readonly number[];
+}>, ciLevel?: number, maxIter?: number, tol?: number): RegressionResult;
+/**
+ * Quasi-Poisson regression.
+ * Thin wrapper around poissonRegression that estimates the dispersion parameter
+ * phi = Pearson chi^2/(n-p) and scales standard errors by sqrt(phi).
+ * AIC/BIC are NaN (not defined for quasi-likelihood).
+ *
+ * Cross-validated with R:
+ * > glm(y ~ x, family = quasipoisson, data = df)
+ * > summary(mod)$dispersion
+ */
+export declare function quasiPoissonRegression(y: readonly number[], predictors: ReadonlyArray<{
+    name: string;
+    values: readonly number[];
+}>, ciLevel?: number, maxIter?: number, tol?: number): RegressionResult & {
+    readonly dispersion: number;
+};
+/**
+ * Negative binomial regression via IRLS.
+ * Link: log(mu) = X*beta, Variance: V(mu) = mu + mu^2/theta
+ * Uses outer loop for theta: method-of-moments init, Newton steps on profile logLik.
+ *
+ * Cross-validated with R:
+ * > library(MASS)
+ * > glm.nb(y ~ x1 + x2, data = df)
+ */
+export declare function negativeBinomialRegression(y: readonly number[], predictors: ReadonlyArray<{
+    name: string;
+    values: readonly number[];
+}>, ciLevel?: number, maxIter?: number, tol?: number): RegressionResult & {
+    readonly theta: number;
+};
+/**
+ * Ordinal logistic regression (proportional odds / cumulative logit model).
+ * P(Y <= j | x) = logistic(alpha_j - x'beta), j = 1,...,J-1
+ * Uses Fisher scoring (Newton-Raphson on the logLik).
+ *
+ * Cross-validated with R:
+ * > library(MASS)
+ * > polr(factor(y) ~ x1 + x2, method = "logistic", data = df)
+ */
+export declare function ordinalLogisticRegression(y: readonly number[], // integer categories 1..J
+predictors: ReadonlyArray<{
+    name: string;
+    values: readonly number[];
+}>, ciLevel?: number, maxIter?: number, tol?: number): OrdinalRegressionResult;
 //# sourceMappingURL=regression.d.ts.map

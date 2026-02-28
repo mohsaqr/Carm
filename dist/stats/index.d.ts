@@ -11,4 +11,5 @@ export * from './analyze.js';
 export * from './clustering.js';
 export * from './preprocess.js';
 export * from './factor-analysis.js';
+export * from './bootstrap.js';
 //# sourceMappingURL=index.d.ts.map

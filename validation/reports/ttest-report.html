@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>T-Test & Descriptive Cross-Validation: Carm vs R</title>
+<style>
+  :root { --bg: #0d1117; --fg: #c9d1d9; --card: #161b22; --border: #30363d;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149; --blue: #58a6ff; --purple: #bc8cff; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px;
+    background: var(--bg); color: var(--fg); padding: 24px 32px; line-height: 1.5; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+  h2 { font-size: 16px; font-weight: 600; margin: 32px 0 12px; color: var(--blue);
+    border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: var(--purple); }
+  .subtitle { color: #8b949e; margin-bottom: 20px; }
+  .summary-bar { display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+  .summary-card { background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 18px; min-width: 130px; }
+  .summary-card .num { font-size: 28px; font-weight: 700; }
+  .summary-card .label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .pass { color: var(--green); }
+  .warn { color: var(--yellow); }
+  .fail { color: var(--red); }
+  .nan { color: #6e7681; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { text-align: left; padding: 8px 10px; background: var(--card); border: 1px solid var(--border);
+    font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px;
+    color: #8b949e; position: sticky; top: 0; z-index: 1; }
+  td { padding: 5px 10px; border: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  tr:nth-child(even) td { background: rgba(22, 27, 34, 0.5); }
+  tr:hover td { background: rgba(56, 139, 253, 0.08); }
+  td.pass { background: rgba(63, 185, 80, 0.1); }
+  td.warn { background: rgba(210, 153, 34, 0.1); }
+  td.fail { background: rgba(248, 81, 73, 0.1); }
+  .threshold { font-size: 10px; color: #6e7681; }
+  .pct { font-weight: 700; }
+  .section-note { color: #8b949e; font-size: 12px; margin-bottom: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+  .badge.ok { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .badge.err { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+</style>
+</head>
+<body>
+
+<h1>T-Test & Descriptive Cross-Validation</h1>
+<p class="subtitle">Carm (TypeScript) vs R — 1000 datasets via Saqrlab::simulate_data("ttest") — 2026-02-27T17:36:20</p>
+
+<div class="summary-bar">
+  <div class="summary-card"><div class="num">1000</div><div class="label">Datasets</div></div>
+  <div class="summary-card"><div class="num">41</div><div class="label">Metrics Tested</div></div>
+  <div class="summary-card"><div class="num pass">41/41</div><div class="label">≥99% Pass Rate</div></div>
+  <div class="summary-card"><div class="num">1000</div><div class="label">Paired Tests</div></div>
+  <div class="summary-card"><div class="num">1000</div><div class="label">Fisher Tests</div></div>
+</div>
+
+
+<h2>Descriptive</h2>
+<p class="section-note">Green = within threshold, Yellow = within 3x, Red = exceeds 3x.</p>
+<table>
+<thead><tr><th>Metric</th><th>Threshold</th><th>n</th><th>Mean |e|</th><th>Median |e|</th><th>P95 |e|</th><th>Max |e|</th><th>Pass Rate</th></tr></thead>
+<tbody>
+<tr>
+  <td>Mean</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">2.48e-13</td>
+  <td class="pass">2.42e-13</td>
+  <td class="pass">4.76e-13</td>
+  <td class="pass">7.18e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Median</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">1.30e-13</td>
+  <td class="pass">0</td>
+  <td class="pass">5.04e-13</td>
+  <td class="pass">5.04e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>SD</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">1.92e-13</td>
+  <td class="pass">1.56e-13</td>
+  <td class="pass">4.66e-13</td>
+  <td class="pass">6.01e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Variance</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">2.01e-13</td>
+  <td class="pass">1.62e-13</td>
+  <td class="pass">4.96e-13</td>
+  <td class="pass">1.06e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>SE</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">1.59e-14</td>
+  <td class="pass">6.54e-15</td>
+  <td class="pass">4.77e-14</td>
+  <td class="pass">1.78e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Trimmed Mean (10%)</td>
+  <td class="threshold">1.00e-8</td>
+  <td>2000</td>
+  <td class="pass">2.47e-13</td>
+  <td class="pass">2.42e-13</td>
+  <td class="pass">4.90e-13</td>
+  <td class="pass">7.11e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Skewness</td>
+  <td class="threshold">1.00e-6</td>
+  <td>2000</td>
+  <td class="pass">1.07e-13</td>
+  <td class="pass">7.65e-14</td>
+  <td class="pass">3.07e-13</td>
+  <td class="pass">1.45e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Kurtosis</td>
+  <td class="threshold">1.00e-6</td>
+  <td>2000</td>
+  <td class="pass">2.22e-13</td>
+  <td class="pass">1.49e-13</td>
+  <td class="pass">6.91e-13</td>
+  <td class="pass">3.82e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>CI Mean Lower</td>
+  <td class="threshold">0.00100000</td>
+  <td>2000</td>
+  <td class="pass">4.91e-9</td>
+  <td class="pass">4.27e-9</td>
+  <td class="pass">9.35e-9</td>
+  <td class="pass">1.57e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>CI Mean Upper</td>
+  <td class="threshold">0.00100000</td>
+  <td>2000</td>
+  <td class="pass">4.91e-9</td>
+  <td class="pass">4.27e-9</td>
+  <td class="pass">9.35e-9</td>
+  <td class="pass">1.57e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Shapiro-Wilk W</td>
+  <td class="threshold">0.00100000</td>
+  <td>2000</td>
+  <td class="pass">2.62e-5</td>
+  <td class="pass">2.48e-5</td>
+  <td class="pass">4.77e-5</td>
+  <td class="warn">0.001061</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Shapiro-Wilk p</td>
+  <td class="threshold">0.01000000</td>
+  <td>2000</td>
+  <td class="pass">3.23e-5</td>
+  <td class="pass">2.55e-5</td>
+  <td class="pass">4.77e-5</td>
+  <td class="pass">0.006004</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>T-tests</h2>
+<p class="section-note">Green = within threshold, Yellow = within 3x, Red = exceeds 3x.</p>
+<table>
+<thead><tr><th>Metric</th><th>Threshold</th><th>n</th><th>Mean |e|</th><th>Median |e|</th><th>P95 |e|</th><th>Max |e|</th><th>Pass Rate</th></tr></thead>
+<tbody>
+<tr>
+  <td>Welch t</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">3.58e-13</td>
+  <td class="pass">3.06e-13</td>
+  <td class="pass">8.55e-13</td>
+  <td class="pass">1.64e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Welch p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">4.60e-10</td>
+  <td class="pass">1.05e-15</td>
+  <td class="pass">3.13e-9</td>
+  <td class="pass">1.56e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Welch df</td>
+  <td class="threshold">0.01000000</td>
+  <td>1000</td>
+  <td class="pass">2.70e-12</td>
+  <td class="pass">1.82e-12</td>
+  <td class="pass">8.53e-12</td>
+  <td class="pass">1.70e-11</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Welch CI Lo</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">8.76e-9</td>
+  <td class="pass">8.02e-9</td>
+  <td class="pass">1.54e-8</td>
+  <td class="pass">2.67e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Welch CI Hi</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">8.76e-9</td>
+  <td class="pass">8.02e-9</td>
+  <td class="pass">1.54e-8</td>
+  <td class="pass">2.67e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Student t</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">3.56e-13</td>
+  <td class="pass">2.97e-13</td>
+  <td class="pass">8.73e-13</td>
+  <td class="pass">1.57e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Student p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">4.92e-10</td>
+  <td class="pass">7.81e-16</td>
+  <td class="pass">3.48e-9</td>
+  <td class="pass">1.67e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Student df</td>
+  <td class="threshold">exact</td>
+  <td>1000</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Paired t</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">3.44e-13</td>
+  <td class="pass">3.00e-13</td>
+  <td class="pass">8.18e-13</td>
+  <td class="pass">1.68e-12</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Paired p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">4.23e-10</td>
+  <td class="pass">7.39e-15</td>
+  <td class="pass">3.13e-9</td>
+  <td class="pass">1.52e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>One-sided less p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">2.30e-10</td>
+  <td class="pass">5.24e-16</td>
+  <td class="pass">1.57e-9</td>
+  <td class="pass">7.80e-9</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>One-sided greater p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">2.30e-10</td>
+  <td class="pass">3.84e-14</td>
+  <td class="pass">1.57e-9</td>
+  <td class="pass">7.80e-9</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Nonparametric</h2>
+<p class="section-note">Green = within threshold, Yellow = within 3x, Red = exceeds 3x.</p>
+<table>
+<thead><tr><th>Metric</th><th>Threshold</th><th>n</th><th>Mean |e|</th><th>Median |e|</th><th>P95 |e|</th><th>Max |e|</th><th>Pass Rate</th></tr></thead>
+<tbody>
+<tr>
+  <td>Mann-Whitney U</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Mann-Whitney p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">3.56e-8</td>
+  <td class="pass">1.37e-9</td>
+  <td class="pass">1.36e-7</td>
+  <td class="pass">1.39e-7</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>MW one-sided p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">1.78e-8</td>
+  <td class="pass">6.84e-10</td>
+  <td class="pass">6.78e-8</td>
+  <td class="pass">6.93e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Wilcoxon W</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass">0</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Wilcoxon p</td>
+  <td class="threshold">0.01000000</td>
+  <td>1000</td>
+  <td class="pass">1.81e-4</td>
+  <td class="pass">1.86e-9</td>
+  <td class="pass">0.001197</td>
+  <td class="pass">0.006902</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Effect Sizes</h2>
+<p class="section-note">Green = within threshold, Yellow = within 3x, Red = exceeds 3x.</p>
+<table>
+<thead><tr><th>Metric</th><th>Threshold</th><th>n</th><th>Mean |e|</th><th>Median |e|</th><th>P95 |e|</th><th>Max |e|</th><th>Pass Rate</th></tr></thead>
+<tbody>
+<tr>
+  <td>Cohen's d</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">9.24e-14</td>
+  <td class="pass">4.84e-14</td>
+  <td class="pass">3.91e-13</td>
+  <td class="pass">5.85e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Hedges' g</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">9.51e-14</td>
+  <td class="pass">5.03e-14</td>
+  <td class="pass">3.91e-13</td>
+  <td class="pass">5.89e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Rank-biserial r</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">2.44e-14</td>
+  <td class="pass">2.47e-14</td>
+  <td class="pass">4.72e-14</td>
+  <td class="pass">4.98e-14</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>d CI Lower</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">7.10e-5</td>
+  <td class="pass">5.73e-5</td>
+  <td class="pass">1.49e-4</td>
+  <td class="pass">2.93e-4</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>d CI Upper</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">7.10e-5</td>
+  <td class="pass">5.73e-5</td>
+  <td class="pass">1.49e-4</td>
+  <td class="pass">2.93e-4</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Frequency</h2>
+<p class="section-note">Green = within threshold, Yellow = within 3x, Red = exceeds 3x.</p>
+<table>
+<thead><tr><th>Metric</th><th>Threshold</th><th>n</th><th>Mean |e|</th><th>Median |e|</th><th>P95 |e|</th><th>Max |e|</th><th>Pass Rate</th></tr></thead>
+<tbody>
+<tr>
+  <td>GoF chi-sq</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">1.72e-13</td>
+  <td class="pass">1.39e-13</td>
+  <td class="pass">4.55e-13</td>
+  <td class="pass">4.97e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>GoF p</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">2.63e-9</td>
+  <td class="pass">2.90e-10</td>
+  <td class="pass">1.30e-8</td>
+  <td class="pass">3.15e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Chi-sq (no Yates)</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">2.37e-13</td>
+  <td class="pass">2.31e-13</td>
+  <td class="pass">4.80e-13</td>
+  <td class="pass">4.97e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Chi-sq p (no Yates)</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">1.29e-9</td>
+  <td class="pass">2.74e-13</td>
+  <td class="pass">9.47e-9</td>
+  <td class="pass">2.26e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Chi-sq (Yates)</td>
+  <td class="threshold">1.00e-4</td>
+  <td>1000</td>
+  <td class="pass">2.35e-13</td>
+  <td class="pass">2.36e-13</td>
+  <td class="pass">4.76e-13</td>
+  <td class="pass">4.97e-13</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Chi-sq p (Yates)</td>
+  <td class="threshold">0.00100000</td>
+  <td>1000</td>
+  <td class="pass">1.23e-9</td>
+  <td class="pass">3.43e-13</td>
+  <td class="pass">8.43e-9</td>
+  <td class="pass">2.79e-8</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+<tr>
+  <td>Fisher's exact p</td>
+  <td class="threshold">0.01000000</td>
+  <td>1000</td>
+  <td class="pass">2.75e-11</td>
+  <td class="pass">6.66e-16</td>
+  <td class="pass">1.78e-10</td>
+  <td class="pass">2.79e-10</td>
+  <td class="pass"><span class="pct">100.0%</span></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Per-Dataset Summary (first 50 with highest max error)</h2>
+<p class="section-note">Showing top-50 datasets sorted by largest single error across all metrics.</p>
+<table>
+<thead><tr><th>Seed</th><th>n1</th><th>n2</th><th>Welch t |e|</th><th>Welch p |e|</th><th>MW U |e|</th><th>MW p |e|</th><th>d |e|</th><th>Chi2 |e|</th></tr></thead>
+<tbody>
+<tr>
+  <td>849</td><td>24</td><td>30</td>
+  <td class="pass">4.67e-13</td>
+  <td class="pass">9.52e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">5.29e-8</td>
+  <td class="pass">7.14e-14</td>
+  <td class="pass">0</td>
+</tr>
+<tr>
+  <td>683</td><td>25</td><td>40</td>
+  <td class="pass">5.49e-13</td>
+  <td class="pass">1.84e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.27e-7</td>
+  <td class="pass">1.33e-13</td>
+  <td class="pass">2.12e-15</td>
+</tr>
+<tr>
+  <td>832</td><td>4</td><td>6</td>
+  <td class="pass">6.69e-13</td>
+  <td class="pass">1.28e-8</td>
+  <td class="pass">0</td>
+  <td class="pass">1.37e-7</td>
+  <td class="pass">2.66e-13</td>
+  <td class="pass">3.34e-13</td>
+</tr>
+<tr>
+  <td>806</td><td>31</td><td>24</td>
+  <td class="pass">2.78e-13</td>
+  <td class="pass">7.63e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.38e-7</td>
+  <td class="pass">1.67e-15</td>
+  <td class="pass">3.89e-14</td>
+</tr>
+<tr>
+  <td>42</td><td>37</td><td>21</td>
+  <td class="pass">8.72e-13</td>
+  <td class="pass">2.63e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.34e-7</td>
+  <td class="pass">1.44e-13</td>
+  <td class="pass">3.42e-13</td>
+</tr>
+<tr>
+  <td>581</td><td>27</td><td>43</td>
+  <td class="pass">4.94e-13</td>
+  <td class="pass">7.21e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.00e-7</td>
+  <td class="pass">1.18e-13</td>
+  <td class="pass">4.59e-15</td>
+</tr>
+<tr>
+  <td>923</td><td>28</td><td>48</td>
+  <td class="pass">7.51e-13</td>
+  <td class="pass">5.46e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.10e-7</td>
+  <td class="pass">1.26e-14</td>
+  <td class="pass">2.86e-13</td>
+</tr>
+<tr>
+  <td>790</td><td>31</td><td>40</td>
+  <td class="pass">3.49e-13</td>
+  <td class="pass">3.72e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.02e-7</td>
+  <td class="pass">1.02e-13</td>
+  <td class="pass">3.71e-14</td>
+</tr>
+<tr>
+  <td>451</td><td>29</td><td>41</td>
+  <td class="pass">9.17e-14</td>
+  <td class="pass">1.23e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.33e-7</td>
+  <td class="pass">2.29e-14</td>
+  <td class="pass">2.17e-13</td>
+</tr>
+<tr>
+  <td>63</td><td>31</td><td>45</td>
+  <td class="pass">5.21e-13</td>
+  <td class="pass">2.37e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.07e-7</td>
+  <td class="pass">1.23e-13</td>
+  <td class="pass">3.87e-14</td>
+</tr>
+<tr>
+  <td>135</td><td>4</td><td>6</td>
+  <td class="pass">8.66e-14</td>
+  <td class="pass">2.09e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">9.13e-8</td>
+  <td class="pass">4.23e-14</td>
+  <td class="pass">0</td>
+</tr>
+<tr>
+  <td>884</td><td>44</td><td>34</td>
+  <td class="pass">3.62e-13</td>
+  <td class="pass">6.40e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.43e-8</td>
+  <td class="pass">1.66e-13</td>
+  <td class="pass">4.91e-13</td>
+</tr>
+<tr>
+  <td>270</td><td>40</td><td>46</td>
+  <td class="pass">1.32e-13</td>
+  <td class="pass">2.06e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">7.08e-8</td>
+  <td class="pass">6.36e-14</td>
+  <td class="pass">2.18e-14</td>
+</tr>
+<tr>
+  <td>120</td><td>36</td><td>58</td>
+  <td class="pass">2.11e-13</td>
+  <td class="pass">4.62e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">7.38e-8</td>
+  <td class="pass">9.15e-14</td>
+  <td class="pass">9.55e-15</td>
+</tr>
+<tr>
+  <td>309</td><td>33</td><td>56</td>
+  <td class="pass">3.06e-13</td>
+  <td class="pass">5.73e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">6.48e-8</td>
+  <td class="pass">3.75e-15</td>
+  <td class="pass">4.89e-13</td>
+</tr>
+<tr>
+  <td>457</td><td>26</td><td>39</td>
+  <td class="pass">4.74e-14</td>
+  <td class="pass">2.50e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.12e-7</td>
+  <td class="pass">1.07e-14</td>
+  <td class="pass">1.44e-14</td>
+</tr>
+<tr>
+  <td>55</td><td>29</td><td>42</td>
+  <td class="pass">2.28e-13</td>
+  <td class="pass">1.96e-13</td>
+  <td class="pass">0</td>
+  <td class="pass">6.49e-8</td>
+  <td class="pass">5.98e-14</td>
+  <td class="pass">3.78e-14</td>
+</tr>
+<tr>
+  <td>121</td><td>39</td><td>22</td>
+  <td class="pass">3.14e-13</td>
+  <td class="pass">7.49e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">9.98e-8</td>
+  <td class="pass">2.94e-15</td>
+  <td class="pass">1.78e-14</td>
+</tr>
+<tr>
+  <td>589</td><td>65</td><td>36</td>
+  <td class="pass">4.10e-13</td>
+  <td class="pass">9.12e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">4.09e-8</td>
+  <td class="pass">1.09e-13</td>
+  <td class="pass">1.96e-13</td>
+</tr>
+<tr>
+  <td>829</td><td>28</td><td>26</td>
+  <td class="pass">2.75e-13</td>
+  <td class="pass">4.62e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.10e-7</td>
+  <td class="pass">6.50e-14</td>
+  <td class="pass">3.28e-15</td>
+</tr>
+<tr>
+  <td>664</td><td>42</td><td>38</td>
+  <td class="pass">1.58e-13</td>
+  <td class="pass">2.16e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.10e-7</td>
+  <td class="pass">3.92e-14</td>
+  <td class="pass">2.83e-14</td>
+</tr>
+<tr>
+  <td>881</td><td>28</td><td>23</td>
+  <td class="pass">5.14e-13</td>
+  <td class="pass">3.89e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.32e-7</td>
+  <td class="pass">6.67e-14</td>
+  <td class="pass">2.05e-13</td>
+</tr>
+<tr>
+  <td>925</td><td>74</td><td>41</td>
+  <td class="pass">3.09e-13</td>
+  <td class="pass">8.14e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">7.30e-8</td>
+  <td class="pass">5.59e-14</td>
+  <td class="pass">3.06e-14</td>
+</tr>
+<tr>
+  <td>646</td><td>21</td><td>35</td>
+  <td class="pass">8.68e-13</td>
+  <td class="pass">2.09e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.35e-7</td>
+  <td class="pass">8.87e-14</td>
+  <td class="pass">4.28e-13</td>
+</tr>
+<tr>
+  <td>449</td><td>52</td><td>34</td>
+  <td class="pass">2.94e-13</td>
+  <td class="pass">3.41e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.08e-8</td>
+  <td class="pass">8.31e-14</td>
+  <td class="pass">4.57e-13</td>
+</tr>
+<tr>
+  <td>721</td><td>37</td><td>61</td>
+  <td class="pass">4.33e-14</td>
+  <td class="pass">3.79e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">5.60e-8</td>
+  <td class="pass">4.44e-14</td>
+  <td class="pass">2.05e-13</td>
+</tr>
+<tr>
+  <td>361</td><td>21</td><td>24</td>
+  <td class="pass">1.36e-13</td>
+  <td class="pass">3.68e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.24e-7</td>
+  <td class="pass">2.91e-14</td>
+  <td class="pass">2.47e-13</td>
+</tr>
+<tr>
+  <td>448</td><td>24</td><td>26</td>
+  <td class="pass">3.42e-13</td>
+  <td class="pass">7.16e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.29e-7</td>
+  <td class="pass">2.90e-14</td>
+  <td class="pass">3.85e-13</td>
+</tr>
+<tr>
+  <td>545</td><td>42</td><td>26</td>
+  <td class="pass">6.48e-14</td>
+  <td class="pass">6.70e-13</td>
+  <td class="pass">0</td>
+  <td class="pass">6.61e-8</td>
+  <td class="pass">3.62e-13</td>
+  <td class="pass">2.04e-13</td>
+</tr>
+<tr>
+  <td>254</td><td>41</td><td>23</td>
+  <td class="pass">5.71e-13</td>
+  <td class="pass">6.57e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.17e-7</td>
+  <td class="pass">1.23e-13</td>
+  <td class="pass">3.44e-13</td>
+</tr>
+<tr>
+  <td>623</td><td>43</td><td>36</td>
+  <td class="pass">3.82e-13</td>
+  <td class="pass">1.21e-8</td>
+  <td class="pass">0</td>
+  <td class="pass">1.17e-7</td>
+  <td class="pass">9.77e-14</td>
+  <td class="pass">3.85e-15</td>
+</tr>
+<tr>
+  <td>713</td><td>25</td><td>46</td>
+  <td class="pass">3.25e-13</td>
+  <td class="pass">5.13e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">9.79e-8</td>
+  <td class="pass">1.26e-13</td>
+  <td class="pass">1.34e-13</td>
+</tr>
+<tr>
+  <td>391</td><td>37</td><td>40</td>
+  <td class="pass">1.20e-13</td>
+  <td class="pass">8.83e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">2.58e-8</td>
+  <td class="pass">6.36e-14</td>
+  <td class="pass">1.85e-13</td>
+</tr>
+<tr>
+  <td>892</td><td>29</td><td>46</td>
+  <td class="pass">1.08e-12</td>
+  <td class="pass">6.97e-12</td>
+  <td class="pass">0</td>
+  <td class="pass">1.24e-7</td>
+  <td class="pass">1.64e-13</td>
+  <td class="pass">8.70e-14</td>
+</tr>
+<tr>
+  <td>1000</td><td>30</td><td>47</td>
+  <td class="pass">3.11e-13</td>
+  <td class="pass">6.95e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">4.90e-8</td>
+  <td class="pass">1.58e-13</td>
+  <td class="pass">6.31e-14</td>
+</tr>
+<tr>
+  <td>872</td><td>21</td><td>26</td>
+  <td class="pass">7.85e-13</td>
+  <td class="pass">2.31e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">2.44e-8</td>
+  <td class="pass">1.87e-13</td>
+  <td class="pass">3.14e-13</td>
+</tr>
+<tr>
+  <td>633</td><td>31</td><td>54</td>
+  <td class="pass">5.24e-13</td>
+  <td class="pass">1.87e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.35e-7</td>
+  <td class="pass">1.46e-13</td>
+  <td class="pass">3.04e-13</td>
+</tr>
+<tr>
+  <td>255</td><td>34</td><td>31</td>
+  <td class="pass">3.20e-13</td>
+  <td class="pass">2.36e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.67e-8</td>
+  <td class="pass">8.73e-14</td>
+  <td class="pass">3.95e-14</td>
+</tr>
+<tr>
+  <td>781</td><td>22</td><td>26</td>
+  <td class="pass">2.55e-13</td>
+  <td class="pass">3.51e-12</td>
+  <td class="pass">0</td>
+  <td class="pass">4.80e-8</td>
+  <td class="pass">1.80e-13</td>
+  <td class="pass">8.35e-14</td>
+</tr>
+<tr>
+  <td>83</td><td>31</td><td>43</td>
+  <td class="pass">1.48e-13</td>
+  <td class="pass">1.48e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.38e-7</td>
+  <td class="pass">3.67e-14</td>
+  <td class="pass">2.53e-13</td>
+</tr>
+<tr>
+  <td>915</td><td>29</td><td>32</td>
+  <td class="pass">1.31e-13</td>
+  <td class="pass">2.25e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.38e-7</td>
+  <td class="pass">4.88e-15</td>
+  <td class="pass">1.11e-16</td>
+</tr>
+<tr>
+  <td>779</td><td>37</td><td>32</td>
+  <td class="pass">2.28e-13</td>
+  <td class="pass">1.54e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">4.99e-8</td>
+  <td class="pass">9.24e-14</td>
+  <td class="pass">2.98e-13</td>
+</tr>
+<tr>
+  <td>184</td><td>34</td><td>58</td>
+  <td class="pass">3.65e-13</td>
+  <td class="pass">1.27e-12</td>
+  <td class="pass">0</td>
+  <td class="pass">8.47e-8</td>
+  <td class="pass">3.14e-14</td>
+  <td class="pass">4.73e-13</td>
+</tr>
+<tr>
+  <td>544</td><td>23</td><td>22</td>
+  <td class="pass">4.07e-13</td>
+  <td class="pass">3.05e-9</td>
+  <td class="pass">0</td>
+  <td class="pass">1.29e-7</td>
+  <td class="pass">1.66e-13</td>
+  <td class="pass">4.39e-13</td>
+</tr>
+<tr>
+  <td>238</td><td>33</td><td>35</td>
+  <td class="pass">2.14e-13</td>
+  <td class="pass">6.22e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">2.24e-9</td>
+  <td class="pass">6.13e-14</td>
+  <td class="pass">4.85e-13</td>
+</tr>
+<tr>
+  <td>482</td><td>44</td><td>34</td>
+  <td class="pass">1.77e-13</td>
+  <td class="pass">3.45e-12</td>
+  <td class="pass">0</td>
+  <td class="pass">1.22e-7</td>
+  <td class="pass">2.89e-15</td>
+  <td class="pass">3.31e-13</td>
+</tr>
+<tr>
+  <td>300</td><td>50</td><td>37</td>
+  <td class="pass">4.96e-13</td>
+  <td class="pass">1.27e-12</td>
+  <td class="pass">0</td>
+  <td class="pass">1.09e-7</td>
+  <td class="pass">9.97e-14</td>
+  <td class="pass">2.74e-13</td>
+</tr>
+<tr>
+  <td>792</td><td>36</td><td>66</td>
+  <td class="pass">7.26e-13</td>
+  <td class="pass">1.56e-8</td>
+  <td class="pass">0</td>
+  <td class="pass">1.22e-7</td>
+  <td class="pass">1.24e-13</td>
+  <td class="pass">4.55e-13</td>
+</tr>
+<tr>
+  <td>53</td><td>30</td><td>49</td>
+  <td class="pass">1.53e-13</td>
+  <td class="pass">1.50e-11</td>
+  <td class="pass">0</td>
+  <td class="pass">1.98e-8</td>
+  <td class="pass">6.54e-14</td>
+  <td class="pass">3.57e-14</td>
+</tr>
+<tr>
+  <td>4</td><td>37</td><td>47</td>
+  <td class="pass">6.12e-13</td>
+  <td class="pass">7.01e-10</td>
+  <td class="pass">0</td>
+  <td class="pass">1.22e-7</td>
+  <td class="pass">1.30e-13</td>
+  <td class="pass">3.14e-13</td>
+</tr>
+</tbody>
+</table>
+
+<p style="margin-top:40px;color:#6e7681;font-size:11px;">
+  Generated 2026-02-27T17:36:20 · Carm vs R (e1071, effsize, base R) · 1000 datasets · 41 metrics
+</p>
+
+</body>
+</html>

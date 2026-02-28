@@ -3,7 +3,7 @@
  * t-tests, one-way ANOVA, Mann-Whitney U, Wilcoxon signed-rank,
  * Kruskal-Wallis, Friedman test.
  */
-import type { StatResult, GroupData, RMANOVAResult } from '../core/types.js';
+import type { StatResult, GroupData, RMANOVAResult, TwoWayANOVAResult, ANCOVAResult } from '../core/types.js';
 /**
  * Welch's t-test for independent samples (unequal variances, default).
  * Set `equalVariances = true` for Student's t-test.
@@ -157,4 +157,70 @@ export declare function repeatedMeasuresANOVA(data: readonly (readonly number[])
     readonly labels?: readonly string[];
     readonly ciLevel?: number;
 }): RMANOVAResult;
+/**
+ * Welch's one-way ANOVA for heteroscedastic groups.
+ * Uses weighted F with Welch-Satterthwaite denominator df.
+ * Reference: Welch (1951) "On the comparison of several mean values"
+ *
+ * Formula (matching R's oneway.test with var.equal=FALSE):
+ *   w_j = n_j / s²_j
+ *   mean_tilde = Σ(w_j * mean_j) / Σ(w_j)
+ *   F_w = Σ w_j*(mean_j - mean_tilde)² / ((k-1) * (1 + 2*(k-2)/(k²-1) * Λ))
+ *   Λ = Σ (1 - w_j/Σw)² / (n_j - 1)
+ *   df_den = (k² - 1) / (3 * Λ)
+ *
+ * Cross-validated with R:
+ * > oneway.test(value ~ group, data = df, var.equal = FALSE)
+ */
+export declare function welchANOVA(groups: readonly GroupData[]): StatResult;
+/**
+ * Mood's median test: non-parametric test for equal medians across groups.
+ * Builds a 2×k contingency table (above vs at-or-below grand median)
+ * and applies a chi-square test.
+ *
+ * Cross-validated with R:
+ * > library(RVAideMemoire); mood.medtest(y ~ group, data = df)
+ */
+export declare function moodsMedianTest(groups: readonly GroupData[]): StatResult;
+/**
+ * Cochran's Q test for related samples with binary outcomes.
+ * Input: n×k binary matrix (subjects × conditions, each entry 0 or 1).
+ * Tests whether the proportion of successes differs across conditions.
+ *
+ * Q = k(k-1) * Σ(C_j - C̄)² / (k * ΣR_i - ΣR_i²)
+ * where C_j = column sums, R_i = row sums
+ *
+ * Cross-validated with R:
+ * > library(RVAideMemoire); cochran.qtest(y ~ cond | subject, data = df)
+ */
+export declare function cochranQ(data: readonly (readonly number[])[]): StatResult;
+/**
+ * Two-way factorial ANOVA.
+ * Computes Type II SS by default via model-comparison (RSS of reduced vs full).
+ *
+ * @param y         Continuous outcome variable
+ * @param factorA   First categorical factor (parallel to y)
+ * @param factorB   Second categorical factor (parallel to y)
+ * @param ssType    Type II (default) or Type III sums of squares
+ *
+ * Cross-validated with R:
+ * > summary(aov(y ~ A * B, data = df))          # Type I
+ * > library(car); Anova(lm(y ~ A * B), type=2)  # Type II
+ */
+export declare function twoWayANOVA(y: readonly number[], factorA: readonly (string | number)[], factorB: readonly (string | number)[], ssType?: 2 | 3): TwoWayANOVAResult;
+/**
+ * Analysis of Covariance (ANCOVA).
+ * OLS regression with a dummy-coded factor + continuous covariate.
+ * Type III SS via model comparison (drop each term from full model).
+ * Computes adjusted group means at the grand mean of the covariate.
+ *
+ * @param y          Continuous outcome variable
+ * @param factor     Categorical grouping factor (parallel to y)
+ * @param covariate  Continuous covariate (parallel to y)
+ *
+ * Cross-validated with R:
+ * > library(car); Anova(lm(y ~ group + covariate), type=3)
+ * > library(emmeans); emmeans(lm(y ~ group + covariate), ~ group)
+ */
+export declare function ancova(y: readonly number[], factor: readonly (string | number)[], covariate: readonly number[]): ANCOVAResult;
 //# sourceMappingURL=comparison.d.ts.map

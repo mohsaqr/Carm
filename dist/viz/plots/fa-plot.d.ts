@@ -91,6 +91,9 @@ export interface FAPlotConfig {
     readonly showFitBox?: boolean;
     readonly diagnostics?: FADiagnostics;
     readonly pathStyle?: FAPathStyle;
+    readonly decimals?: number;
+    readonly sortBy?: 'original' | 'factor' | 'loading';
+    readonly suppressBelow?: number;
 }
 export declare function renderFAPlot(container: HTMLElement, data: FAResult | CFAResult, config?: FAPlotConfig): void;
 //# sourceMappingURL=fa-plot.d.ts.map

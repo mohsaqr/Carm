@@ -1,3 +1,38 @@
+## 2026-02-28 (Google Drive → local folder migration)
+
+### Google Drive corrupts node_modules
+- Google Drive sync converts symlinks in `node_modules/.bin/` to plain 21-byte text files containing the relative path
+- Native binaries (rollup, esbuild `*.node` files) get `com.apple.quarantine` xattr from Chrome/Drive, causing macOS Gatekeeper to block `dlopen()` with "code signature not valid for use in process"
+- Execute permissions (`+x`) may also be stripped from binary files
+- Fix: `rm -rf node_modules && npm install` after any Google Drive → local folder migration
+- Quick workaround (if clean install isn't possible): `xattr -r -d com.apple.quarantine node_modules/@rollup node_modules/@esbuild node_modules/esbuild` + `chmod +x node_modules/.bin/*`
+
+### Repos moved from Google Drive to local filesystem
+- JStats: `/Users/mohammedsaqr/Documents/Github/JStats`
+- Aistatia: `/Users/mohammedsaqr/Documents/Github/aistatia`
+- Old path (Google Drive): `/Users/mohammedsaqr/Library/CloudStorage/GoogleDrive-saqr@saqr.me/My Drive/Git/`
+
+## 2026-02-28 (Geomin delta=0.001 lavaan equivalence)
+
+### lavaan outputs loadings on covariance scale, Carm uses correlation scale
+- lavaan's `lavInspect(fit, "est")$lambda` gives raw loadings on the COVARIANCE scale
+- Carm always uses the correlation matrix, so loadings are on the CORRELATION scale
+- To compare: standardize lavaan loadings by `L_std = L_raw / sqrt(ov_var)` where `ov_var = diag(sample covariance)`
+- After standardization: Carm matches lavaan to MAE = 8.9e-7, max diff = 3.0e-6 (essentially identical)
+- Q criterion values: Carm 0.4791117957, lavaan(std) 0.4791117835 (diff = 1.2e-8)
+
+### GPArotation without random starts finds worse local optima for small geomin delta
+- GPArotation::geominQ defaults to randomStarts=0 (single start from T=I)
+- With delta=0.001, the geomin landscape has more local optima — single start converges to Q ≈ 0.484
+- lavaan defaults to rstarts=100, Carm uses randomStarts=50 — both find Q ≈ 0.479 (better optimum)
+- Must use `randomStarts = 100` in GPArotation R references for fair cross-validation with Carm
+- For delta=0.01, the landscape is smoother — single start finds the global optimum
+
+### Carm default geominDelta changed from 0.01 to 0.001 (matching lavaan)
+- GPArotation default: 0.01; lavaan default: 0.001
+- Changed in 3 locations: comment (line 138), applyRotation (line 1023), runEFA (line 1679)
+- Existing tests that pass explicit `geominDelta: 0.01` are NOT affected
+
 ## 2026-02-27 (Numerical Equivalence Testing — 14 Methods vs R)
 
 ### R's binom.test two-sided p-value uses exact enumeration, not 2*min(pLess, pGreater)

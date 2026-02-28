@@ -135,7 +135,7 @@ export interface EFAOptions {
   readonly nFactors?: number               // auto-detect via parallel analysis if omitted
   readonly extraction?: 'paf' | 'ml'       // default: 'ml'
   readonly rotation?: 'varimax' | 'oblimin' | 'promax' | 'quartimin' | 'geomin' | 'none'  // default: 'promax'
-  readonly geominDelta?: number              // geomin epsilon/delta (default: 0.01)
+  readonly geominDelta?: number              // geomin epsilon/delta (default: 0.001, matches lavaan)
   readonly seed?: number                   // default: 42 (for parallel analysis)
   readonly maxIter?: number                // default: 1000
   readonly tol?: number                    // default: 1e-6
@@ -1020,7 +1020,7 @@ function applyRotation(
   method: string,
   maxIter: number,
   tol: number,
-  geominDelta: number = 0.01,
+  geominDelta: number = 0.001,
   randomStarts: number = 1,
   seed: number = 42
 ): { rotated: number[][]; Phi: number[][] } {
@@ -1061,12 +1061,44 @@ function applyRotation(
 }
 
 /**
+ * Compute the QR start matrix: Q from QR(A^T).
+ * Using T = Q as a starting rotation produces lower-triangular initial loadings,
+ * matching lavaan's Cholesky-parameterized starting point.
+ * This ensures the multi-start rotation explores lavaan's convergence basin.
+ */
+function qrStartMatrix(A: number[][], k: number): number[][] | null {
+  // QR(A^T): A^T is k×p, columns of A^T = rows of A.
+  // Orthogonalize the first k columns of A^T (= first k rows of A).
+  // Q[row][col] = A^T[row][col] = A[col][row]
+  if (A.length < k) return null // not enough rows
+
+  const Q: number[][] = Array.from({ length: k }, (_, row) =>
+    Array.from({ length: k }, (_, col) => A[col]![row]!)
+  )
+
+  // Modified Gram-Schmidt on columns
+  for (let j = 0; j < k; j++) {
+    for (let prev = 0; prev < j; prev++) {
+      let dot = 0
+      for (let i = 0; i < k; i++) dot += Q[i]![j]! * Q[i]![prev]!
+      for (let i = 0; i < k; i++) Q[i]![j] = Q[i]![j]! - dot * Q[i]![prev]!
+    }
+    let norm2 = 0
+    for (let i = 0; i < k; i++) norm2 += Q[i]![j]! ** 2
+    const norm = Math.sqrt(norm2)
+    if (norm < 1e-15) return null // degenerate — first k rows not full rank
+    for (let i = 0; i < k; i++) Q[i]![j] = Q[i]![j]! / norm
+  }
+
+  return Q
+}
+
+/**
  * Run gpfOblq with optional random starting matrices.
  * Start 0 always uses T=I (deterministic, matches R/GPArotation).
- * Starts 1..randomStarts-1 use Haar-distributed random orthogonal matrices.
+ * Start 1 uses T from QR(A^T) — lower-triangular start matching lavaan.
+ * Starts 2..randomStarts-1 use Haar-distributed random orthogonal matrices.
  * Returns the solution with the lowest criterion value.
- *
- * When randomStarts=30, this matches lavaan's GPA×30 strategy.
  */
 function gpfOblqWithRandomStarts(
   loadings: number[][],
@@ -1077,12 +1109,21 @@ function gpfOblqWithRandomStarts(
   randomStarts: number,
   seed: number
 ): { rotated: number[][]; Phi: number[][] } {
-  // Start 0: T = I (always, for backward compatibility)
+  // Start 0: T = I (always, for backward compatibility with GPArotation)
   let best = gpfOblq(loadings, criterionFn, maxIter, tol)
 
-  if (randomStarts > 1) {
+  // Start 1: T = Q from QR(A^T) — lower-triangular start matching lavaan
+  const Tqr = qrStartMatrix(loadings, k)
+  if (Tqr) {
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr)
+    if (result.f < best.f) {
+      best = result
+    }
+  }
+
+  if (randomStarts > 2) {
     const rng = new PRNG(seed)
-    for (let s = 1; s < randomStarts; s++) {
+    for (let s = 2; s < randomStarts; s++) {
       const Trand = randomOrthogonalMatrix(k, rng)
       const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand)
       if (result.f < best.f) {
@@ -1676,7 +1717,7 @@ export function runEFA(
 
   const extraction = options?.extraction ?? 'ml'
   const rotation = options?.rotation ?? 'promax'
-  const geominDelta = options?.geominDelta ?? 0.01
+  const geominDelta = options?.geominDelta ?? 0.001
   const maxIter = options?.maxIter ?? 1000
   const tol = options?.tol ?? 1e-6
   const seed = options?.seed ?? 42

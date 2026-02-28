@@ -90,6 +90,41 @@ import type { EffectInterpretation, FactorFit } from './types.js';
  * e.g. "χ²(24) = 28.42, p = .241, RMSEA = 0.042 [0.000, 0.085], CFI = 0.987, TLI = 0.982, SRMR = 0.038"
  */
 export declare function formatCFAFit(fit: FactorFit): string;
+/**
+ * APA string for Poisson regression.
+ * e.g. "Deviance = 12.3, Null deviance = 45.6, AIC = 78.9"
+ */
+export declare function formatPoisson(deviance: number, nullDeviance: number, aic: number): string;
+/**
+ * APA string for negative binomial regression.
+ * e.g. "Deviance = 12.3, θ = 4.56, AIC = 78.9"
+ */
+export declare function formatNegBin(deviance: number, theta: number, aic: number): string;
+/**
+ * APA string for two-way ANOVA factor row.
+ * e.g. "Factor A: F(2, 54) = 4.21, p = .018, η² = 0.14"
+ */
+export declare function formatTwoWayANOVA(source: string, F: number, df1: number, df2: number, pValue: number, etaSq: number): string;
+/**
+ * APA string for ANCOVA factor row.
+ * e.g. "Factor: F(2, 53) = 5.10, p = .009, η² = 0.16"
+ */
+export declare function formatANCOVA(source: string, F: number, df1: number, df2: number, pValue: number, etaSq: number): string;
+/**
+ * APA string for binomial test.
+ * e.g. "p̂ = 0.60, p = .327, 95% CI [0.36, 0.81], g = 0.10"
+ */
+export declare function formatBinomial(pHat: number, pValue: number, ci: readonly [number, number], g: number, ciLevel?: number): string;
+/**
+ * APA string for proportions z-test.
+ * e.g. "z = 2.31, p = .021, h = 0.45, 95% CI [0.02, 0.18]"
+ */
+export declare function formatProportions(z: number, pValue: number, h: number, ci: readonly [number, number], ciLevel?: number): string;
+/**
+ * APA string for Cochran's Q test.
+ * e.g. "Q(2) = 8.40, p = .015"
+ */
+export declare function formatCochranQ(Q: number, df: number, pValue: number): string;
 /** Generic effect size interpretation helper. */
 export declare function interpretEffect(value: number, thresholds: readonly [number, number, number]): EffectInterpretation;
 //# sourceMappingURL=apa.d.ts.map

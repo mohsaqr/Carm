@@ -68,12 +68,17 @@ export interface LMMResult {
         readonly residual: number;
         readonly slopes?: Readonly<Record<string, number>>;
     };
+    readonly randomCorrelations?: Readonly<Record<string, number>>;
     readonly icc: number;
     readonly logLik: number;
     readonly aic: number;
     readonly bic: number;
     readonly nObs: number;
     readonly nGroups: number;
+    readonly nParams: number;
+    readonly method: 'REML' | 'ML';
+    readonly r2Marginal: number;
+    readonly r2Conditional: number;
     readonly formatted: string;
 }
 /** PCA result with loadings, scores, and variance explained. */
@@ -229,6 +234,84 @@ export interface RMANOVAResult extends StatResult {
     readonly epsilonHF: number;
     readonly correctedDf?: readonly [number, number];
     readonly correction: 'none' | 'Greenhouse-Geisser' | 'Huynh-Feldt';
+}
+/** A single row in the Two-Way ANOVA table (factor A, B, interaction, residual, total). */
+export interface ANOVATableRow {
+    readonly source: string;
+    readonly ss: number;
+    readonly df: number;
+    readonly ms: number;
+    readonly F: number;
+    readonly pValue: number;
+    readonly etaSq: number;
+}
+/** Result from a two-way factorial ANOVA. */
+export interface TwoWayANOVAResult {
+    readonly rows: readonly ANOVATableRow[];
+    readonly residual: {
+        readonly ss: number;
+        readonly df: number;
+        readonly ms: number;
+    };
+    readonly total: {
+        readonly ss: number;
+        readonly df: number;
+    };
+    readonly n: number;
+    readonly formatted: string;
+}
+/** Result from analysis of covariance. */
+export interface ANCOVAResult {
+    readonly rows: readonly ANOVATableRow[];
+    readonly residual: {
+        readonly ss: number;
+        readonly df: number;
+        readonly ms: number;
+    };
+    readonly total: {
+        readonly ss: number;
+        readonly df: number;
+    };
+    readonly adjustedMeans: readonly {
+        readonly label: string;
+        readonly adjustedMean: number;
+    }[];
+    readonly n: number;
+    readonly formatted: string;
+}
+/** Result from ordinal logistic (proportional odds) regression. */
+export interface OrdinalRegressionResult {
+    readonly thresholds: readonly {
+        readonly name: string;
+        readonly estimate: number;
+        readonly se: number;
+        readonly z: number;
+        readonly pValue: number;
+    }[];
+    readonly coefficients: readonly {
+        readonly name: string;
+        readonly estimate: number;
+        readonly se: number;
+        readonly z: number;
+        readonly pValue: number;
+        readonly ci: readonly [number, number];
+    }[];
+    readonly logLik: number;
+    readonly aic: number;
+    readonly bic: number;
+    readonly n: number;
+    readonly nCategories: number;
+    readonly formatted: string;
+}
+/** Result from bootstrap confidence interval estimation. */
+export interface BootstrapCIResult {
+    readonly estimate: number;
+    readonly ci: readonly [number, number];
+    readonly se: number;
+    readonly ciLevel: number;
+    readonly nBoot: number;
+    readonly method: 'percentile' | 'bca';
+    readonly formatted: string;
 }
 /** Field type descriptor for the analyze() dispatch layer. */
 export type FieldType = 'numeric' | 'binary' | 'categorical' | 'ordinal';

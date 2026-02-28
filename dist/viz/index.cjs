@@ -4039,17 +4039,28 @@ function renderScree2(d3, container, data, config) {
 function renderLoadings(d3, container, data, config) {
   const theme = config.theme ?? DEFAULT_THEME;
   const threshold = config.loadingThreshold ?? 0.3;
+  const dec = config.decimals ?? 2;
+  const suppressBelow = config.suppressBelow ?? 0;
+  const sortBy = config.sortBy ?? "factor";
   const nItems = data.loadings.length;
   const nFactors = data.nFactors;
   const itemOrder = Array.from({ length: nItems }, (_, i) => i);
-  itemOrder.sort((a, b) => {
-    const rowA = data.loadings[a];
-    const rowB = data.loadings[b];
-    const maxFactorA = rowA.indexOf(Math.max(...rowA.map(Math.abs)));
-    const maxFactorB = rowB.indexOf(Math.max(...rowB.map(Math.abs)));
-    if (maxFactorA !== maxFactorB) return maxFactorA - maxFactorB;
-    return Math.max(...rowB.map(Math.abs)) - Math.max(...rowA.map(Math.abs));
-  });
+  if (sortBy === "factor") {
+    itemOrder.sort((a, b) => {
+      const rowA = data.loadings[a];
+      const rowB = data.loadings[b];
+      const maxFactorA = rowA.indexOf(Math.max(...rowA.map(Math.abs)));
+      const maxFactorB = rowB.indexOf(Math.max(...rowB.map(Math.abs)));
+      if (maxFactorA !== maxFactorB) return maxFactorA - maxFactorB;
+      return Math.max(...rowB.map(Math.abs)) - Math.max(...rowA.map(Math.abs));
+    });
+  } else if (sortBy === "loading") {
+    itemOrder.sort((a, b) => {
+      const maxA = Math.max(...data.loadings[a].map(Math.abs));
+      const maxB = Math.max(...data.loadings[b].map(Math.abs));
+      return maxB - maxA;
+    });
+  }
   const cellW = 56, cellH = 28;
   const showComm = true;
   const extraCols = showComm ? 1 : 0;
@@ -4083,12 +4094,15 @@ function renderLoadings(d3, container, data, config) {
           formatTooltipRow(facLabels[ci] ?? `F${ci + 1}`, val)
         ].join(""), theme);
       }).on("mouseout", hideTooltip);
-      g.append("text").attr("x", ci * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).attr("opacity", dimmed ? 0.5 : 1).text(val.toFixed(2));
+      const suppressed = suppressBelow > 0 && Math.abs(val) < suppressBelow;
+      if (!suppressed) {
+        g.append("text").attr("x", ci * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).attr("opacity", dimmed ? 0.5 : 1).text(val.toFixed(dec));
+      }
     });
     if (showComm) {
       const comm = data.communalities[origIdx] ?? 0;
       g.append("rect").attr("x", nFactors * cellW).attr("y", rowIdx * cellH).attr("width", cellW - 2).attr("height", cellH - 2).attr("rx", 3).attr("fill", commScale(comm));
-      g.append("text").attr("x", nFactors * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", comm > 0.6 ? "#fff" : theme.text).text(comm.toFixed(2));
+      g.append("text").attr("x", nFactors * cellW + cellW / 2).attr("y", rowIdx * cellH + cellH / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", Math.min(10, cellW / 5)).attr("fill", comm > 0.6 ? "#fff" : theme.text).text(comm.toFixed(dec));
     }
   });
   if (config.caption) addCaption(svg, config.caption, W, H, theme);
@@ -4165,6 +4179,7 @@ function fColor(fi, ps, theme) {
 function renderPath(d3, container, data, config) {
   const theme = config.theme ?? DEFAULT_THEME;
   const ps = resolvePathStyle(config.pathStyle);
+  const dec = config.decimals ?? 2;
   const showErrors = config.showErrorTerms !== false;
   const showFit = config.showFitBox !== false;
   const nFactors = data.nFactors;
@@ -4295,7 +4310,7 @@ function renderPath(d3, container, data, config) {
       const labelX = t1 * t1 * t1 * (factorCx - ps.factorRx - 2) + 3 * t1 * t1 * t * arcX + 3 * t1 * t * t * arcX + t * t * t * (factorCx - ps.factorRx - 2);
       const labelY = t1 * t1 * t1 * y1 + 3 * t1 * t1 * t * y1 + 3 * t1 * t * t * y2 + t * t * t * y2;
       g.append("rect").attr("x", labelX - pillW / 2).attr("y", labelY - pillH / 2).attr("width", pillW).attr("height", pillH).attr("rx", 8).attr("fill", theme.background).attr("stroke", theme.gridLine).attr("stroke-width", 0.7);
-      g.append("text").attr("x", labelX).attr("y", labelY + 3.5).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.covLabelFontSize).attr("font-weight", "600").attr("fill", ps.covColor).text(corr.toFixed(2));
+      g.append("text").attr("x", labelX).attr("y", labelY + 3.5).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.covLabelFontSize).attr("font-weight", "600").attr("fill", ps.covColor).text(corr.toFixed(dec));
     }
   }
   for (let fi = 0; fi < nFactors; fi++) {
@@ -4332,7 +4347,7 @@ function renderPath(d3, container, data, config) {
       const mt = ps.loadingPosition, mt1 = 1 - mt;
       const lx = mt1 * mt1 * mt1 * x1 + 3 * mt1 * mt1 * mt * cp1x + 3 * mt1 * mt * mt * cp2x + mt * mt * mt * x2;
       const ly = mt1 * mt1 * mt1 * y1 + 3 * mt1 * mt1 * mt * cp1y + 3 * mt1 * mt * mt * cp2y + mt * mt * mt * y2;
-      const labelText = `${loading.toFixed(2)}${stars}`;
+      const labelText = `${loading.toFixed(dec)}${stars}`;
       const lbl = g.append("text").attr("x", lx).attr("y", ly + ps.loadingLabelOffset).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.loadingFontSize).attr("font-weight", ps.loadingFontWeight).attr("fill", arrowColor).text(labelText);
       if (ps.halo) lbl.attr("paint-order", "stroke").attr("stroke", ps.haloColor).attr("stroke-width", ps.haloWidth).attr("stroke-linejoin", "round");
     }
@@ -4416,7 +4431,7 @@ function renderPath(d3, container, data, config) {
       if (ps.errorSelfLoop) {
         const loopRight = errorCx + ps.errorRx + ps.errorSelfLoopSize;
         g.append("path").attr("d", `M${errorCx + ps.errorRx},${cy - 3} C${loopRight},${cy - 14} ${loopRight},${cy + 14} ${errorCx + ps.errorRx},${cy + 3}`).attr("fill", "none").attr("stroke", theme.axisLine).attr("stroke-width", ps.errorArrowWidth).attr("marker-end", "url(#fa-arr-err)");
-        const errLbl = g.append("text").attr("x", loopRight + 2).attr("y", cy + ps.errorFontSize * 0.35).attr("text-anchor", "start").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize - 0.5).attr("font-weight", "500").attr("fill", theme.textMuted).text(uniq.toFixed(2));
+        const errLbl = g.append("text").attr("x", loopRight + 2).attr("y", cy + ps.errorFontSize * 0.35).attr("text-anchor", "start").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize - 0.5).attr("font-weight", "500").attr("fill", theme.textMuted).text(uniq.toFixed(dec));
         if (ps.halo) errLbl.attr("paint-order", "stroke").attr("stroke", ps.haloColor).attr("stroke-width", ps.haloWidth).attr("stroke-linejoin", "round");
       }
       g.append("text").attr("x", errorCx).attr("y", cy + 1).attr("text-anchor", "middle").attr("dominant-baseline", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", ps.errorFontSize).attr("font-weight", "600").attr("fill", theme.textMuted).text(`e${i + 1}`);
@@ -4500,6 +4515,7 @@ function renderPath(d3, container, data, config) {
 }
 function renderCommunality(d3, container, data, config) {
   const theme = config.theme ?? DEFAULT_THEME;
+  const dec = config.decimals ?? 2;
   const nItems = data.communalities.length;
   const W = config.width ?? 500;
   const H = config.height ?? Math.max(nItems * 28 + 120, 250);
@@ -4535,7 +4551,7 @@ function renderCommunality(d3, container, data, config) {
         formatTooltipRow("Uniqueness", data.uniqueness[origIdx] ?? 0)
       ].join(""), theme);
     }).on("mouseout", hideTooltip);
-    g.append("text").attr("x", xScale(val) + 4).attr("y", y + yScale.bandwidth() / 2 + 4).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.text).text(val.toFixed(2));
+    g.append("text").attr("x", xScale(val) + 4).attr("y", y + yScale.bandwidth() / 2 + 4).attr("font-family", theme.fontFamilyMono).attr("font-size", theme.fontSizeSmall - 1).attr("fill", theme.text).text(val.toFixed(dec));
   });
   g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(xScale).ticks(5)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
   g.append("g").call(d3.axisLeft(yScale)).selectAll("text").attr("fill", theme.text).attr("font-family", theme.fontFamily).attr("font-size", theme.fontSize);
@@ -4544,6 +4560,7 @@ function renderCommunality(d3, container, data, config) {
 }
 function renderFactorCorrelation(d3, container, data, config) {
   const theme = config.theme ?? DEFAULT_THEME;
+  const dec = config.decimals ?? 2;
   const Phi = data.factorCorrelations;
   const k = data.nFactors;
   const facLabels = config.factorLabels ?? data.factorNames;
@@ -4579,7 +4596,7 @@ function renderFactorCorrelation(d3, container, data, config) {
         }
       }).on("mouseout", hideTooltip);
       if (i !== j) {
-        g.append("text").attr("x", j * cellSize + cellSize / 2).attr("y", i * cellSize + cellSize / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", 12).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).text(val.toFixed(2));
+        g.append("text").attr("x", j * cellSize + cellSize / 2).attr("y", i * cellSize + cellSize / 2 + 4).attr("text-anchor", "middle").attr("font-family", theme.fontFamilyMono).attr("font-size", 12).attr("fill", Math.abs(val) > 0.6 ? "#fff" : theme.text).text(val.toFixed(dec));
       }
     }
   }

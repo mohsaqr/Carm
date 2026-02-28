@@ -129,6 +129,9 @@ export interface FAPlotConfig {
   readonly showFitBox?: boolean            // default: true (for path)
   readonly diagnostics?: FADiagnostics     // for scree plot parallel analysis overlay
   readonly pathStyle?: FAPathStyle         // obsessive control over path diagram
+  readonly decimals?: number               // default: 2 — decimal places for loadings/communalities/correlations
+  readonly sortBy?: 'original' | 'factor' | 'loading'  // default: 'factor' — loadings heatmap row order
+  readonly suppressBelow?: number          // default: 0 — hide text for |loading| < threshold (cell still colored)
 }
 
 // ─── Entry Point ─────────────────────────────────────────────────────────
@@ -282,19 +285,31 @@ function renderLoadings(
 ): void {
   const theme = config.theme ?? DEFAULT_THEME
   const threshold = config.loadingThreshold ?? 0.3
+  const dec = config.decimals ?? 2
+  const suppressBelow = config.suppressBelow ?? 0
+  const sortBy = config.sortBy ?? 'factor'
   const nItems = data.loadings.length
   const nFactors = data.nFactors
 
-  // Sort items by primary factor assignment
+  // Sort items according to sortBy option
   const itemOrder = Array.from({ length: nItems }, (_, i) => i)
-  itemOrder.sort((a, b) => {
-    const rowA = data.loadings[a]!
-    const rowB = data.loadings[b]!
-    const maxFactorA = rowA.indexOf(Math.max(...rowA.map(Math.abs)))
-    const maxFactorB = rowB.indexOf(Math.max(...rowB.map(Math.abs)))
-    if (maxFactorA !== maxFactorB) return maxFactorA - maxFactorB
-    return Math.max(...rowB.map(Math.abs)) - Math.max(...rowA.map(Math.abs))
-  })
+  if (sortBy === 'factor') {
+    itemOrder.sort((a, b) => {
+      const rowA = data.loadings[a]!
+      const rowB = data.loadings[b]!
+      const maxFactorA = rowA.indexOf(Math.max(...rowA.map(Math.abs)))
+      const maxFactorB = rowB.indexOf(Math.max(...rowB.map(Math.abs)))
+      if (maxFactorA !== maxFactorB) return maxFactorA - maxFactorB
+      return Math.max(...rowB.map(Math.abs)) - Math.max(...rowA.map(Math.abs))
+    })
+  } else if (sortBy === 'loading') {
+    itemOrder.sort((a, b) => {
+      const maxA = Math.max(...data.loadings[a]!.map(Math.abs))
+      const maxB = Math.max(...data.loadings[b]!.map(Math.abs))
+      return maxB - maxA
+    })
+  }
+  // sortBy === 'original' → no sorting, keep natural order
 
   const cellW = 56, cellH = 28
   const showComm = true
@@ -355,13 +370,17 @@ function renderLoadings(
         })
         .on('mouseout', hideTooltip)
 
-      g.append('text')
-        .attr('x', ci * cellW + cellW / 2).attr('y', rowIdx * cellH + cellH / 2 + 4)
-        .attr('text-anchor', 'middle')
-        .attr('font-family', theme.fontFamilyMono).attr('font-size', Math.min(10, cellW / 5))
-        .attr('fill', Math.abs(val) > 0.6 ? '#fff' : theme.text)
-        .attr('opacity', dimmed ? 0.5 : 1)
-        .text(val.toFixed(2))
+      // Show text unless suppressed
+      const suppressed = suppressBelow > 0 && Math.abs(val) < suppressBelow
+      if (!suppressed) {
+        g.append('text')
+          .attr('x', ci * cellW + cellW / 2).attr('y', rowIdx * cellH + cellH / 2 + 4)
+          .attr('text-anchor', 'middle')
+          .attr('font-family', theme.fontFamilyMono).attr('font-size', Math.min(10, cellW / 5))
+          .attr('fill', Math.abs(val) > 0.6 ? '#fff' : theme.text)
+          .attr('opacity', dimmed ? 0.5 : 1)
+          .text(val.toFixed(dec))
+      }
     })
 
     // Communality cell
@@ -377,7 +396,7 @@ function renderLoadings(
         .attr('text-anchor', 'middle')
         .attr('font-family', theme.fontFamilyMono).attr('font-size', Math.min(10, cellW / 5))
         .attr('fill', comm > 0.6 ? '#fff' : theme.text)
-        .text(comm.toFixed(2))
+        .text(comm.toFixed(dec))
     }
   })
 
@@ -471,6 +490,7 @@ function renderPath(
 ): void {
   const theme = config.theme ?? DEFAULT_THEME
   const ps = resolvePathStyle(config.pathStyle)
+  const dec = config.decimals ?? 2
   const showErrors = config.showErrorTerms !== false
   const showFit = config.showFitBox !== false
 
@@ -682,7 +702,7 @@ function renderPath(
         .attr('text-anchor', 'middle')
         .attr('font-family', theme.fontFamilyMono).attr('font-size', ps.covLabelFontSize).attr('font-weight', '600')
         .attr('fill', ps.covColor)
-        .text(corr.toFixed(2))
+        .text(corr.toFixed(dec))
     }
   }
 
@@ -736,7 +756,7 @@ function renderPath(
       const lx = mt1 * mt1 * mt1 * x1 + 3 * mt1 * mt1 * mt * cp1x + 3 * mt1 * mt * mt * cp2x + mt * mt * mt * x2
       const ly = mt1 * mt1 * mt1 * y1 + 3 * mt1 * mt1 * mt * cp1y + 3 * mt1 * mt * mt * cp2y + mt * mt * mt * y2
 
-      const labelText = `${loading.toFixed(2)}${stars}`
+      const labelText = `${loading.toFixed(dec)}${stars}`
 
       const lbl = g.append('text')
         .attr('x', lx).attr('y', ly + ps.loadingLabelOffset)
@@ -910,7 +930,7 @@ function renderPath(
           .attr('text-anchor', 'start')
           .attr('font-family', theme.fontFamilyMono).attr('font-size', ps.errorFontSize - 0.5)
           .attr('font-weight', '500').attr('fill', theme.textMuted)
-          .text(uniq.toFixed(2))
+          .text(uniq.toFixed(dec))
         if (ps.halo) errLbl.attr('paint-order', 'stroke').attr('stroke', ps.haloColor).attr('stroke-width', ps.haloWidth).attr('stroke-linejoin', 'round')
       }
 
@@ -1065,6 +1085,7 @@ function renderCommunality(
   config: FAPlotConfig
 ): void {
   const theme = config.theme ?? DEFAULT_THEME
+  const dec = config.decimals ?? 2
   const nItems = data.communalities.length
   const W = config.width ?? 500
   const H = config.height ?? Math.max(nItems * 28 + 120, 250)
@@ -1132,7 +1153,7 @@ function renderCommunality(
     g.append('text')
       .attr('x', xScale(val) + 4).attr('y', y + yScale.bandwidth() / 2 + 4)
       .attr('font-family', theme.fontFamilyMono).attr('font-size', theme.fontSizeSmall - 1)
-      .attr('fill', theme.text).text(val.toFixed(2))
+      .attr('fill', theme.text).text(val.toFixed(dec))
   })
 
   // Axes
@@ -1156,6 +1177,7 @@ function renderFactorCorrelation(
   config: FAPlotConfig
 ): void {
   const theme = config.theme ?? DEFAULT_THEME
+  const dec = config.decimals ?? 2
   const Phi = data.factorCorrelations
   const k = data.nFactors
   const facLabels = config.factorLabels ?? data.factorNames
@@ -1215,7 +1237,7 @@ function renderFactorCorrelation(
           .attr('text-anchor', 'middle')
           .attr('font-family', theme.fontFamilyMono).attr('font-size', 12)
           .attr('fill', Math.abs(val) > 0.6 ? '#fff' : theme.text)
-          .text(val.toFixed(2))
+          .text(val.toFixed(dec))
       }
     }
   }

@@ -47,4 +47,13 @@ export interface CorrelationMatrix {
  * Method: 'pearson' | 'spearman' | 'kendall'
  */
 export declare function correlationMatrix(data: readonly (readonly number[])[], labels?: readonly string[], method?: 'pearson' | 'spearman' | 'kendall'): CorrelationMatrix;
+/**
+ * Point-biserial correlation between a binary variable and a continuous variable.
+ * Validates binary is 0/1, delegates to Pearson, renames to r_pb.
+ *
+ * Cross-validated with R:
+ * > cor.test(binary, continuous)
+ * # Point-biserial is just Pearson r when one var is binary
+ */
+export declare function pointBiserialCorrelation(binary: readonly number[], continuous: readonly number[], ciLevel?: number): StatResult;
 //# sourceMappingURL=correlation.d.ts.map

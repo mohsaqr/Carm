@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var core_exports = {};
 __export(core_exports, {
   Matrix: () => Matrix,
+  PRNG: () => PRNG,
   adjustPValues: () => adjustPValues,
   betaFn: () => betaFn,
   chiSqCDF: () => chiSqCDF,
@@ -28,22 +29,30 @@ __export(core_exports, {
   chiSqQuantile: () => chiSqQuantile,
   clamp: () => clamp,
   cov: () => cov,
+  digamma: () => digamma,
   fDistCDF: () => fDistCDF,
   fDistPValue: () => fDistPValue,
+  formatANCOVA: () => formatANCOVA,
   formatANOVA: () => formatANOVA,
+  formatBinomial: () => formatBinomial,
   formatCFAFit: () => formatCFAFit,
   formatCI: () => formatCI,
   formatChiSq: () => formatChiSq,
+  formatCochranQ: () => formatCochranQ,
   formatCorrelation: () => formatCorrelation,
   formatDF: () => formatDF,
   formatKruskalWallis: () => formatKruskalWallis,
   formatLMM: () => formatLMM,
   formatMannWhitney: () => formatMannWhitney,
+  formatNegBin: () => formatNegBin,
   formatP: () => formatP,
+  formatPoisson: () => formatPoisson,
+  formatProportions: () => formatProportions,
   formatRMANOVA: () => formatRMANOVA,
   formatRegression: () => formatRegression,
   formatStat: () => formatStat,
   formatTTest: () => formatTTest,
+  formatTwoWayANOVA: () => formatTwoWayANOVA,
   gamma: () => gamma,
   incompleteBeta: () => incompleteBeta,
   incompleteGamma: () => incompleteGamma,
@@ -75,6 +84,7 @@ __export(core_exports, {
   tDistCDF: () => tDistCDF,
   tDistPValue: () => tDistPValue,
   tDistQuantile: () => tDistQuantile,
+  trigamma: () => trigamma,
   variance: () => variance
 });
 module.exports = __toCommonJS(core_exports);
@@ -465,6 +475,37 @@ function logGamma(z) {
 }
 function gamma(z) {
   return Math.exp(logGamma(z));
+}
+function digamma(x) {
+  if (x <= 0 && x === Math.floor(x)) return NaN;
+  if (x < 0) return digamma(1 - x) - Math.PI / Math.tan(Math.PI * x);
+  let result = 0;
+  let z = x;
+  while (z < 8) {
+    result -= 1 / z;
+    z += 1;
+  }
+  const z2 = 1 / (z * z);
+  result += Math.log(z) - 0.5 / z - z2 * (1 / 12 - z2 * (1 / 120 - z2 * (1 / 252 - z2 * (1 / 240 - z2 * (5 / 660 - z2 * 691 / 32760)))));
+  return result;
+}
+function trigamma(x) {
+  if (x <= 0 && x === Math.floor(x)) return NaN;
+  if (x < 0) {
+    const piX = Math.PI * x;
+    const sinPiX = Math.sin(piX);
+    return -(Math.PI * Math.PI) / (sinPiX * sinPiX) + trigamma(1 - x);
+  }
+  let result = 0;
+  let z = x;
+  while (z < 8) {
+    result += 1 / (z * z);
+    z += 1;
+  }
+  const iz = 1 / z;
+  const iz2 = iz * iz;
+  result += iz + iz2 / 2 + iz2 * iz * (1 / 6 - iz2 * (1 / 30 - iz2 * (1 / 42 - iz2 * (1 / 30 - iz2 * (5 / 66 - iz2 * 691 / 2730)))));
+  return result;
 }
 function logBeta(a, b) {
   return logGamma(a) + logGamma(b) - logGamma(a + b);
@@ -1082,6 +1123,29 @@ function interpretCramerV(v, df) {
 function formatCFAFit(fit) {
   return `\u03C7\xB2(${formatDF(fit.df)}) = ${formatStat(fit.chiSq)}, ${formatP(fit.pValue)}, RMSEA = ${formatStat(fit.rmsea, 3)} ${formatCI(fit.rmseaCI, 3)}, CFI = ${formatStat(fit.cfi, 3)}, TLI = ${formatStat(fit.tli, 3)}, SRMR = ${formatStat(fit.srmr, 3)}`;
 }
+function formatPoisson(deviance, nullDeviance, aic) {
+  return `Deviance = ${formatStat(deviance, 1)}, Null deviance = ${formatStat(nullDeviance, 1)}, AIC = ${formatStat(aic, 1)}`;
+}
+function formatNegBin(deviance, theta, aic) {
+  return `Deviance = ${formatStat(deviance, 1)}, \u03B8 = ${formatStat(theta, 2)}, AIC = ${formatStat(aic, 1)}`;
+}
+function formatTwoWayANOVA(source, F, df1, df2, pValue, etaSq) {
+  return `${source}: F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, \u03B7\xB2 = ${formatStat(etaSq)}`;
+}
+function formatANCOVA(source, F, df1, df2, pValue, etaSq) {
+  return `${source}: F(${formatDF([df1, df2])}) = ${formatStat(F)}, ${formatP(pValue)}, \u03B7\xB2 = ${formatStat(etaSq)}`;
+}
+function formatBinomial(pHat, pValue, ci, g, ciLevel = 0.95) {
+  const ciPct = Math.round(ciLevel * 100);
+  return `p\u0302 = ${formatStat(pHat, 3)}, ${formatP(pValue)}, ${ciPct}% CI ${formatCI(ci, 3)}, g = ${formatStat(g, 3)}`;
+}
+function formatProportions(z, pValue, h, ci, ciLevel = 0.95) {
+  const ciPct = Math.round(ciLevel * 100);
+  return `z = ${formatStat(z)}, ${formatP(pValue)}, h = ${formatStat(h)}, ${ciPct}% CI ${formatCI(ci, 3)}`;
+}
+function formatCochranQ(Q, df, pValue) {
+  return `Q(${formatDF(df)}) = ${formatStat(Q)}, ${formatP(pValue)}`;
+}
 function interpretEffect(value, thresholds) {
   const abs = Math.abs(value);
   if (abs < thresholds[0]) return "negligible";
@@ -1089,4 +1153,21 @@ function interpretEffect(value, thresholds) {
   if (abs < thresholds[2]) return "medium";
   return "large";
 }
+
+// src/core/prng.ts
+var PRNG = class {
+  state;
+  constructor(seed) {
+    this.state = seed >>> 0;
+  }
+  next() {
+    this.state = this.state + 2654435769 | 0;
+    let t = this.state ^ this.state >>> 16;
+    t = Math.imul(t, 569420461);
+    t = t ^ t >>> 15;
+    t = Math.imul(t, 1935289751);
+    t = t ^ t >>> 15;
+    return (t >>> 0) / 4294967296;
+  }
+};
 //# sourceMappingURL=index.cjs.map

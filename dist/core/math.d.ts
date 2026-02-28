@@ -11,6 +11,21 @@ import type { PAdjMethod } from './types.js';
 export declare function logGamma(z: number): number;
 /** Gamma function. */
 export declare function gamma(z: number): number;
+/**
+ * Digamma function ψ(x) = d/dx ln Γ(x).
+ * Asymptotic series for x ≥ 8, recurrence ψ(x) = ψ(x+1) - 1/x for small x.
+ * Reference: Abramowitz & Stegun §6.3.18
+ */
+export declare function digamma(x: number): number;
+/**
+ * Trigamma function ψ'(x) = d²/dx² ln Γ(x).
+ * Asymptotic series for x ≥ 8, recurrence ψ'(x) = ψ'(x+1) + 1/x² for small x.
+ * Reference: Abramowitz & Stegun §6.4.12
+ *
+ * Asymptotic: ψ'(z) = 1/z + 1/(2z²) + 1/(6z³) - 1/(30z⁵) + 1/(42z⁷) - 1/(30z⁹) + ...
+ *           = 1/z + 1/(2z²) + (1/z³)·[1/6 - (1/z²)·(1/30 - (1/z²)·(1/42 - ...))]
+ */
+export declare function trigamma(x: number): number;
 /** Log of Beta function: log B(a, b) = logΓ(a) + logΓ(b) - logΓ(a+b). */
 export declare function logBeta(a: number, b: number): number;
 /** Beta function. */
