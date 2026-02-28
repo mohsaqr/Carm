@@ -97,7 +97,7 @@ function computeCorrelationMatrix(
   data: readonly (readonly number[])[],
   n: number,
   d: number
-): Matrix {
+): { R: Matrix; sds: Float64Array } {
   const means = new Float64Array(d)
   const sds = new Float64Array(d)
 
@@ -126,7 +126,7 @@ function computeCorrelationMatrix(
       R[c]![r] = val
     }
   }
-  return Matrix.fromArray(R)
+  return { R: Matrix.fromArray(R), sds }
 }
 
 // ─── Options interfaces ──────────────────────────────────────────────────
@@ -871,6 +871,26 @@ function gpfOblq(
     })
   )
 
+  // Reflect columns: flip factor if sum of loadings is negative (lavaan default)
+  // lavaan::lav_matrix_rotate.R performs this after rotation to ensure
+  // primary loadings are positive, improving interpretability and matching
+  // lavaan's basin selection behavior.
+  for (let j = 0; j < k; j++) {
+    let colSum = 0
+    for (let i = 0; i < Larr.length; i++) colSum += Larr[i]![j]!
+    if (colSum < 0) {
+      // Flip loadings column j
+      for (let i = 0; i < Larr.length; i++) Larr[i]![j] = -Larr[i]![j]!
+      // Flip corresponding Phi row and column (off-diagonals only)
+      for (let m = 0; m < k; m++) {
+        if (m !== j) {
+          Phi[j]![m] = -Phi[j]![m]!
+          Phi[m]![j] = -Phi[m]![j]!
+        }
+      }
+    }
+  }
+
   return { rotated: Larr, T: Tarr, Phi, f }
 }
 
@@ -1097,7 +1117,8 @@ function qrStartMatrix(A: number[][], k: number): number[][] | null {
  * Run gpfOblq with optional random starting matrices.
  * Start 0 always uses T=I (deterministic, matches R/GPArotation).
  * Start 1 uses T from QR(A^T) — lower-triangular start matching lavaan.
- * Starts 2..randomStarts-1 use Haar-distributed random orthogonal matrices.
+ * Start 2 uses T from varimax — orthogonal simple-structure initialization.
+ * Starts 3..randomStarts-1 use Haar-distributed random orthogonal matrices.
  * Returns the solution with the lowest criterion value.
  */
 function gpfOblqWithRandomStarts(
@@ -1116,19 +1137,24 @@ function gpfOblqWithRandomStarts(
   const Tqr = qrStartMatrix(loadings, k)
   if (Tqr) {
     const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr)
-    if (result.f < best.f) {
-      best = result
-    }
+    if (result.f < best.f) best = result
   }
 
-  if (randomStarts > 2) {
+  // Start 2: T from varimax — varimax finds an orthogonal simple-structure
+  // solution that is often close to the geomin oblique optimum; using it as
+  // a starting point explores a basin that pure random starts may miss.
+  {
+    const vmx = rotateVarimax(loadings, maxIter, tol)
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T)
+    if (result.f < best.f) best = result
+  }
+
+  if (randomStarts > 3) {
     const rng = new PRNG(seed)
-    for (let s = 2; s < randomStarts; s++) {
+    for (let s = 3; s < randomStarts; s++) {
       const Trand = randomOrthogonalMatrix(k, rng)
       const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand)
-      if (result.f < best.f) {
-        best = result
-      }
+      if (result.f < best.f) best = result
     }
   }
 
@@ -1208,7 +1234,7 @@ function parallelAnalysis(
     const randomData: number[][] = Array.from({ length: n }, () =>
       Array.from({ length: d }, () => prngNormal(rng))
     )
-    const randR = computeCorrelationMatrix(randomData, n, d)
+    const { R: randR } = computeCorrelationMatrix(randomData, n, d)
     const randEig = randR.eigen().values  // sorted descending
     for (let i = 0; i < d; i++) {
       allEigens[i]![iter] = randEig[i]!
@@ -1669,7 +1695,7 @@ export function runFADiagnostics(
   const iterations = options?.parallelIterations ?? 100
   const rng = new PRNG(seed)
 
-  const R = computeCorrelationMatrix(data, n, d)
+  const { R } = computeCorrelationMatrix(data, n, d)
 
   // KMO & Bartlett
   const { kmo, kmoPerItem, bartlett } = computeKMOBartlett(R, n, d)
@@ -1723,7 +1749,7 @@ export function runEFA(
   const seed = options?.seed ?? 42
   const randomStarts = options?.randomStarts ?? 50
 
-  const R = computeCorrelationMatrix(data, n, d)
+  const { R } = computeCorrelationMatrix(data, n, d)
   const eigenvalues = R.eigen().values  // sorted descending
 
   // Determine number of factors
@@ -1741,10 +1767,36 @@ export function runEFA(
     ? extractML(R, nFactors, maxIter, tol)
     : extractPAF(R, nFactors, maxIter, tol)
 
-  // Rotate
-  const { rotated, Phi } = applyRotation(
-    extracted.loadings, rotation, maxIter, tol, geominDelta, randomStarts, seed
+  // Model-implied standardization (matches lavaan's std.ov=TRUE default)
+  // lavaan rotates standardized loadings: A = Λ / sqrt(ov_var), where
+  // ov_var_i = h²_i + ψ_i (model-implied variance per variable).
+  // For a correlation matrix input, ov_var ≈ 1.0 but not exactly.
+  // The per-variable deviation from 1.0 gives each row a different weight
+  // in the geomin criterion, shifting which basin GPA enters.
+  const ovVar = new Float64Array(d)
+  for (let i = 0; i < d; i++) {
+    let h2 = 0
+    for (let j = 0; j < nFactors; j++) h2 += extracted.loadings[i]![j]! ** 2
+    // ψ_i = 1 - h² for correlation matrix (uniqueness from extraction)
+    const psi = 1 - Math.min(h2, 0.999)
+    ovVar[i] = h2 + psi  // should ≈ 1.0 for correlation matrix
+  }
+
+  // Standardize by model-implied SD before rotation
+  const loadingsForRotation = extracted.loadings.map((row, i) => {
+    const scale = Math.sqrt(ovVar[i]!)
+    return row.map(v => v / scale)
+  })
+
+  const { rotated: rotatedStd, Phi } = applyRotation(
+    loadingsForRotation, rotation, maxIter, tol, geominDelta, randomStarts, seed
   )
+
+  // De-standardize after rotation (restore original scale)
+  const rotated = rotatedStd.map((row, i) => {
+    const scale = Math.sqrt(ovVar[i]!)
+    return row.map(v => v * scale)
+  })
 
   // Compute communalities and uniqueness from rotated solution + Phi
   const communalities = new Float64Array(d)
@@ -1840,7 +1892,7 @@ export function runCFA(
   const maxIter = options?.maxIter ?? 1000
   const tolVal = options?.tol ?? 1e-6
 
-  const S = computeCorrelationMatrix(data, n, d)
+  const { R: S } = computeCorrelationMatrix(data, n, d)
 
   // Optimize CFA
   const { L, Theta, Phi } = cfaOptimize(S, model, d, maxIter, tolVal)

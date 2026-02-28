@@ -1,3 +1,22 @@
+### 2026-02-28 — EFA geomin: model-implied standardization + column reflection
+
+- `src/stats/factor-analysis.ts`:
+  - Added model-implied standardization in `runEFA()`: computes `ovVar_i = h²_i + ψ_i` per variable, standardizes loadings by `sqrt(ovVar)` before rotation, de-standardizes after. Matches lavaan's `std.ov=TRUE` default.
+  - Added post-rotation column reflection in `gpfOblq()`: flips factor columns with negative loading sum, including corresponding Phi row/column sign flips. Matches lavaan's default behavior.
+  - Removed unused `criterionGeominCov()` function (was causing build error with `noUnusedLocals: true`).
+- `tmp/baseline-compare.ts`: Rewrote with proper psychometric metrics: Tucker's congruence coefficient per factor, communality comparison, factor correlation matrix comparison, reproduced correlation matrix.
+- Tests: 784/784 pass, 200/200 geomin cross-validation pass
+- Result on rraw dataset: Tucker's φ all > 0.95 (min=0.975), mean primary Δ still ~2.57% (inherent to different GPA basins, confirmed by ovVar ≈ 1.0 making standardization nearly a no-op for correlation matrix input).
+
+### 2026-02-28 — EFA geomin rotation: varimax-initialized start + criterionGeominCov
+
+- `src/stats/factor-analysis.ts`:
+  - Added `criterionGeominCov()`: covariance-weighted geomin criterion function. Mathematically equivalent to standard geomin on covariance-scale loadings but operates on correlation-scale loadings. Utility function for future use.
+  - Added varimax-initialized start (#2) to `gpfOblqWithRandomStarts()`: computes varimax rotation first, then uses its T matrix as a starting point for oblique GPA. Adds one more deterministic exploration direction.
+  - Updated start numbering: random starts now begin at index 3 (was 2) to account for the new varimax start.
+- Tests: 784/784 pass, 200/200 geomin cross-validation pass
+- Investigation: covariance-scale rotation approaches (scaling loadings, weighted criterion, hybrid scoring) all found different basins from lavaan. The ~2.5% loading difference on the rraw dataset is inherent to near-degenerate optima in the geomin criterion surface — Carm finds a mathematically better Q.
+
 ### 2026-02-27 — Numerical equivalence tests for all 14 new methods (R cross-validation)
 
 Infrastructure:

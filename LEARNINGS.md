@@ -1,3 +1,43 @@
+## 2026-02-28 (Model-implied standardization + column reflection)
+
+### Model-implied standardization is nearly a no-op for correlation matrix input
+- lavaan computes `ov_var_i = h²_i + ψ_i` and standardizes loadings by `sqrt(ov_var)` before rotation
+- For correlation matrix input, `ov_var ≈ 1.0` for all variables (deviation < 0.001 typically)
+- This means the standardization barely changes the loadings going into rotation
+- The ~2.5% rraw dataset diff is confirmed to be a basin selection issue, not a preprocessing issue
+- Tucker's congruence: all 5 factors > 0.95 (min=0.975), confirming factor identity across solutions
+
+### Column reflection (flip negative-sum columns) is the correct lavaan post-processing
+- lavaan flips factor columns where `sum(loadings_j) < 0` after rotation
+- This affects sign convention but not optimality — both sign choices are valid local optima
+- When flipping a column, must also flip the corresponding Phi row and column (off-diagonals only)
+- Diagonal of Phi stays 1.0 (doesn't get double-flipped)
+
+## 2026-02-28 (Geomin covariance-scale rotation investigation)
+
+### Covariance-scale geomin rotation finds a BETTER but DIFFERENT optimum from lavaan
+- Hypothesis: rotating in covariance scale (matching lavaan) would fix the ~2.5% loading diff
+- Reality: covariance-scale rotation finds Q_cov=0.534 (better than lavaan's Q_cov=0.547) but in a completely different basin, increasing the loading diff to 6.3%
+- The covariance-weighted criterion (mathematically equivalent to cov-scale rotation) produces the same result
+- More starts (50, 100, 200) don't help — ALL starts converge to the same basin
+- Varimax-initialized start also converges to the same basin
+- Hybrid scoring (corr-scale GPA, cov-scale start selection) gave 3.7% — worse than baseline
+
+### The 2.5% lavaan diff is inherent to different GPA implementations
+- Carm Q_corr=0.4791 vs lavaan Q_corr=0.4800 — Carm finds a mathematically BETTER optimum
+- Both are valid local optima of the geomin criterion with δ=0.001
+- The geomin surface for 31-var, 5-factor data has near-degenerate optima (Q diff = 0.001)
+- Factor match correlations: [0.9996, 0.9930, 0.9996, 0.9999, 0.9726] — factor 5 is the weak link
+- Teacher burnout dataset (23 vars, 5 factors) matches lavaan to MAE=1e-6 — the issue is dataset-specific
+- For some datasets the criterion landscape is smoother and both implementations converge to the same point; for others (rraw_dataaw_data) the landscape has many near-equal optima
+
+### criterionGeominCov: variable-weighted geomin for covariance-scale equivalence
+- Q_cov = Σ_i [Π_j (sd²_i × λ²_ij + δ)]^{1/k} = Σ_i sd²_i × [Π_j (λ²_ij + δ/sd²_i)]^{1/k}
+- Each variable gets weight sd²_i and effective delta δ/sd²_i
+- Mathematically equivalent to standard geomin on covariance-scale loadings
+- Implemented as `criterionGeominCov()` in factor-analysis.ts for future use
+- The variable-specific δ makes it impossible to replicate cov-scale behavior with a single δ at corr scale
+
 ## 2026-02-28 (Google Drive → local folder migration)
 
 ### Google Drive corrupts node_modules

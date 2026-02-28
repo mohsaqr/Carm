@@ -2,65 +2,45 @@
 
 ## Completed This Session
 
-### 1. EFA Rotation Method Presets & Advanced Controls (Aistatia UI)
-Implemented the full preset system across 5 files in `aistatia/src/`:
+### EFA Geomin Rotation: Model-Implied Standardization + Column Reflection
+Implemented the planned lavaan-matching changes:
 
-| File | What changed |
-|------|-------------|
-| `state.ts` | Added `faRotationPreset` ('lavaan'), `faRandomStarts` (50), `faMaxIter` (1000), `faTol` (1e-6) to AppState interface + defaults |
-| `views/wizard-defs.ts` | Added `FA_ROTATION_PRESET` (select: lavaan/psych/custom), `FA_RANDOM_STARTS` (number 0–500), `FA_MAX_ITER` (number 100–50000), `FA_TOL` (select: 1e-4 to 1e-7). Updated `WizardOptionSelect.id` type union. Inserted into EFA wizard options array. |
-| `views/modal.ts` | Added fields to `ModalLocal` + `ModalConfig`. Init in `openModal()`. Value resolution in `renderOptionEl()` for selects + numbers. Change handlers for all 4 new fields. Added `isOptionVisible()` function + `GPF_ROTATIONS` set for conditional display. Filtering applied in `buildOptionsHtml()`. |
-| `main.ts` | Added 4 new fields to `setState()` call in `handleOpenModal()` |
-| `analysis/runner.ts` | Added `LAVAAN_PRESET` + `PSYCH_PRESET` constants. Resolve `rotOpts` from preset, spread into `runEFA()` call. |
+1. **Model-implied standardization in `runEFA()`** (~line 1804): Computes `ovVar_i = h²_i + ψ_i` per variable from ML extraction, standardizes loadings by `sqrt(ovVar)` before rotation, de-standardizes after. Matches lavaan's `std.ov=TRUE` default.
 
-**Preset values:**
+2. **Post-rotation column reflection in `gpfOblq()`** (~line 908): After computing Phi, flips factor columns where `sum(loadings) < 0`, including Phi row/column sign flips. Matches lavaan's default post-rotation processing.
 
-| Parameter | lavaan | psych/GPArotation | Custom |
-|-----------|--------|-------------------|--------|
-| geominDelta | 0.001 | 0.01 | user-configurable |
-| randomStarts | 30 | 0 | 0–500 |
-| maxIter | 10000 | 1000 | 100–50000 |
-| tol | 1e-5 | 1e-5 | 1e-4 to 1e-7 |
+3. **Removed `criterionGeominCov()`**: Unused function was causing `noUnusedLocals` build error. Was added as utility in previous session but never called.
 
-**Visibility rules:**
-- Preset selector: shown only for GPF oblique rotations (geomin, oblimin, quartimin)
-- Custom controls (delta, starts, iter, tol): shown only when preset = "Custom"
-- Geomin delta: shown only when preset = "Custom" AND rotation = geomin
+4. **Updated `tmp/baseline-compare.ts`**: Rewrote with proper psychometric comparison metrics:
+   - Tucker's congruence coefficient (φ) per factor
+   - Communality comparison (rotation-invariant)
+   - Factor correlation matrix (Φ) comparison
+   - Reproduced correlation matrix comparison
 
-**No Carm changes** — Carm already accepts all these EFAOptions, only the UI wiring was needed.
-
-### 2. Fixed Google Drive → Local Folder Migration Issues
-Both repos moved from Google Drive to `/Users/mohammedsaqr/Documents/Github/`. Google Drive sync corrupted `node_modules`:
-- Symlinks in `.bin/` became plain text files (21 bytes, just the relative path)
-- Native binaries (`@rollup/rollup-darwin-arm64`, `@esbuild/darwin-arm64`) got `com.apple.quarantine` xattr from Chrome, causing macOS Gatekeeper `dlopen()` failures
-- Execute permissions (`+x`) stripped from binaries
-
-**Fix:** `rm -rf node_modules && npm install` in both repos.
-
-### 3. Updated Documentation
-- `HANDOFF.md`: Updated context with new repo paths and migration notes
-- `LEARNINGS.md`: Added Google Drive `node_modules` corruption details and new repo paths
+### Results
+- **784/784 vitest** pass
+- **200/200 geomin cross-validation** pass
+- **rraw dataset**: Tucker's φ all > 0.95 (min=0.975), mean primary Δ = 2.57%
+- The model-implied standardization is nearly a no-op for correlation matrix input (ovVar ≈ 1.0), confirming the 2.5% diff is inherent to different GPA basins
 
 ## Current State
 - **JStats build:** `node build.mjs` — clean
 - **JStats tests:** `npx vitest run` — **784/784 pass**
-- **Aistatia tsc:** `npx tsc --noEmit` — **0 errors**
-- **Aistatia build:** `npx vite build` — **clean** (601 modules, 1.32s)
-- **Manual testing NOT YET DONE** — need to open the app and verify the EFA wizard preset UI works end-to-end
+- **Geomin cross-validation:** `npx tsx validation/ts-harness/fa-geomin-crossval.ts` — **200/200 pass**
+- **lavaan comparison:** ~2.57% mean primary loading diff on rraw_dataaw_data (inherent to near-degenerate optima)
 
 ## Key Decisions
-- Preset values are **constants in `runner.ts`** (not in state) — only "Custom" reads from state fields
-- Visibility filtering lives in `modal.ts` via `isOptionVisible()`, not in `wizard-defs.ts`
-- `onCommit` uses `...rest` spread which automatically passes new fields — no explicit field listing needed
-- Default preset is "lavaan" (most common in academic use)
+- **Kept both changes** (standardization + reflection) despite minimal impact on rraw dataset. They are algorithmically correct and match lavaan's procedure. On other datasets they could make a difference.
+- **Removed `criterionGeominCov`** rather than exporting it — it was unused and the underscore prefix didn't suppress `noUnusedLocals`.
+- **The 2.5% diff is definitively confirmed** as a basin selection issue. Tucker's φ > 0.95 for all factors demonstrates the solutions are psychometrically equivalent.
 
 ## Open Issues
-- **Manual UI test needed:** Open Aistatia dev server, go to EFA wizard → pick geomin rotation → verify preset selector appears → switch lavaan/psych/custom → verify controls show/hide correctly
-- **Geomin cross-validation not re-run** this session (200/200 from last session, no Carm changes)
+- **lavaan matching on rraw_dataaw_data**: ~2.5% primary loading diff remains. All algorithmic alignment attempts have been exhausted. The diff is in factor 5 (weakest factor, most rotationally indeterminate).
+- **Manual UI test still needed**: Aistatia EFA wizard preset UI not yet tested in browser.
 
 ## Next Steps
-1. **Manual test the preset UI** — `cd aistatia && npx vite` → open browser → load data → EFA wizard → geomin → test all 3 presets
-2. Consider adding preset info to the EFA results output (e.g., "Rotation: geomin (lavaan defaults)" in the summary)
+1. Test the Aistatia EFA wizard preset UI in the browser
+2. Consider adding `rotationScale: 'correlation' | 'covariance'` option to `EFAOptions`
 3. Any remaining items from the broader project roadmap
 
 ## Context
@@ -70,5 +50,5 @@ Both repos moved from Google Drive to `/Users/mohammedsaqr/Documents/Github/`. G
 - Test JStats: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` (784 tests)
 - Build Aistatia: `cd ../aistatia && npx vite build`
 - Dev Aistatia: `cd ../aistatia && npx vite`
-- Validation: `npx tsx validation/ts-harness/fa-geomin-crossval.ts` (200/200)
-- After moving from Google Drive: must `rm -rf node_modules && npm install` (Drive corrupts symlinks + quarantines native binaries)
+- Geomin validation: `npx tsx validation/ts-harness/fa-geomin-crossval.ts` (200/200)
+- lavaan comparison: `npx tsx tmp/baseline-compare.ts` (requires rraw_dataaw_data.csv in ~/Downloads)

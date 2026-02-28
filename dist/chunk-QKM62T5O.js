@@ -4757,7 +4757,7 @@ function computeCorrelationMatrix(data, n, d) {
       R[c][r] = val;
     }
   }
-  return Matrix.fromArray(R);
+  return { R: Matrix.fromArray(R), sds };
 }
 function computeFit(S, Sigma, n, d, nFreeParams, nFactors) {
   let logDetSigma, logDetS;
@@ -5218,6 +5218,19 @@ function gpfOblq(A, criterion, maxIter, tol, Tinit) {
       return s;
     })
   );
+  for (let j = 0; j < k; j++) {
+    let colSum = 0;
+    for (let i = 0; i < Larr.length; i++) colSum += Larr[i][j];
+    if (colSum < 0) {
+      for (let i = 0; i < Larr.length; i++) Larr[i][j] = -Larr[i][j];
+      for (let m = 0; m < k; m++) {
+        if (m !== j) {
+          Phi[j][m] = -Phi[j][m];
+          Phi[m][j] = -Phi[m][j];
+        }
+      }
+    }
+  }
   return { rotated: Larr, T: Tarr, Phi, f };
 }
 function computeGPFoblqGradient(L, Gq, Tmat) {
@@ -5357,18 +5370,19 @@ function gpfOblqWithRandomStarts(loadings, criterionFn, maxIter, tol, k, randomS
   const Tqr = qrStartMatrix(loadings, k);
   if (Tqr) {
     const result = gpfOblq(loadings, criterionFn, maxIter, tol, Tqr);
-    if (result.f < best.f) {
-      best = result;
-    }
+    if (result.f < best.f) best = result;
   }
-  if (randomStarts > 2) {
+  {
+    const vmx = rotateVarimax(loadings, maxIter, tol);
+    const result = gpfOblq(loadings, criterionFn, maxIter, tol, vmx.T);
+    if (result.f < best.f) best = result;
+  }
+  if (randomStarts > 3) {
     const rng = new PRNG(seed);
-    for (let s = 2; s < randomStarts; s++) {
+    for (let s = 3; s < randomStarts; s++) {
       const Trand = randomOrthogonalMatrix(k, rng);
       const result = gpfOblq(loadings, criterionFn, maxIter, tol, Trand);
-      if (result.f < best.f) {
-        best = result;
-      }
+      if (result.f < best.f) best = result;
     }
   }
   return { rotated: best.rotated, Phi: best.Phi };
@@ -5414,7 +5428,7 @@ function parallelAnalysis(observedEigenvalues, n, d, iterations, rng) {
       { length: n },
       () => Array.from({ length: d }, () => prngNormal(rng))
     );
-    const randR = computeCorrelationMatrix(randomData, n, d);
+    const { R: randR } = computeCorrelationMatrix(randomData, n, d);
     const randEig = randR.eigen().values;
     for (let i = 0; i < d; i++) {
       allEigens[i][iter] = randEig[i];
@@ -5732,7 +5746,7 @@ function runFADiagnostics(data, options) {
   const seed = options?.seed ?? 42;
   const iterations = options?.parallelIterations ?? 100;
   const rng = new PRNG(seed);
-  const R = computeCorrelationMatrix(data, n, d);
+  const { R } = computeCorrelationMatrix(data, n, d);
   const { kmo, kmoPerItem, bartlett } = computeKMOBartlett(R, n, d);
   const eigenvalues = R.eigen().values;
   const { simulated, suggested: parallelSuggested } = parallelAnalysis(
@@ -5765,7 +5779,7 @@ function runEFA(data, options) {
   const tol = options?.tol ?? 1e-6;
   const seed = options?.seed ?? 42;
   const randomStarts = options?.randomStarts ?? 50;
-  const R = computeCorrelationMatrix(data, n, d);
+  const { R } = computeCorrelationMatrix(data, n, d);
   const eigenvalues = R.eigen().values;
   let nFactors = options?.nFactors;
   if (nFactors === void 0) {
@@ -5776,8 +5790,19 @@ function runEFA(data, options) {
   if (nFactors < 1) throw new Error("runEFA: nFactors must be at least 1");
   if (nFactors >= d) throw new Error("runEFA: nFactors must be less than number of variables");
   const extracted = extraction === "ml" ? extractML(R, nFactors, maxIter, tol) : extractPAF(R, nFactors, maxIter, tol);
-  const { rotated, Phi } = applyRotation(
-    extracted.loadings,
+  const ovVar = new Float64Array(d);
+  for (let i = 0; i < d; i++) {
+    let h2 = 0;
+    for (let j = 0; j < nFactors; j++) h2 += extracted.loadings[i][j] ** 2;
+    const psi = 1 - Math.min(h2, 0.999);
+    ovVar[i] = h2 + psi;
+  }
+  const loadingsForRotation = extracted.loadings.map((row, i) => {
+    const scale = Math.sqrt(ovVar[i]);
+    return row.map((v) => v / scale);
+  });
+  const { rotated: rotatedStd, Phi } = applyRotation(
+    loadingsForRotation,
     rotation,
     maxIter,
     tol,
@@ -5785,6 +5810,10 @@ function runEFA(data, options) {
     randomStarts,
     seed
   );
+  const rotated = rotatedStd.map((row, i) => {
+    const scale = Math.sqrt(ovVar[i]);
+    return row.map((v) => v * scale);
+  });
   const communalities = new Float64Array(d);
   const uniqueness = new Float64Array(d);
   for (let i = 0; i < d; i++) {
@@ -5841,7 +5870,7 @@ function runCFA(data, model, options) {
   if (k < 1) throw new Error("runCFA: model must specify at least 1 factor");
   const maxIter = options?.maxIter ?? 1e3;
   const tolVal = options?.tol ?? 1e-6;
-  const S = computeCorrelationMatrix(data, n, d);
+  const { R: S } = computeCorrelationMatrix(data, n, d);
   const { L, Theta, Phi } = cfaOptimize(S, model, d, maxIter, tolVal);
   const impliedSigma = computeImpliedCov(L, Phi, Theta);
   let nLoadingParams = 0;
@@ -6113,4 +6142,4 @@ export {
   bootstrapCI,
   bootstrapCITwoSample
 };
-//# sourceMappingURL=chunk-EPVE6M7P.js.map
+//# sourceMappingURL=chunk-QKM62T5O.js.map
