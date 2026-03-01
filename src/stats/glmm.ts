@@ -327,23 +327,9 @@ function pirlsInner(
   return { beta: betaArr, b: finalB, mu, penalizedDeviance: prevPenDev, converged }
 }
 
-// ─── Log-determinant (lme4 parameterization) ──────────────────────────────
-
-function computeLogDetLme4(
-  Z_ext: Matrix, L: Matrix, mu: readonly number[],
-  n: number, gq: number, nGroups: number, q: number,
-): number {
-  const Zstar = buildZstar(Z_ext, L, n, nGroups, q)
-  const wHat = mu.map(m => m * (1 - m))
-  const WZdata = new Array(n * gq).fill(0)
-  for (let i = 0; i < n; i++) {
-    const wi = wHat[i]!
-    for (let j = 0; j < gq; j++) WZdata[i * gq + j] = wi * Zstar.get(i, j)
-  }
-  const WZ = new Matrix(n, gq, WZdata)
-  const H = Zstar.transpose().multiply(WZ).add(Matrix.identity(gq))
-  return H.logDet()
-}
+// (computeLaplaceCorrection removed — ldRX2 is not part of the profile
+// Laplace deviance that determines the MLE. R's devfun includes it for
+// internal reasons but the MLE is determined by penDev + ldL2 alone.)
 
 // ─── Main GLMM function ───────────────────────────────────────────────────
 
@@ -403,7 +389,13 @@ export function runGLMM(input: GLMMInput): GLMMResult {
       }
     }
     try {
-      return pirls.penalizedDeviance + computeLogDetLme4(Z_ext, Lambda, pirls.mu, n, gq, nGroups, q)
+      const Lc = buildCholFactor(theta, q)
+      const Zs = buildZstar(Z_ext, Lc, n, nGroups, q)
+      const ww = pirls.mu.map(m => Math.max(1e-10, m * (1 - m)))
+      const WZd = new Array(n * gq).fill(0)
+      for (let ii = 0; ii < n; ii++) { const wi = ww[ii]!; for (let jj = 0; jj < gq; jj++) WZd[ii * gq + jj] = wi * Zs.get(ii, jj) }
+      const Hmat = Zs.transpose().multiply(new Matrix(n, gq, WZd)).add(Matrix.identity(gq))
+      return pirls.penalizedDeviance + Hmat.logDet()
     } catch { return Infinity }
   }
 
@@ -446,7 +438,12 @@ export function runGLMM(input: GLMMInput): GLMMResult {
     const pr = pirlsInner(th, y, X, Z_ext, q, nGroups, 50, 1e-12, initBeta)
     if (!pr.converged && pr.penalizedDeviance === Infinity) return Infinity
     try {
-      return pr.penalizedDeviance + computeLogDetLme4(Z_ext, buildCholFactor(th, q), pr.mu, n, gq, nGroups, q)
+      const Lc2 = buildCholFactor(th, q)
+      const Zs2 = buildZstar(Z_ext, Lc2, n, nGroups, q)
+      const ww2 = pr.mu.map(m => Math.max(1e-10, m * (1 - m)))
+      const WZd2 = new Array(n * gq).fill(0)
+      for (let ii = 0; ii < n; ii++) { const wi = ww2[ii]!; for (let jj = 0; jj < gq; jj++) WZd2[ii * gq + jj] = wi * Zs2.get(ii, jj) }
+      return pr.penalizedDeviance + Zs2.transpose().multiply(new Matrix(n, gq, WZd2)).add(Matrix.identity(gq)).logDet()
     } catch { return Infinity }
   }
 
@@ -522,7 +519,13 @@ export function runGLMM(input: GLMMInput): GLMMResult {
         }
       }
       let logDet: number
-      try { logDet = computeLogDetLme4(Z_ext, Lambda, muV, n, gq, nGroups, q) } catch { return Infinity }
+      try {
+        const ZsF = buildZstar(Z_ext, Lambda, n, nGroups, q)
+        const wwF2 = muV.map(m => Math.max(1e-10, m * (1 - m)))
+        const WZdF = new Array(n * gq).fill(0)
+        for (let ii = 0; ii < n; ii++) { const wi = wwF2[ii]!; for (let jj = 0; jj < gq; jj++) WZdF[ii * gq + jj] = wi * ZsF.get(ii, jj) }
+        logDet = ZsF.transpose().multiply(new Matrix(n, gq, WZdF)).add(Matrix.identity(gq)).logDet()
+      } catch { return Infinity }
       return dev + uNorm + logDet
     }
 
@@ -670,7 +673,13 @@ export function runGLMM(input: GLMMInput): GLMMResult {
   const uNormSq = uFinal.reduce((s, v) => s + v * v, 0)
   const dev = binomialDeviance(y, muOpt)
   let logDetH: number
-  try { logDetH = computeLogDetLme4(Z_ext, L, muOpt, n, gq, nGroups, q) } catch { logDetH = 0 }
+  try {
+    const ZsFinal = buildZstar(Z_ext, L, n, nGroups, q)
+    const wwFinal = muOpt.map(m => Math.max(1e-10, m * (1 - m)))
+    const WZdFinal = new Array(n * gq).fill(0)
+    for (let ii = 0; ii < n; ii++) { const wi = wwFinal[ii]!; for (let jj = 0; jj < gq; jj++) WZdFinal[ii * gq + jj] = wi * ZsFinal.get(ii, jj) }
+    logDetH = ZsFinal.transpose().multiply(new Matrix(n, gq, WZdFinal)).add(Matrix.identity(gq)).logDet()
+  } catch { logDetH = 0 }
   const neg2LL = dev + uNormSq + logDetH
   const logLik = -0.5 * neg2LL
 
@@ -680,8 +689,40 @@ export function runGLMM(input: GLMMInput): GLMMResult {
   const deviance = -2 * logLik
   const formatted = formatGLMM(icc, aic, deviance)
 
+  // Extract ranef (matches R's ranef()) and coef (matches R's coef())
+  const reNames = ['(Intercept)', ...slopeNames]
+  const randomEffects: Record<string, Record<string, number>> = {}
+  const groupCoefficients: Record<string, Record<string, number>> = {}
+
+  for (let g = 0; g < nGroups; g++) {
+    const gName = String(groupLevels[g])
+    randomEffects[gName] = {}
+    groupCoefficients[gName] = {}
+
+    // Fixed effects → group coefficients
+    for (let i = 0; i < p; i++) {
+      groupCoefficients[gName]![fixedEffectNames[i]!] = roundTo(beta[i]!, 6)
+    }
+
+    // Random effects + combined coefficients
+    for (let k = 0; k < q; k++) {
+      const reName = reNames[k]!
+      const bVal = bOpt[g * q + k]!
+
+      // ranef()
+      randomEffects[gName]![reName] = roundTo(bVal, 6)
+
+      // coef() = fixed + random
+      const feIdx = fixedEffectNames.indexOf(reName)
+      const feVal = feIdx >= 0 ? beta[feIdx]! : 0
+      groupCoefficients[gName]![reName] = roundTo(feVal + bVal, 6)
+    }
+  }
+
   return {
     fixedEffects,
+    randomEffects,
+    groupCoefficients,
     varianceComponents: { intercept: roundTo(sigmab2, 6), ...(slopeNames.length > 0 ? { slopes: slopeVarRecord } : {}) },
     ...(Object.keys(randomCorrs).length > 0 ? { randomCorrelations: randomCorrs } : {}),
     icc: roundTo(icc, 6), logLik: roundTo(logLik, 4), deviance: roundTo(deviance, 4),
