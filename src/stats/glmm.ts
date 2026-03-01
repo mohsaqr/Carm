@@ -345,7 +345,8 @@ export function runGLMM(input: GLMMInput): GLMMResult {
     if (y[i] !== 0 && y[i] !== 1) throw new Error(`runGLMM: outcome must be 0/1 binary, got ${y[i]} at index ${i}`)
   }
 
-  const groupLevels = [...new Set(groupId)]
+  // Sort to match R's factor() ordering (alphanumeric)
+  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a) > String(b) ? 1 : String(a) < String(b) ? -1 : 0)
   const nGroups = groupLevels.length
   if (nGroups < 2) throw new Error('runGLMM: need at least 2 groups')
 
