@@ -342,10 +342,12 @@ export interface GLMMFixedEffect {
 /** Full result from a logistic GLMM. */
 export interface GLMMResult {
   readonly fixedEffects: readonly GLMMFixedEffect[]
+  /** Fixed effects only — matches R's fixef(mod). */
+  readonly fixef: Readonly<Record<string, number>>
   /** Random effects by group — matches R's ranef(mod). */
-  readonly randomEffects: Readonly<Record<string, Readonly<Record<string, number>>>>
+  readonly ranef: Readonly<Record<string, Readonly<Record<string, number>>>>
   /** Group-level coefficients (fixed + random) — matches R's coef(mod). */
-  readonly groupCoefficients: Readonly<Record<string, Readonly<Record<string, number>>>>
+  readonly coef: Readonly<Record<string, Readonly<Record<string, number>>>>
   readonly varianceComponents: {
     readonly intercept: number    // σ²_b (random intercept variance)
     readonly slopes?: Readonly<Record<string, number>>

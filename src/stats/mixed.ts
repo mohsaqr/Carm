@@ -229,7 +229,7 @@ export function runLMM(input: LMMInput): LMMResult {
   if (groupId.length !== n) throw new Error('runLMM: groupId must have same length as outcome')
 
   // Identify groups — sort to match R's factor() ordering (alphanumeric)
-  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a) > String(b) ? 1 : String(a) < String(b) ? -1 : 0)
+  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a).localeCompare(String(b)))
   const nGroups = groupLevels.length
   if (nGroups < 2) throw new Error('runLMM: need at least 2 groups')
 
@@ -529,7 +529,7 @@ export function computeBLUPs(
 ): ReadonlyArray<{ group: string | number; blup: number }> {
   const { outcome: y, fixedPredictors, groupId } = input
   const n = y.length
-  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a) > String(b) ? 1 : String(a) < String(b) ? -1 : 0)
+  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a).localeCompare(String(b)))
   const predNames = Object.keys(fixedPredictors)
 
   const sigmab2 = result.varianceComponents.intercept

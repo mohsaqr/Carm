@@ -141,7 +141,8 @@ interface PIRLSResult {
   readonly beta: readonly number[]
   readonly b: readonly number[]
   readonly mu: readonly number[]
-  readonly penalizedDeviance: number
+  readonly penalizedDeviance: number  // binomial deviance + ||u||²
+  readonly pwrss: number              // Σ(y-μ)²/w + ||u||² (working model RSS, matches R)
   readonly converged: boolean
 }
 
@@ -227,7 +228,7 @@ function pirlsInner(
     try {
       Lz = H.cholesky()
     } catch {
-      return { beta: betaArr, b: new Array(gq).fill(0), mu, penalizedDeviance: Infinity, converged: false }
+      return { beta: betaArr, b: new Array(gq).fill(0), mu, penalizedDeviance: Infinity, pwrss: Infinity, converged: false }
     }
 
     // 3. Forward solve: RZX = L_z⁻¹ Z*'WX, cu = L_z⁻¹ Z*'Wz
@@ -247,7 +248,7 @@ function pirlsInner(
     try {
       newBetaM = schurLHS.inverse().multiply(schurRHS)
     } catch {
-      return { beta: betaArr, b: new Array(gq).fill(0), mu, penalizedDeviance: Infinity, converged: false }
+      return { beta: betaArr, b: new Array(gq).fill(0), mu, penalizedDeviance: Infinity, pwrss: Infinity, converged: false }
     }
     const newBeta = Array.from({ length: p }, (_, i) => newBetaM.get(i, 0))
 
@@ -324,7 +325,15 @@ function pirlsInner(
     }
   }
 
-  return { beta: betaArr, b: finalB, mu, penalizedDeviance: prevPenDev, converged }
+  // Compute pwrss = Σ(y-μ)²/w + ||u||² (working model RSS, R's objective)
+  const finalW = mu.map(m => Math.max(1e-10, m * (1 - m)))
+  let pwrss = uArr.reduce((s, v) => s + v * v, 0) // ||u||²
+  for (let i = 0; i < y.length; i++) {
+    const r = y[i]! - mu[i]!
+    pwrss += r * r / finalW[i]!
+  }
+
+  return { beta: betaArr, b: finalB, mu, penalizedDeviance: prevPenDev, pwrss, converged }
 }
 
 // (computeLaplaceCorrection removed — ldRX2 is not part of the profile
@@ -345,8 +354,8 @@ export function runGLMM(input: GLMMInput): GLMMResult {
     if (y[i] !== 0 && y[i] !== 1) throw new Error(`runGLMM: outcome must be 0/1 binary, got ${y[i]} at index ${i}`)
   }
 
-  // Sort to match R's factor() ordering (alphanumeric)
-  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a) > String(b) ? 1 : String(a) < String(b) ? -1 : 0)
+  // Sort to match R's factor() ordering (locale-aware alphanumeric)
+  const groupLevels = Array.from(new Set(groupId)).sort((a, b) => String(a).localeCompare(String(b)))
   const nGroups = groupLevels.length
   if (nGroups < 2) throw new Error('runGLMM: need at least 2 groups')
 
@@ -377,7 +386,6 @@ export function runGLMM(input: GLMMInput): GLMMResult {
     const pirls = pirlsInner(theta, y, X, Z_ext, q, nGroups, maxIter, tol, cachedBeta, cachedU)
     if (!pirls.converged && pirls.penalizedDeviance === Infinity) return Infinity
     cachedBeta = [...pirls.beta]
-    // Convert b back to u for warm-start
     const Lambda = buildCholFactor(theta, q)
     let LambdaInv: Matrix
     try { LambdaInv = Lambda.inverse() } catch { return Infinity }
@@ -390,8 +398,7 @@ export function runGLMM(input: GLMMInput): GLMMResult {
       }
     }
     try {
-      const Lc = buildCholFactor(theta, q)
-      const Zs = buildZstar(Z_ext, Lc, n, nGroups, q)
+      const Zs = buildZstar(Z_ext, Lambda, n, nGroups, q)
       const ww = pirls.mu.map(m => Math.max(1e-10, m * (1 - m)))
       const WZd = new Array(n * gq).fill(0)
       for (let ii = 0; ii < n; ii++) { const wi = ww[ii]!; for (let jj = 0; jj < gq; jj++) WZd[ii * gq + jj] = wi * Zs.get(ii, jj) }
@@ -690,40 +697,41 @@ export function runGLMM(input: GLMMInput): GLMMResult {
   const deviance = -2 * logLik
   const formatted = formatGLMM(icc, aic, deviance)
 
-  // Extract ranef (matches R's ranef()) and coef (matches R's coef())
+  // ─── R-style coefficients (fixef, ranef, coef) ───────────────────────
   const reNames = ['(Intercept)', ...slopeNames]
-  const randomEffects: Record<string, Record<string, number>> = {}
-  const groupCoefficients: Record<string, Record<string, number>> = {}
+
+  const fixef: Record<string, number> = {}
+  const ranef: Record<string, Record<string, number>> = {}
+  const coef: Record<string, Record<string, number>> = {}
+
+  for (let i = 0; i < p; i++) {
+    fixef[fixedEffectNames[i]!] = roundTo(beta[i]!, 6)
+  }
 
   for (let g = 0; g < nGroups; g++) {
     const gName = String(groupLevels[g])
-    randomEffects[gName] = {}
-    groupCoefficients[gName] = {}
+    ranef[gName] = {}
+    coef[gName] = {}
 
-    // Fixed effects → group coefficients
+    // Initialize coef with fixed effects
     for (let i = 0; i < p; i++) {
-      groupCoefficients[gName]![fixedEffectNames[i]!] = roundTo(beta[i]!, 6)
+      coef[gName]![fixedEffectNames[i]!] = fixef[fixedEffectNames[i]!]!
     }
 
-    // Random effects + combined coefficients
+    // Add random deviations
     for (let k = 0; k < q; k++) {
       const reName = reNames[k]!
       const bVal = bOpt[g * q + k]!
-
-      // ranef()
-      randomEffects[gName]![reName] = roundTo(bVal, 6)
-
-      // coef() = fixed + random
-      const feIdx = fixedEffectNames.indexOf(reName)
-      const feVal = feIdx >= 0 ? beta[feIdx]! : 0
-      groupCoefficients[gName]![reName] = roundTo(feVal + bVal, 6)
+      ranef[gName]![reName] = roundTo(bVal, 6)
+      coef[gName]![reName] = roundTo((fixef[reName] ?? 0) + bVal, 6)
     }
   }
 
   return {
     fixedEffects,
-    randomEffects,
-    groupCoefficients,
+    fixef,
+    ranef,
+    coef,
     varianceComponents: { intercept: roundTo(sigmab2, 6), ...(slopeNames.length > 0 ? { slopes: slopeVarRecord } : {}) },
     ...(Object.keys(randomCorrs).length > 0 ? { randomCorrelations: randomCorrs } : {}),
     icc: roundTo(icc, 6), logLik: roundTo(logLik, 4), deviance: roundTo(deviance, 4),
