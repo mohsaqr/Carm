@@ -50,6 +50,7 @@ export interface DescriptiveResult {
   readonly ci: readonly [number, number]
   readonly ciLevel: number
   readonly shapiroWilk: { statistic: number; pValue: number }
+  readonly andersonDarling?: { statistic: number; pValue: number }
   readonly formatted: string
 }
 
@@ -117,6 +118,7 @@ export interface RegressionResult {
   readonly bic: number
   readonly residuals: readonly number[]
   readonly fitted: readonly number[]
+  readonly residualNormality?: { test: string; statistic: number; pValue: number }
   readonly n: number
   readonly formatted: string
 }
@@ -302,6 +304,62 @@ export interface OrdinalRegressionResult {
   readonly formatted: string
 }
 
+// ─── Equivalence Testing (TOST) ─────────────────────────────────────────
+
+/** Result from TOST equivalence testing. */
+export interface EquivalenceResult {
+  readonly testName: string
+  readonly estimate: number              // observed value (mean diff, r, d)
+  readonly bounds: readonly [number, number]  // [-delta, +delta]
+  readonly t1: number                    // t-stat for H0: diff ≤ -delta
+  readonly t2: number                    // t-stat for H0: diff ≥ +delta
+  readonly p1: number                    // p-value for lower bound test
+  readonly p2: number                    // p-value for upper bound test
+  readonly pValue: number                // max(p1, p2)
+  readonly df: number
+  readonly ci: readonly [number, number] // (1-2α) CI
+  readonly ciLevel: number               // actual CI level (e.g. 0.90 for α=0.05)
+  readonly equivalent: boolean           // pValue < α
+  readonly n: number
+  readonly effectSize?: EffectSize
+  readonly formatted: string
+}
+
+// ─── Logistic GLMM ─────────────────────────────────────────────────────
+
+/** A single fixed effect from a logistic GLMM (z-tests, not t-tests). */
+export interface GLMMFixedEffect {
+  readonly name: string
+  readonly estimate: number       // on log-odds scale
+  readonly se: number
+  readonly zValue: number         // Wald z
+  readonly pValue: number
+  readonly ci: readonly [number, number]
+  readonly or: number             // exp(estimate) = odds ratio
+  readonly orCI: readonly [number, number]  // exp(CI bounds)
+}
+
+/** Full result from a logistic GLMM. */
+export interface GLMMResult {
+  readonly fixedEffects: readonly GLMMFixedEffect[]
+  readonly varianceComponents: {
+    readonly intercept: number    // σ²_b (random intercept variance)
+    readonly slopes?: Readonly<Record<string, number>>
+  }
+  readonly randomCorrelations?: Readonly<Record<string, number>>
+  readonly icc: number            // latent-scale ICC = σ²_b / (σ²_b + π²/3)
+  readonly logLik: number         // Laplace log-likelihood
+  readonly deviance: number       // -2 * logLik
+  readonly aic: number
+  readonly bic: number
+  readonly nObs: number
+  readonly nGroups: number
+  readonly nParams: number
+  readonly family: 'binomial'
+  readonly link: 'logit'
+  readonly formatted: string
+}
+
 // ─── Bootstrap CI ───────────────────────────────────────────────────────
 
 /** Result from bootstrap confidence interval estimation. */
@@ -365,6 +423,8 @@ export type Field = NumericField | GroupField
  *                           't-test-independent'. Default false (Welch's).
  * @field normalityAlpha   - Shapiro-Wilk p-value threshold for auto-routing
  *                           parametric vs non-parametric. Default 0.05.
+ * @field equivalenceDelta - Equivalence bound for TOST tests. Required when
+ *                           forceTest is a TOST variant.
  */
 export interface AnalyzeOptions {
   readonly ciLevel?: number
@@ -373,6 +433,7 @@ export interface AnalyzeOptions {
   readonly forceTest?: string
   readonly equalVariances?: boolean
   readonly normalityAlpha?: number
+  readonly equivalenceDelta?: number
 }
 
 /**
@@ -393,7 +454,7 @@ export interface AnalysisResult {
   readonly test: string
   readonly outcome: string
   readonly predictor?: string
-  readonly result: StatResult | FrequencyTestResult
+  readonly result: StatResult | FrequencyTestResult | EquivalenceResult
   readonly descriptives?: readonly DescriptiveResult[]
   readonly posthoc?: readonly PairwiseResult[]
   readonly normality?: ReadonlyArray<{ group: string; W: number; p: number }>

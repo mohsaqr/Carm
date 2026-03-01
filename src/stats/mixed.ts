@@ -52,7 +52,7 @@ export interface LMMComparison {
  * θ layout: [log(L[0,0]), L[1,0], log(L[1,1]), L[2,0], L[2,1], log(L[2,2]), ...]
  * Diagonal elements are exp(θ) to ensure positivity.
  */
-function buildCholFactor(theta: readonly number[], q: number): Matrix {
+export function buildCholFactor(theta: readonly number[], q: number): Matrix {
   const data = new Array(q * q).fill(0)
   let idx = 0
   for (let i = 0; i < q; i++) {
@@ -74,7 +74,7 @@ function buildCholFactor(theta: readonly number[], q: number): Matrix {
  *   Z_ext[i, j*q + 0] = 1 if obs i in group j (intercept)
  *   Z_ext[i, j*q + k] = slopePredictors[k-1][i] if obs i in group j, else 0
  */
-function buildExtendedZ(
+export function buildExtendedZ(
   n: number,
   groupId: readonly (string | number)[],
   groupLevels: readonly (string | number)[],
@@ -102,7 +102,7 @@ function buildExtendedZ(
  * Compute A = Z_ext · (I_g ⊗ L) efficiently without forming the block-diagonal.
  * A[i, j*q+k] = Σ_{m=k..q-1} Z_ext[i, j*q+m] · L[m, k]
  */
-function buildA(Z_ext: Matrix, L: Matrix, nGroups: number, q: number, n: number): Matrix {
+export function buildA(Z_ext: Matrix, L: Matrix, nGroups: number, q: number, n: number): Matrix {
   const gq = nGroups * q
   const data = new Array(n * gq).fill(0)
   for (let i = 0; i < n; i++) {

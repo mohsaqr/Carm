@@ -1,3 +1,70 @@
+## 2026-03-01 (Logistic GLMM)
+
+### Laplace log-determinant must use lme4 parameterization
+- The naive Laplace deviance `dev + b'G⁻¹b + log|Z'WZ + G⁻¹|` has a `-2·nGroups·log|Λ|` bias compared to lme4. This drives the optimizer to θ → +∞ (infinite variance) because the log-det decreases as G grows.
+- Fix: use lme4's parameterization `log|Λ'Z'WZΛ + I|` instead of `log|Z'WZ + G⁻¹|`. Mathematically equivalent after accounting for the determinant of the block-diagonal G⁻¹, but the lme4 form eliminates the θ-dependent bias.
+- This is a fundamental GLMM implementation gotcha not documented in most textbooks.
+
+### GLMM tolerances are wider than LMM for R cross-validation
+- Laplace approximation quality differs between implementations
+- lme4 uses BOBYQA optimizer; our implementation uses Nelder-Mead
+- Typical tolerances: fixed effects ±0.5, variance ±1.5, logLik ±5, AIC ±10
+- Fixed effects (coefficients, SEs) are much more stable than variance components
+
+### GLMM has no σ² to profile out (unlike LMM)
+- In Gaussian LMM, σ² is profiled analytically, reducing the optimization dimension
+- In logistic GLMM, the binomial variance is determined by μ = logistic(η), so there's no residual variance parameter
+- No REML either — only ML estimation is valid for GLMMs
+
+### GLMM β-b confounding explains coefficient differences from R
+- Even at R's exact θ, our PIRLS converges to β₀ = -0.963 vs R's -1.022 (diff = 0.06). This is NOT a bug — it's the classic β₀/b confounding in random intercept models.
+- Both solutions give identical binomial deviance (185.60 vs 185.55, diff = 0.05) and logLik (diff = 0.014). The β₀ and b trade off: our higher β₀ is compensated by more negative random intercepts.
+- The gradient at our converged point is zero (1e-14), confirming it IS a genuine mode.
+- The logLik/AIC/BIC are the reliable accuracy metrics for cross-validation, not individual coefficients.
+
+### Multi-start is critical for GLMM convergence
+- Adding θ_start = -4 to multi-start values (not just -2 to +2) is important for cases where the true variance is small
+- Without negative starts, the optimizer can miss the low-variance minimum
+
+## 2026-03-01 (Bootstrap-enhanced tests + TOST equivalence testing)
+
+### TOST CI convention: (1-2α)
+- When user passes `ciLevel=0.95` (α=0.05), TOST uses a 90% CI (1-2α). This matches R's TOSTER package. The `ciLevel` field in `EquivalenceResult` reports the actual CI level used (0.90), not the input ciLevel.
+- The 90% CI is directly comparable to the equivalence bounds: if CI ⊆ [-δ, +δ], then equivalence is established.
+
+### TOSTER R package API changes
+- TOSTER's `t_TOST` returns CI in `r$eqb$lower.ci[1]` in some versions but empty `{}` in others. Manual CI computation (diff ± t_crit × SE) is more reliable for cross-validation.
+- `eqbound_type = "SMD"` requires explicit `low_eqbound` and `high_eqbound` in newer versions (cannot just pass `eqbound`).
+- Paired TOST with constant differences (all diffs identical) causes `t.test.default: data are essentially constant` error in R. Use varied data for test fixtures.
+
+### Bootstrap correlation: paired resampling is critical
+- Cannot use `bootstrapCITwoSample` for correlations because it resamples x and y independently, breaking pairing and giving nonsensical CIs.
+- Correct approach: create index array `[0..n-1]`, pass to `bootstrapCI`, and in the statFn extract paired (x[i], y[i]) from resampled indices.
+
+### Bootstrap correlation: minimum n for stable resampling
+- With n < 5, bootstrap resamples can produce zero-variance arrays which make Pearson/Spearman throw. Enforced n ≥ 5 minimum.
+
+### Bootstrap regression: case resampling
+- Cannot use generic `bootstrapCI`/`bootstrapCITwoSample` for regression because the statistic is multi-valued (vector of coefficients + R²). Custom loop using PRNG directly with row resampling and try/catch for singular matrices.
+
+## 2026-03-01 (distributions.ts integration — additive wiring)
+
+### Snapshot-based numerical equivalence verification
+- JSON snapshot diff (before/after) is the most reliable way to verify zero-impact changes. Compare all numeric fields with `a != b` (exact) rather than tolerance — any drift indicates an unintended side effect.
+- The `formatted` string is expected to change (new AD text appended). All other fields must be identical.
+
+### analyze() test name field
+- analyze() returns `test: 'descriptive'` (lowercase, no " statistics") in the no-predictor branch, matching `result.testName` from the dummy StatResult, which has `testName: 'Descriptive statistics'`. The `test` field and `testName` field are different — `test` comes from the analyze wrapper.
+
+### KS D statistic: sd denominator difference from R
+- Our `kolmogorovSmirnov()` uses MLE-fitted params internally (n denominator for normal sigma). R's `ks.test(x, "pnorm", mean(x), sd(x))` passes user-supplied sd (n-1 denominator). This causes the D statistic to differ by ~0.01-0.013 for moderate n. KS D tolerance should be 0.02, not 1e-3.
+
+### AD on zero-variance data (perfect fit residuals)
+- When OLS residuals are all zero (R² = 1.0), AD returns `statistic: NaN, pValue: 0` because sd=0 makes the CDF standardization undefined. R's `nortest::ad.test` may produce a finite result due to floating-point accumulation differences in residuals (~1e-14 in R vs exactly 0 in our implementation). This is a degenerate edge case, not a bug.
+
+### Optional fields with exactOptionalPropertyTypes
+- TypeScript's `exactOptionalPropertyTypes` means you can't set an optional field to `undefined` directly. Use the spread pattern: `...(val !== undefined && { field: val })` to conditionally include optional fields.
+
 ## 2026-03-01 (Distribution fitting module)
 
 ### DistributionName type collision with viz module

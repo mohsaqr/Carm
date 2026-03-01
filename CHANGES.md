@@ -1,3 +1,50 @@
+### 2026-03-01 — Logistic GLMM (Generalized Linear Mixed Model)
+
+- `src/core/types.ts`: added `GLMMFixedEffect` interface (z-tests, OR, orCI) and `GLMMResult` interface (latent ICC, deviance, family/link)
+- `src/core/apa.ts`: added `formatGLMM()` — APA string with ICC (latent), AIC, Deviance
+- `src/stats/mixed.ts`: exported `buildCholFactor`, `buildExtendedZ`, `buildA` for reuse by GLMM
+- `src/stats/glmm.ts` (NEW): `runGLMM()` — logistic GLMM via Laplace approximation with PIRLS inner loop, multi-start Nelder-Mead, Wald z-tests, odds ratios, latent-scale ICC
+- `src/stats/index.ts`: added GLMM export
+- `tests/stats/glmm.test.ts` (NEW): 14 unit tests — structure, OR, ICC formula, significance, CI levels, edge cases
+- `tests/stats/glmm-numerical-equivalence.test.ts` (NEW): 20 R cross-validation checks vs lme4::glmer()
+- `validation/r-reference/glmm-ref.R` (NEW): R script generating reference values
+- `tests/fixtures/glmm-ref.json` (NEW): R reference fixture
+- aistatia integration: registry, runner, wizard-defs, types, results, layout, apa-banner, plot-panel
+- Tests: 1437 total (37 new), all passing
+
+### 2026-03-01 — Bootstrap-enhanced tests + TOST equivalence testing
+
+- `src/core/types.ts`: added `EquivalenceResult` interface, `equivalenceDelta` to `AnalyzeOptions`, widened `AnalysisResult.result` union to include `EquivalenceResult`
+- `src/stats/equivalence.ts` (NEW): 4 TOST functions — `tostIndependent` (Welch), `tostPaired`, `tostCorrelation` (Fisher z), `tostCohensD` (Hedges & Olkin SE)
+- `src/stats/bootstrap-tests.ts` (NEW): 10 bootstrap CI wrappers — `bootstrapCohensD`, `bootstrapHedgesG`, `bootstrapCohensDPaired`, `bootstrapPearsonR`, `bootstrapSpearmanRho`, `bootstrapMeanDiff`, `bootstrapMeanDiffPaired`, `bootstrapRegression`, `bootstrapEtaSquared`, `bootstrapOmegaSquared`
+- `src/stats/analyze.ts`: added 4 new `forceTest` routes (`tost-independent`, `tost-paired`, `tost-cohens-d`, `tost-correlation`), added `equivalenceDelta` to `ResolvedOptions`, imported TOST functions
+- `src/stats/index.ts`: added exports for `bootstrap-tests.js` and `equivalence.js`
+- `tests/stats/equivalence.test.ts` (NEW): 48 unit tests covering all 4 TOST functions + analyze() integration
+- `tests/stats/bootstrap-tests.test.ts` (NEW): 46 unit tests covering all 10 bootstrap wrappers
+- `tests/stats/equivalence-numerical-equivalence.test.ts` (NEW): 45 R cross-validation checks (7 test cases × 6-9 values each)
+- `tests/stats/bootstrap-tests-numerical-equivalence.test.ts` (NEW): 14 R cross-validation checks for point estimates
+- `validation/r-reference/equivalence-ref.R` (NEW): R script using TOSTER + manual Fisher z
+- `validation/r-reference/bootstrap-tests-ref.R` (NEW): R script generating point estimate fixtures
+- `tests/fixtures/equivalence-ref.json` (NEW): R-generated reference values
+- `tests/fixtures/bootstrap-tests-ref.json` (NEW): R-generated reference values
+- Tests: 1400/1400 pass (1247 existing + 153 new), zero regressions
+
+### 2026-03-01 — Wire distributions.ts into 6 consuming modules (additive only)
+
+- `src/core/types.ts`: added 2 optional fields (andersonDarling on DescriptiveResult, residualNormality on RegressionResult). Non-breaking.
+- `src/stats/descriptive.ts`: added AD test to describe() for n >= 8. Existing Shapiro-Wilk untouched.
+- `src/stats/analyze.ts`: added GoF routing via forceTest 'anderson-darling' / 'kolmogorov-smirnov'. Existing auto-routing untouched.
+- `src/stats/regression.ts`: added residual normality AD test to fitOLS() for n >= 8. Existing OLS logic untouched.
+- `src/viz/plots/distribution.ts`: added gamma & beta to DistributionName type and switch cases. Existing 6 cases untouched.
+- `src/viz/plots/qq-plot.ts`: added distribution/distributionParams to QQPlotConfig + getQuantileFn() helper. Default normal behavior unchanged.
+- `src/viz/plots/histogram.ts`: added fittedDistribution/showGoFTest to HistogramConfig + fitted overlay code block. Existing showNormalCurve untouched.
+- `tests/stats/distributions-integration.test.ts` (NEW): 23 tests covering all 6 changes.
+- `tests/stats/integration-numerical-equivalence.test.ts` (NEW): 157 tests — dedicated R cross-validation for every touched function (27 R-equivalence checks).
+- `validation/r-reference/integration-ref.R` (NEW): R script generating fixture with 20 sections.
+- `tests/fixtures/integration-ref.json` (NEW): R-generated reference values (15 dp precision).
+- Tests: 1246/1246 pass (1066 existing + 23 integration + 157 equivalence), zero regressions.
+- Numerical equivalence: all existing numeric fields bit-for-bit identical before/after (verified via JSON snapshot diff).
+
 ### 2026-03-01 — Distribution fitting module (Module 6) + numerical equivalence
 
 - `src/stats/distributions.ts` (NEW): 38 exported functions covering:

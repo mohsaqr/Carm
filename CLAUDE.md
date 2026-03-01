@@ -286,6 +286,10 @@ Every new statistical implementation MUST have a dedicated numerical equivalence
 Keep this list updated when adding new equivalence tests:
 - `tests/stats/numerical-equivalence.test.ts` — 14 methods: Welch ANOVA, Mood's median, Cochran's Q, McNemar, binomial test, proportions Z, point-biserial, Cramér's V, two-way ANOVA, ANCOVA, quasi-Poisson, negative binomial, ordinal logistic, bootstrap CI
 - `tests/stats/distributions-numerical-equivalence.test.ts` — 32 checks: 8 PDFs, 4 CDFs, 5 quantiles, 6 discrete, 5 MLE fits, 4 GoF tests
+- `tests/stats/integration-numerical-equivalence.test.ts` — 27 checks: 5 describe() AD+SW, 4 analyze() GoF routing, 3 fitOLS() residual AD, 6 gamma/beta PDF/CDF, 6 QQ quantile fns, 3 histogram MLE fits
+- `tests/stats/equivalence-numerical-equivalence.test.ts` — 45 checks: tostIndependent (equiv+nonequiv), tostPaired (equiv+nonequiv), tostCohensD, tostCorrelation (equiv+nonequiv) vs R TOSTER + manual Fisher z
+- `tests/stats/bootstrap-tests-numerical-equivalence.test.ts` — 14 checks: point estimates for Cohen's d, Hedges' g, paired d, mean diff, Pearson r, Spearman ρ, regression (intercept+slope+R²), η², ω² vs R
+- `tests/stats/glmm-numerical-equivalence.test.ts` — 23 checks: fixed effects (intercept, slopes), SEs, z-values, variance components, logLik, AIC for single and multi-predictor logistic GLMM vs R lme4::glmer(). Tolerances: coefficients 5e-2–1e-1, SEs 1e-2, variance 1e-2, logLik 5e-2, AIC 1e-1
 
 ## Visualization Testing Protocol
 - You CANNOT see rendered plots. Never assume a plot looks correct.

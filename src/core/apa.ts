@@ -174,6 +174,14 @@ export function formatLMM(icc: number, aic: number, bic: number, logLik: number)
 }
 
 /**
+ * APA string for logistic GLMM.
+ * e.g. "ICC (latent) = 0.42, AIC = 234.5, Deviance = 223.5"
+ */
+export function formatGLMM(icc: number, aic: number, deviance: number): string {
+  return `ICC (latent) = ${formatStat(icc)}, AIC = ${formatStat(aic, 1)}, Deviance = ${formatStat(deviance, 1)}`
+}
+
+/**
  * Interpret Cohen's d effect size.
  */
 export function interpretCohensD(d: number): string {

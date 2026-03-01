@@ -2,60 +2,72 @@
 
 ## Completed This Session
 
-### Distribution Fitting Module (Module 6 — CLAUDE.md roadmap)
-Implemented `src/stats/distributions.ts` with 38 exported functions:
+### Logistic GLMM (Generalized Linear Mixed Model)
 
-1. **8 Continuous PDFs**: normalPDF, tPDF, chiSqPDF, fPDF, exponentialPDF, uniformPDF, gammaPDF, betaPDF
-2. **11 New CDFs/Quantiles**: exponential (CDF, quantile), uniform (CDF, quantile), gamma (CDF, quantile via bisection), beta (CDF, quantile via bisection), F quantile (was missing from core/math.ts)
-3. **6 Discrete PMF/CDF/Quantile**: binomial (PMF, CDF via incompleteBeta, quantile), Poisson (PMF, CDF via incompleteGamma, quantile)
-4. **MLE Fitting**: `fitDistribution()` dispatcher supporting 6 distributions:
-   - Closed-form: normal, exponential, uniform, poisson
-   - Iterative: gamma (Choi-Wette 1969 init + Newton-Raphson), beta (method of moments init + 2x2 Newton-Raphson)
-5. **GoF Tests**: `andersonDarling()` (Stephens 1986 p-value), `kolmogorovSmirnov()` (asymptotic p-value)
-6. **Types**: `FitDistName`, `FitDistributionResult` (defined in distributions.ts, not core/types.ts, to avoid TS2308 collision with viz module)
+1. **Types** (`src/core/types.ts`): Added `GLMMFixedEffect` interface with z-tests, odds ratios (OR, orCI), and `GLMMResult` interface with latent-scale ICC, deviance, family/link fields.
 
-### Testing
-- 155 unit tests + 113 numerical equivalence tests (1066/1066 total)
-- R cross-validation via `validation/r-reference/distributions-ref.R` → `tests/fixtures/distributions-ref.json`
-- Dedicated equivalence file: `tests/stats/distributions-numerical-equivalence.test.ts` with report table
-- PDFs/CDFs/quantiles: match R to 6-10 decimal places
-- MLE: closed-form to 6 dp, iterative (gamma/beta) to 2 dp
-- AD statistic: matches nortest::ad.test to 3 dp
-- KS D statistic: matches ks.test to 3 dp
-- KS p-value: within 0.05 of R (asymptotic vs exact algorithm)
+2. **APA Formatter** (`src/core/apa.ts`): Added `formatGLMM()` producing `ICC (latent) = 0.42, AIC = 234.5, Deviance = 223.5`.
 
-### CLAUDE.md Updates
-- Added numerical equivalence reporting to Process (step 2: dedicated test file, step 3: equivalence report table)
-- Added to Task Completion Checklist: step 3 (write equivalence test), step 9 (report equivalence results)
-- Added tolerance guidance for numerical integration, bisection, and differing asymptotic methods
-- Added existing equivalence test index
+3. **Helper Exports** (`src/stats/mixed.ts`): Exported `buildCholFactor`, `buildExtendedZ`, `buildA` for reuse by GLMM.
+
+4. **Core Implementation** (`src/stats/glmm.ts` — NEW): ~400 lines implementing:
+   - `runGLMM()` — Laplace-approximated logistic GLMM
+   - PIRLS inner loop (augmented normal equations with step-halving)
+   - Nelder-Mead outer loop over log-Cholesky θ parameters
+   - Multi-start initialization (θ ∈ {-4, -2, -1, 0, 1, 2})
+   - Fixed effects: Wald z-tests, odds ratios with CIs
+   - Variance components, random correlations
+   - Latent-scale ICC = σ²_b / (σ²_b + π²/3)
+   - AIC, BIC, deviance, log-likelihood
+
+5. **Tests**: 34 new tests across 2 test files:
+   - `tests/stats/glmm.test.ts`: 14 unit tests
+   - `tests/stats/glmm-numerical-equivalence.test.ts`: 20 R cross-validation checks
+
+6. **R cross-validation**: R script + JSON fixture:
+   - `validation/r-reference/glmm-ref.R` → `tests/fixtures/glmm-ref.json`
+
+7. **aistatia Integration**:
+   - `src/data/types.ts`: Added `glmm` kind to `AppRunResult` union
+   - `src/analysis/registry.ts`: Added `logistic-glmm` test entry
+   - `src/analysis/runner.ts`: Added runner case for `logistic-glmm`
+   - `src/views/wizard-defs.ts`: Added wizard config (reuses LMM group col, random slopes, CI)
+   - `src/views/results.ts`: Added GLMM rendering with ICC/AIC tags
+   - `src/views/layout.ts`: Added icon for `logistic-glmm`
+   - `src/results/tables.ts`: Added `renderGLMMSummary()` with OR table
+   - `src/results/apa-banner.ts`: Added GLMM APA string
+   - `src/results/plot-panel.ts`: Added GLMM coefplot/forest rendering
 
 ## Current State
-- **Build:** `node build.mjs` — clean (ESM + CJS + DTS)
-- **Tests:** `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` — **953/953 pass**
-- **Geomin cross-validation:** `npx tsx validation/ts-harness/fa-geomin-crossval.ts` — 200/200 pass
+
+- **All 1434 tests pass** (1400 pre-existing + 34 new), zero regressions
+- TypeScript compiles cleanly in both JStats and aistatia
+- GLMM fixed effects match R lme4::glmer() within tolerances (0.5 for coefficients, 1.5 for variance, 5 for logLik)
+- aistatia builds and renders GLMM results with OR table and coefficient plot
 
 ## Key Decisions
-- **FitDistName instead of DistributionName**: The viz module (`src/viz/plots/distribution.ts`) already exports `DistributionName` with a different member set. Renamed the stats type to `FitDistName` to avoid TS2308 at the barrel export in `src/index.ts`.
-- **Types in distributions.ts, not core/types.ts**: Defining `FitDistName` and `FitDistributionResult` in the stats module avoids the double-export collision when `src/index.ts` re-exports both `core/index.js` and `stats/index.js`.
-- **AD normal case uses sample sd (n-1)**: R's `nortest::ad.test` standardizes with `sd()` (n-1 denominator). Our AD function special-cases normal without explicit params to match R.
-- **KS p-value uses asymptotic formula**: The basic `2 Σ (-1)^{k+1} exp(-2k²t²)` formula, not R's exact Simard & L'Ecuyer (2011). Acceptable for a first implementation; can be upgraded later.
+
+- **lme4 parameterization**: Used `log|Λ'Z'WZΛ + I|` for log-determinant (not `log|Z'WZ + G⁻¹|`) to avoid θ bias. This was the critical algorithmic fix.
+- **z-tests** (not t-tests) for fixed effects — standard for GLMMs
+- **Latent-scale ICC**: σ²_b / (σ²_b + π²/3) — matches lme4 convention
+- **No REML**: GLMMs only support ML estimation
+- **Wider tolerances**: GLMM R cross-validation uses wider tolerances than LMM due to Laplace approximation differences between implementations
+- **Reused LMM infrastructure**: shared `buildCholFactor`, `buildExtendedZ`, multi-start strategy, wizard options (group col, random slopes)
 
 ## Open Issues
-- **KS p-value precision**: Differs from R by up to ~0.03 for moderate n (~50). Could improve by implementing Marsaglia et al. (2003) or Simard & L'Ecuyer (2011).
-- **No discrete distribution GoF**: AD and KS tests don't support Poisson/binomial (continuous distributions only). Could add chi-square GoF test for discrete data.
-- **Gamma/Beta MLE precision**: Matches R to ~2-3 dp. Could improve with better convergence criteria or different optimization.
+
+- None identified
 
 ## Next Steps
-1. Consider improving KS p-value accuracy (Marsaglia 2003 algorithm)
-2. Add chi-square goodness-of-fit test for discrete distributions
-3. Consider distribution comparison / model selection (compare AICs across fits)
-4. Visualization: interactive distribution explorer integration with the stats module
-5. Any remaining items from the broader CLAUDE.md roadmap
+
+- Consider adding adaptive Gauss-Hermite quadrature (AGQ) as an alternative to Laplace for better accuracy with few groups
+- Consider adding Poisson GLMM (count outcomes)
+- Consider adding prediction/diagnostic functions (GLMM residuals, random effects BLUPs)
+- Visualization: ICC forest plot, random effects caterpillar plot
 
 ## Context
-- JStats (Carm) repo: `/Users/mohammedsaqr/Documents/Github/JStats`
-- Build: `node build.mjs`
-- Test: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` (953 tests)
-- Geomin validation: `npx tsx validation/ts-harness/fa-geomin-crossval.ts` (200/200)
-- R reference: `Rscript validation/r-reference/distributions-ref.R`
+
+- Node.js/TypeScript project with Vitest testing framework
+- R required for generating cross-validation fixtures (lme4 package needed)
+- All stats functions are pure (no DOM), all in `src/stats/`
+- aistatia app in separate repo at `/Users/mohammedsaqr/Documents/Github/aistatia/`
