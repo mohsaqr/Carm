@@ -1,3 +1,21 @@
+### 2026-03-01 — Distribution fitting module (Module 6) + numerical equivalence
+
+- `src/stats/distributions.ts` (NEW): 38 exported functions covering:
+  - 8 continuous PDFs: normalPDF, tPDF, chiSqPDF, fPDF, exponentialPDF, uniformPDF, gammaPDF, betaPDF
+  - 11 new CDFs/quantiles: exponential, uniform, gamma, beta, F quantile (was missing from core)
+  - 6 discrete PMF/CDF/quantile: binomial, Poisson
+  - 1 MLE fitting dispatcher: fitDistribution() supporting normal, exponential, uniform, poisson, gamma (Newton-Raphson), beta (Newton-Raphson)
+  - 2 goodness-of-fit tests: andersonDarling (Stephens 1986 p-value), kolmogorovSmirnov (asymptotic p-value)
+  - Types: FitDistName, FitDistributionResult
+- `src/stats/index.ts`: added re-export for distributions module
+- `validation/r-reference/distributions-ref.R`: R script generating 600+ line fixture
+- `tests/fixtures/distributions-ref.json`: R-generated reference values
+- `tests/stats/distributions.test.ts`: 155 tests — all PDFs, CDFs, quantiles, MLE fits, GoF tests, inverse consistency, integral checks
+- `tests/stats/distributions-numerical-equivalence.test.ts` (NEW): 113 tests — dedicated R numerical equivalence with equivalence report table
+- `CLAUDE.md`: added numerical equivalence reporting requirement to Process section and Task Completion Checklist; added equivalence report table format; added existing equivalence test index
+- Tests: 1066/1066 pass (798 existing + 155 unit + 113 equivalence), zero regressions
+- R cross-validation: PDFs/CDFs/quantiles match to 6-10 dp; MLE closed-form to 6 dp, iterative to 2 dp; AD statistic to 3 dp; KS D to 3 dp
+
 ### 2026-03-01 — EFA: quartimax and target rotation
 
 - `src/stats/factor-analysis.ts`:

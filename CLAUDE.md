@@ -235,14 +235,31 @@ Every new statistical implementation MUST have a dedicated numerical equivalence
 
 ### Process
 1. Write an R script that runs the equivalent analysis on synthetic test data and outputs all key quantities (statistic, df, p-value, effect size, CI, coefficients, etc.) to a JSON file in `tests/fixtures/`.
-2. Write a Vitest test that loads the JSON fixture and compares each value from the Carm implementation against R's output using `toBeCloseTo()` with appropriate tolerance.
-3. The R script and its invocation must be documented in a comment block at the top of the test file.
-4. Cover at minimum: the main test statistic, degrees of freedom, p-value, effect size, and confidence intervals. For regression models: all coefficients, SEs, AIC/BIC, log-likelihood.
+2. Write a **dedicated** numerical equivalence test file named `tests/stats/<module>-numerical-equivalence.test.ts` (separate from the main unit test file). This file:
+   - Loads the JSON fixture and compares each value from the Carm implementation against R's output.
+   - Uses `toBeCloseTo()` with appropriate tolerance for each comparison.
+   - Groups tests by category (e.g., PDFs, CDFs, quantiles, fitting, GoF).
+   - Documents the R code used to generate each expected value in comments.
+3. Include an **equivalence report table** in the test file header comment showing: function name, R equivalent, tolerance used, and pass/fail status. Example:
+```
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║  EQUIVALENCE REPORT — module.ts vs R                         ║
+ * ╠═══════════════════════╤════════════════════╤═══════╤═════════╣
+ * ║  Function             │ R function         │ Tol   │ Status  ║
+ * ╠═══════════════════════╪════════════════════╪═══════╪═════════╣
+ * ║  myFunction           │ r.equivalent()     │ 1e-6  │ PASS    ║
+ * ║  myIterative           │ optim(...)         │ 1e-2  │ PASS    ║
+ * ╚═══════════════════════╧════════════════════╧═══════╧═════════╝
+```
+4. The R script and its invocation must be documented in a comment block at the top of the test file.
+5. Cover at minimum: the main test statistic, degrees of freedom, p-value, effect size, and confidence intervals. For regression models: all coefficients, SEs, AIC/BIC, log-likelihood. For distribution functions: PDFs, CDFs, quantiles, and fitting parameters.
 
 ### Tolerances
-- Deterministic algorithms (OLS, chi-square, t-test): `1e-6` or tighter
-- Iterative algorithms (IRLS, EM, Newton): `1e-4` (may need `1e-2` for convergence-sensitive quantities)
+- Closed-form / deterministic algorithms (OLS, chi-square, t-test, exact PDFs): `1e-6` or tighter
+- Numerical integration / bisection (CDFs via incomplete gamma/beta, quantiles): `1e-5` to `1e-6`
+- Iterative algorithms (IRLS, EM, Newton-Raphson MLE): `1e-4` (may need `1e-2` for convergence-sensitive quantities)
 - P-values near 0 or 1: use absolute tolerance `1e-4`
+- P-values from different asymptotic approximations (e.g., KS asymptotic vs R exact): use absolute tolerance with clear documentation of why the methods differ
 - Random/stochastic methods (bootstrap): compare distribution properties, not exact values
 
 ### Fixture Format
@@ -264,6 +281,11 @@ Every new statistical implementation MUST have a dedicated numerical equivalence
 - After implementing any new statistical function
 - After modifying the internals of an existing statistical function
 - Before marking any stats task as complete
+
+### Existing Equivalence Tests
+Keep this list updated when adding new equivalence tests:
+- `tests/stats/numerical-equivalence.test.ts` — 14 methods: Welch ANOVA, Mood's median, Cochran's Q, McNemar, binomial test, proportions Z, point-biserial, Cramér's V, two-way ANOVA, ANCOVA, quasi-Poisson, negative binomial, ordinal logistic, bootstrap CI
+- `tests/stats/distributions-numerical-equivalence.test.ts` — 32 checks: 8 PDFs, 4 CDFs, 5 quantiles, 6 discrete, 5 MLE fits, 4 GoF tests
 
 ## Visualization Testing Protocol
 - You CANNOT see rendered plots. Never assume a plot looks correct.
@@ -335,13 +357,15 @@ Every new statistical implementation MUST have a dedicated numerical equivalence
 When completing any task:
 1. Write the code.
 2. Write tests for all new/modified functions.
-3. Run all tests and verify they pass.
-4. Generate test HTML for any visual changes and present to user.
-5. Update LEARNINGS.md with anything discovered.
-6. Update CHANGES.md with what was modified.
-7. Update HANDOFF.md with current project state.
-8. Report changes in plain English with illustrations.
-9. Only then report the task as complete.
+3. **For any statistical function**: write a dedicated `<module>-numerical-equivalence.test.ts` file with R cross-validation, equivalence report table in the header, and documented tolerances. This is separate from unit tests.
+4. Run all tests and verify they pass.
+5. Generate test HTML for any visual changes and present to user.
+6. Update LEARNINGS.md with anything discovered.
+7. Update CHANGES.md with what was modified.
+8. Update HANDOFF.md with current project state.
+9. **Report the numerical equivalence results** — present the equivalence table showing each function, the R equivalent, the tolerance, and pass/fail. This goes in the final summary to the user.
+10. Report changes in plain English with illustrations.
+11. Only then report the task as complete.
 No shortcuts. These are part of the task definition.
 
 ## Workflow

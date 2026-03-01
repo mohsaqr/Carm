@@ -1,3 +1,27 @@
+## 2026-03-01 (Distribution fitting module)
+
+### DistributionName type collision with viz module
+- `src/viz/plots/distribution.ts` already exports `DistributionName` (for viz config). When `distributions.ts` also exported `DistributionName`, TypeScript threw TS2308 (ambiguous re-export) at `src/index.ts` because both `core/index.js` and `stats/index.js` would export it. Fix: renamed to `FitDistName` in the stats module.
+
+### Anderson-Darling: R's nortest::ad.test uses sample sd (n-1), not MLE sigma (n)
+- R's `nortest::ad.test` standardizes data using `sd()` (n-1 denominator), not MLE sigma (n denominator).
+- MASS::fitdistr('normal') also uses n-1 for sigma (which is actually the sample SD, not strict MLE).
+- Our `fitDistribution('normal')` correctly uses MLE (n denominator). But for `andersonDarling()` to match R, the normal case must use n-1 denominator. Fixed by special-casing normal in `andersonDarling()`.
+
+### KS p-value: asymptotic vs R's exact
+- R's `ks.test` uses the exact Simard & L'Ecuyer (2011) algorithm for the KS distribution CDF.
+- Our implementation uses the basic asymptotic formula `2 Σ (-1)^{k+1} exp(-2k²t²)` where `t = √n·D`.
+- For n=50 with moderate D, the difference can be ~0.02-0.03 in p-value. Acceptable for a first implementation.
+
+### Gamma MLE: Choi-Wette initialization is crucial
+- Without good initialization, Newton-Raphson for gamma shape can diverge or converge to wrong value.
+- Choi-Wette (1969) provides two formulas depending on s = log(x̄) - mean(log(x)): one for s < 0.5672, another for larger s.
+- Matches R MASS::fitdistr to ~3 decimal places.
+
+### Beta MLE: method of moments + Newton-Raphson with 2x2 Hessian
+- The 2x2 Newton-Raphson using both gradient components and the full Hessian converges much faster than coordinate descent.
+- Matches R optim(L-BFGS-B) to ~2 decimal places.
+
 ## 2026-03-01 (Quartimax and target rotation)
 
 ### GPForth orthogonal solver differs from GPFoblq in key ways

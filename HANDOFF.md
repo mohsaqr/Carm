@@ -2,53 +2,60 @@
 
 ## Completed This Session
 
-### EFA: Quartimax and Target Rotation
-Added two new rotation methods to the EFA module:
+### Distribution Fitting Module (Module 6 — CLAUDE.md roadmap)
+Implemented `src/stats/distributions.ts` with 38 exported functions:
 
-1. **Quartimax rotation** (orthogonal): `criterionQuartimax()` + `gpfOrth()` + `gpfOrthWithRandomStarts()`
-   - Criterion: f = -(1/4) Σ λ⁴, Gq = -λ³
-   - New orthogonal GPF solver matching R GPArotation::GPForth
-   - SVD polar decomposition for step updates, symmetric gradient projection
-   - Multi-start: T=I, QR, varimax, random orthogonal starts
-
-2. **Target rotation** (oblique): `criterionTarget()` using existing `gpfOblq()`
-   - Criterion: f = Σ w²(λ-h)², supports partial specification via weight matrix
-   - Uses oblique GPF solver with `reflect=false` to prevent column reflection from moving loadings away from target
-
-3. **Interface changes**: `EFAOptions.rotation` now includes `'quartimax' | 'target'`, plus `targetMatrix` and `targetWeight` options.
-
-4. **Bug fix**: Added `reflect` parameter to `gpfOblq()` — column reflection invalidates target criterion values for multi-start selection.
+1. **8 Continuous PDFs**: normalPDF, tPDF, chiSqPDF, fPDF, exponentialPDF, uniformPDF, gammaPDF, betaPDF
+2. **11 New CDFs/Quantiles**: exponential (CDF, quantile), uniform (CDF, quantile), gamma (CDF, quantile via bisection), beta (CDF, quantile via bisection), F quantile (was missing from core/math.ts)
+3. **6 Discrete PMF/CDF/Quantile**: binomial (PMF, CDF via incompleteBeta, quantile), Poisson (PMF, CDF via incompleteGamma, quantile)
+4. **MLE Fitting**: `fitDistribution()` dispatcher supporting 6 distributions:
+   - Closed-form: normal, exponential, uniform, poisson
+   - Iterative: gamma (Choi-Wette 1969 init + Newton-Raphson), beta (method of moments init + 2x2 Newton-Raphson)
+5. **GoF Tests**: `andersonDarling()` (Stephens 1986 p-value), `kolmogorovSmirnov()` (asymptotic p-value)
+6. **Types**: `FitDistName`, `FitDistributionResult` (defined in distributions.ts, not core/types.ts, to avoid TS2308 collision with viz module)
 
 ### Testing
-- 14 new vitest tests (798/798 total)
-- R cross-validation: quartimax 100/100, target 93/100 (7 basin differences)
-- 200/200 geomin crossval (no regression)
+- 155 unit tests + 113 numerical equivalence tests (1066/1066 total)
+- R cross-validation via `validation/r-reference/distributions-ref.R` → `tests/fixtures/distributions-ref.json`
+- Dedicated equivalence file: `tests/stats/distributions-numerical-equivalence.test.ts` with report table
+- PDFs/CDFs/quantiles: match R to 6-10 decimal places
+- MLE: closed-form to 6 dp, iterative (gamma/beta) to 2 dp
+- AD statistic: matches nortest::ad.test to 3 dp
+- KS D statistic: matches ks.test to 3 dp
+- KS p-value: within 0.05 of R (asymptotic vs exact algorithm)
+
+### CLAUDE.md Updates
+- Added numerical equivalence reporting to Process (step 2: dedicated test file, step 3: equivalence report table)
+- Added to Task Completion Checklist: step 3 (write equivalence test), step 9 (report equivalence results)
+- Added tolerance guidance for numerical integration, bisection, and differing asymptotic methods
+- Added existing equivalence test index
 
 ## Current State
-- **JStats build:** `node build.mjs` — clean
-- **JStats tests:** `npx vitest run` — **798/798 pass**
-- **Geomin cross-validation:** `npx tsx validation/ts-harness/fa-geomin-crossval.ts` — **200/200 pass**
-- **Quartimax/target cross-validation:** `npx tsx validation/ts-harness/fa-quartimax-target-crossval.ts` — quartimax 100/100, target ~93/100
+- **Build:** `node build.mjs` — clean (ESM + CJS + DTS)
+- **Tests:** `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` — **953/953 pass**
+- **Geomin cross-validation:** `npx tsx validation/ts-harness/fa-geomin-crossval.ts` — 200/200 pass
 
 ## Key Decisions
-- **Orthogonal GPF solver** (`gpfOrth`) was implemented from scratch rather than adapting `gpfOblq`, because the two algorithms differ in parameterization (L=AT vs L=A×inv(T)'), gradient computation, projection, and step update (SVD vs column normalization).
-- **Column reflection disabled for target rotation**: reflection changes distance-to-target and invalidates the criterion value used for multi-start selection. Other rotations (geomin, oblimin, quartimax) are sign-invariant so reflection is harmless.
-- **Target rotation uses oblique GPF**: target rotation is inherently oblique (factors are allowed to correlate when rotating toward a target). Users wanting orthogonal target rotation can use the existing varimax/quartimax instead.
+- **FitDistName instead of DistributionName**: The viz module (`src/viz/plots/distribution.ts`) already exports `DistributionName` with a different member set. Renamed the stats type to `FitDistName` to avoid TS2308 at the barrel export in `src/index.ts`.
+- **Types in distributions.ts, not core/types.ts**: Defining `FitDistName` and `FitDistributionResult` in the stats module avoids the double-export collision when `src/index.ts` re-exports both `core/index.js` and `stats/index.js`.
+- **AD normal case uses sample sd (n-1)**: R's `nortest::ad.test` standardizes with `sd()` (n-1 denominator). Our AD function special-cases normal without explicit params to match R.
+- **KS p-value uses asymptotic formula**: The basic `2 Σ (-1)^{k+1} exp(-2k²t²)` formula, not R's exact Simard & L'Ecuyer (2011). Acceptable for a first implementation; can be upgraded later.
 
 ## Open Issues
-- **Target rotation crossval 7% failure rate**: Due to GPA basin differences between R (single T=I start) and Carm (multi-start). Same phenomenon as geomin ~2.5% differences. Not a bug.
-- **lavaan matching on rraw dataset**: ~2.5% primary loading diff remains (inherent to different GPA basins).
+- **KS p-value precision**: Differs from R by up to ~0.03 for moderate n (~50). Could improve by implementing Marsaglia et al. (2003) or Simard & L'Ecuyer (2011).
+- **No discrete distribution GoF**: AD and KS tests don't support Poisson/binomial (continuous distributions only). Could add chi-square GoF test for discrete data.
+- **Gamma/Beta MLE precision**: Matches R to ~2-3 dp. Could improve with better convergence criteria or different optimization.
 
 ## Next Steps
-1. Consider adding orthogonal target rotation (`targetT`) via `gpfOrth` if needed
-2. Consider adding `pstQ` (partially specified target with explicit weight matrix) as a named rotation method
-3. Test the Aistatia EFA wizard with quartimax/target in the browser
-4. Any remaining items from the broader project roadmap
+1. Consider improving KS p-value accuracy (Marsaglia 2003 algorithm)
+2. Add chi-square goodness-of-fit test for discrete distributions
+3. Consider distribution comparison / model selection (compare AICs across fits)
+4. Visualization: interactive distribution explorer integration with the stats module
+5. Any remaining items from the broader CLAUDE.md roadmap
 
 ## Context
 - JStats (Carm) repo: `/Users/mohammedsaqr/Documents/Github/JStats`
-- Build JStats: `node build.mjs`
-- Test JStats: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` (798 tests)
+- Build: `node build.mjs`
+- Test: `NODE_OPTIONS='--max-old-space-size=4096' npx vitest run` (953 tests)
 - Geomin validation: `npx tsx validation/ts-harness/fa-geomin-crossval.ts` (200/200)
-- Quartimax/target validation: `npx tsx validation/ts-harness/fa-quartimax-target-crossval.ts`
-- R reference generation: `Rscript validation/r-reference/fa-quartimax-target-ref.R`
+- R reference: `Rscript validation/r-reference/distributions-ref.R`
